@@ -16,16 +16,6 @@ export const metadata: Metadata = {
     generator: 'v0.app'
 }
 
-function handleGlobalError(error: Error, errorInfo: any) {
-  console.error("Global error caught:", error, errorInfo)
-
-  // Log to external service in production
-  if (process.env.NODE_ENV === "production") {
-    // Example: Send to error tracking service
-    // errorTracker.captureException(error, { extra: errorInfo })
-  }
-}
-
 export default function RootLayout({
   children,
 }: {
@@ -34,7 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <ErrorBoundary onError={handleGlobalError}>
+        <ErrorBoundary>
           <AuthProvider>
             <div className="flex h-screen bg-gray-50">
               <ErrorBoundary
