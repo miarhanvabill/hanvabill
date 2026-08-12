@@ -514,6 +514,7 @@ export default function CreateStaffPage() {
           </div>
         </div>
       </form>
+      </div>
     </div>
   )
 }
