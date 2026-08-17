@@ -9,9 +9,9 @@ import Link from "next/link"
 import { getStaffMember, type Staff } from "@/app/actions/staff"
 
 interface StaffDetailsPageProps {
-  params: {
+  params: Promise<{
     id: string
-  }
+  }>
 }
 
 async function StaffDetailsContent({ staffId }: { staffId: string }) {
@@ -285,7 +285,8 @@ async function StaffDetailsContent({ staffId }: { staffId: string }) {
   )
 }
 
-export default function StaffDetailsPage({ params }: StaffDetailsPageProps) {
+export default async function StaffDetailsPage({ params }: StaffDetailsPageProps) {
+  const { id } = await params;
   return (
     <Suspense
       fallback={
@@ -307,7 +308,7 @@ export default function StaffDetailsPage({ params }: StaffDetailsPageProps) {
         </div>
       }
     >
-      <StaffDetailsContent staffId={params.id} />
+      <StaffDetailsContent staffId={id} />
     </Suspense>
   )
 }

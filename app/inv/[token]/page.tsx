@@ -3,8 +3,9 @@ import { notFound } from "next/navigation"
 import { getInvoiceByShareToken } from "@/app/actions/invoices"
 import { InvoiceTemplate } from "@/components/invoice-template"
 
-export default async function PublicInvoicePage({ params }: { params: { token: string } }) {
-  const res = await getInvoiceByShareToken(params.token)
+export default async function PublicInvoicePage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  const res = await getInvoiceByShareToken(token)
   if (!res.success || !res.invoice) return notFound()
 
   const inv = res.invoice

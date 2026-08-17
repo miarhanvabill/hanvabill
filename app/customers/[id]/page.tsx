@@ -18,7 +18,8 @@ async function CustomerDetailsContent({ id }: { id: string }) {
   return <CustomerProfileDisplay customer={customer} bookings={bookings} invoices={invoices} />
 }
 
-export default async function CustomerDetailsPage({ params }: { params: { id: string } }) {
+export default async function CustomerDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   return (
     <Suspense
       fallback={
@@ -30,7 +31,7 @@ export default async function CustomerDetailsPage({ params }: { params: { id: st
         </div>
       }
     >
-      <CustomerDetailsContent id={params.id} />
+      <CustomerDetailsContent id={id} />
     </Suspense>
   )
 }

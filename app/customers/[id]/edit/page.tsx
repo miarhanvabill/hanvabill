@@ -53,8 +53,8 @@ function toInputDate(value?: unknown) {
   return `${yyyy}-${mm}-${dd}`
 }
 
-export default async function EditCustomerPage({ params }: { params: { id: string } }) {
-  const customerId = params.id
+export default async function EditCustomerPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id: customerId } = await params
   const customer = await getCustomer(customerId)
   if (!customer) notFound()
 
