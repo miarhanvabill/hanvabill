@@ -24,10 +24,19 @@ export default function LoginPage() {
     setError("")
 
     try {
-      // For demo purposes, accept any email/password
       if (email && password) {
-        localStorage.setItem("auth_token", "demo_token")
-        router.push("/")
+        const formData = new FormData()
+        formData.append("email", email)
+        formData.append("password", password)
+        
+        const { login } = await import("@/app/actions/auth")
+        const result = await login(formData)
+        
+        if (result.success) {
+          router.push("/")
+        } else {
+          setError(result.message)
+        }
       } else {
         setError("Please enter both email and password")
       }
@@ -93,9 +102,6 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">Demo credentials: Use any email and password to login</p>
-          </div>
         </CardContent>
       </Card>
     </div>

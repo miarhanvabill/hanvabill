@@ -2,6 +2,7 @@
 
 import { neon } from "@neondatabase/serverless"
 import { revalidatePath } from "next/cache"
+import { requireAuth } from "@/lib/auth"
 
 const sql = neon(process.env.DATABASE_URL!)
 
@@ -40,6 +41,7 @@ export interface UpdateCustomerState {
 
 export async function getCustomers(): Promise<Customer[]> {
   try {
+    const session = await requireAuth()
     const customers = await sql`
       SELECT 
         c.id,
@@ -61,6 +63,7 @@ export async function getCustomers(): Promise<Customer[]> {
         COALESCE(SUM(CASE WHEN b.status IN ('completed', 'confirmed') THEN b.total_amount ELSE 0 END), 0) as total_spent
       FROM customers c
       LEFT JOIN bookings b ON c.id = b.customer_id
+      WHERE c.tenant_id = ${session.tenantId}
       GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.created_at, c.updated_at
       ORDER BY c.created_at DESC
     `
@@ -73,40 +76,14 @@ export async function getCustomers(): Promise<Customer[]> {
     })) as Customer[]
   } catch (error) {
     console.error("Error fetching customers:", error)
-    // Return mock data as fallback
-    return [
-      {
-        id: 1,
-        full_name: "John Doe",
-        phone_number: "+1234567890",
-        email: "john@example.com",
-        address: "123 Main St",
-        gender: "male",
-        date_of_birth: "1990-01-01",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        total_bookings: 5,
-        total_spent: 2500,
-      },
-      {
-        id: 2,
-        full_name: "Jane Smith",
-        phone_number: "+1234567891",
-        email: "jane@example.com",
-        address: "456 Oak Ave",
-        gender: "female",
-        date_of_birth: "1985-05-15",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        total_bookings: 3,
-        total_spent: 1800,
-      },
-    ]
+    return []
   }
 }
 
 export async function getCustomer(id: string): Promise<Customer | null> {
   try {
+    const session = await requireAuth()
+    
     if (!id || isNaN(Number(id))) {
       console.error("Invalid customer ID:", id)
       return null
@@ -133,7 +110,7 @@ export async function getCustomer(id: string): Promise<Customer | null> {
         COALESCE(SUM(CASE WHEN b.status IN ('completed', 'confirmed') THEN b.total_amount ELSE 0 END), 0) as total_spent
       FROM customers c
       LEFT JOIN bookings b ON c.id = b.customer_id
-      WHERE c.id = ${id}
+      WHERE c.id = ${id} AND c.tenant_id = ${session.tenantId}
       GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.created_at, c.updated_at
     `
 
@@ -154,6 +131,8 @@ export async function getCustomer(id: string): Promise<Customer | null> {
 
 export async function searchCustomers(query: string): Promise<Customer[]> {
   try {
+    const session = await requireAuth()
+    
     if (!query || query.trim().length === 0) {
       return []
     }
@@ -180,9 +159,10 @@ export async function searchCustomers(query: string): Promise<Customer[]> {
         COALESCE(SUM(CASE WHEN b.status IN ('completed', 'confirmed') THEN b.total_amount ELSE 0 END), 0) as total_spent
       FROM customers c
       LEFT JOIN bookings b ON c.id = b.customer_id
-      WHERE c.full_name ILIKE ${`%${searchQuery}%`} 
-         OR c.phone_number ILIKE ${`%${searchQuery}%`}
-         OR c.email ILIKE ${`%${searchQuery}%`}
+      WHERE c.tenant_id = ${session.tenantId} 
+        AND (c.full_name ILIKE ${`%${searchQuery}%`} 
+             OR c.phone_number ILIKE ${`%${searchQuery}%`}
+             OR c.email ILIKE ${`%${searchQuery}%`})
       GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.created_at, c.updated_at
       ORDER BY c.full_name
       LIMIT 20
@@ -203,6 +183,7 @@ export async function searchCustomers(query: string): Promise<Customer[]> {
 // Server action to handle FormData from the form
 export async function createCustomer(formData: FormData) {
   try {
+    const session = await requireAuth()
     console.log("Creating customer with form data:", Object.fromEntries(formData.entries()))
 
     const phoneNumber = formData.get("phoneNumber") as string
@@ -235,7 +216,7 @@ export async function createCustomer(formData: FormData) {
 
     // Check if customer already exists
     const existingCustomers = await sql`
-      SELECT id FROM customers WHERE phone_number = ${phoneNumber}
+      SELECT id FROM customers WHERE phone_number = ${phoneNumber} AND tenant_id = ${session.tenantId}
     `
 
     if (existingCustomers.length > 0) {
@@ -247,6 +228,7 @@ export async function createCustomer(formData: FormData) {
 
     const customers = await sql`
       INSERT INTO customers (
+        tenant_id,
         full_name,
         phone_number,
         email,
@@ -262,6 +244,7 @@ export async function createCustomer(formData: FormData) {
         updated_at
       )
       VALUES (
+        ${session.tenantId},
         ${fullName},
         ${phoneNumber},
         ${email || null},
@@ -320,12 +303,15 @@ export async function createCustomerData(customerData: {
   notes?: string
 }): Promise<Customer> {
   try {
+    const session = await requireAuth()
+    
     if (!customerData.full_name || !customerData.phone_number) {
       throw new Error("Full name and phone number are required")
     }
 
     const customers = await sql`
       INSERT INTO customers (
+        tenant_id,
         full_name,
         phone_number,
         email,
@@ -342,6 +328,7 @@ export async function createCustomerData(customerData: {
         updated_at
       )
       VALUES (
+        ${session.tenantId},
         ${customerData.full_name},
         ${customerData.phone_number},
         ${customerData.email || null},
@@ -396,6 +383,8 @@ export async function updateCustomer(
   },
 ): Promise<UpdateCustomerState> {
   try {
+    const session = await requireAuth()
+    
     if (!id || isNaN(Number(id))) {
       return {
         success: false,
@@ -419,7 +408,7 @@ export async function updateCustomer(
         lead_source = COALESCE(${customerData.lead_source}, lead_source),
         notes = COALESCE(${customerData.notes}, notes),
         updated_at = NOW()
-      WHERE id = ${id}
+      WHERE id = ${id} AND tenant_id = ${session.tenantId}
       RETURNING *
     `
 
@@ -457,11 +446,13 @@ export async function updateCustomer(
 
 export async function deleteCustomer(id: string): Promise<void> {
   try {
+    const session = await requireAuth()
+    
     if (!id || isNaN(Number(id))) {
       throw new Error("Invalid customer ID")
     }
 
-    await sql`DELETE FROM customers WHERE id = ${id}`
+    await sql`DELETE FROM customers WHERE id = ${id} AND tenant_id = ${session.tenantId}`
 
     revalidatePath("/")
     revalidatePath("/customers")
@@ -474,15 +465,17 @@ export async function deleteCustomer(id: string): Promise<void> {
 
 export async function getCustomerStats(): Promise<CustomerStats> {
   try {
+    const session = await requireAuth()
+    
     const today = new Date().toISOString().split("T")[0]
     const currentMonth = new Date().getMonth() + 1
     const currentYear = new Date().getFullYear()
 
     const [totalResult, todayResult, monthResult, avgSpentResult] = await Promise.all([
-      sql`SELECT COUNT(*) as count FROM customers`,
-      sql`SELECT COUNT(*) as count FROM customers WHERE DATE(created_at) = ${today}`,
-      sql`SELECT COUNT(*) as count FROM customers WHERE EXTRACT(MONTH FROM created_at) = ${currentMonth} AND EXTRACT(YEAR FROM created_at) = ${currentYear}`,
-      sql`SELECT AVG(total_amount) as avg FROM bookings WHERE status IN ('completed', 'confirmed')`,
+      sql`SELECT COUNT(*) as count FROM customers WHERE tenant_id = ${session.tenantId}`,
+      sql`SELECT COUNT(*) as count FROM customers WHERE tenant_id = ${session.tenantId} AND DATE(created_at) = ${today}`,
+      sql`SELECT COUNT(*) as count FROM customers WHERE tenant_id = ${session.tenantId} AND EXTRACT(MONTH FROM created_at) = ${currentMonth} AND EXTRACT(YEAR FROM created_at) = ${currentYear}`,
+      sql`SELECT AVG(total_amount) as avg FROM bookings WHERE tenant_id = ${session.tenantId} AND status IN ('completed', 'confirmed')`,
     ])
 
     return {
@@ -494,23 +487,25 @@ export async function getCustomerStats(): Promise<CustomerStats> {
   } catch (error) {
     console.error("Error fetching customer stats:", error)
     return {
-      total: 1247,
-      newToday: 3,
-      newThisMonth: 89,
-      averageSpent: 2450,
+      total: 0,
+      newToday: 0,
+      newThisMonth: 0,
+      averageSpent: 0,
     }
   }
 }
 
 export async function findOrCreateCustomer(phoneNumber: string, fullName: string): Promise<Customer> {
   try {
+    const session = await requireAuth()
+    
     if (!phoneNumber || !fullName) {
       throw new Error("Phone number and full name are required")
     }
 
     // First try to find existing customer
     const existingCustomers = await sql`
-      SELECT * FROM customers WHERE phone_number = ${phoneNumber}
+      SELECT * FROM customers WHERE phone_number = ${phoneNumber} AND tenant_id = ${session.tenantId}
     `
 
     if (existingCustomers.length > 0) {

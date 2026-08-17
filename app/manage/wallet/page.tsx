@@ -79,47 +79,9 @@ export default function WalletManagePage() {
       console.error("Failed to fetch wallet data:", error)
       setIsOnline(false)
 
-      // Fallback mock data
-      const mockWallets: CustomerWallet[] = [
-        {
-          id: "1",
-          customerId: "1",
-          customerName: "Sarah Johnson",
-          customerPhone: "+91 98765 43210",
-          totalPoints: 1250,
-          lifetimeEarned: 2500,
-          lifetimeRedeemed: 1250,
-          tier: "gold",
-          lastActivity: "2024-01-20T14:30:00Z",
-        },
-        {
-          id: "2",
-          customerId: "2",
-          customerName: "Michael Chen",
-          customerPhone: "+91 98765 43211",
-          totalPoints: 850,
-          lifetimeEarned: 1800,
-          lifetimeRedeemed: 950,
-          tier: "silver",
-          lastActivity: "2024-01-18T11:00:00Z",
-        },
-      ]
-
-      const mockTransactions: WalletTransaction[] = [
-        {
-          id: "1",
-          customerId: "1",
-          customerName: "Sarah Johnson",
-          type: "earned",
-          points: 120,
-          amount: 1200,
-          description: "Points earned from purchase",
-          createdAt: "2024-01-20T14:30:00Z",
-        },
-      ]
-
-      setWallets(mockWallets)
-      setTransactions(mockTransactions)
+      // Empty arrays if API fails to prevent dummy data
+      setWallets([])
+      setTransactions([])
     } finally {
       setLoading(false)
     }
