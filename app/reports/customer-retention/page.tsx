@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Header } from "@/components/header"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -100,7 +100,7 @@ export default function CustomerRetentionPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header
+      <PageHeader
         title="Customer Retention Analysis"
         subtitle="Analysis of customer loyalty, repeat visits, and retention strategies effectiveness."
         showBackButton

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Header } from "@/components/header"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -256,7 +256,7 @@ export default function ServicesPage() {
   if (loading) {
     return (
       <div className="content-wrapper">
-        <Header title="Services" subtitle="Manage your salon services and pricing" />
+        <PageHeader title="Services" subtitle="Manage your salon services and pricing" />
         <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             {[...Array(4)].map((_, i) => (
@@ -278,7 +278,7 @@ export default function ServicesPage() {
 
   return (
     <div className="content-wrapper">
-      <Header title="Services" subtitle="Manage your salon services and pricing" />
+      <PageHeader title="Services" subtitle="Manage your salon services and pricing" />
       <PageProgress sections={sections} />
 
       <div className="p-6 space-y-8">

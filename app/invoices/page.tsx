@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Header } from "@/components/header"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -158,7 +158,7 @@ export default function InvoicesPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header title="Invoices" subtitle="Create, manage and track your salon invoices with GST compliance" />
+      <PageHeader title="Invoices" subtitle="Create, manage and track your salon invoices with GST compliance" />
 
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-7xl mx-auto space-y-6">

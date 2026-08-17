@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Header } from "@/components/header"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
@@ -175,7 +175,7 @@ export default function ReportsPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header
+      <PageHeader
         title="Reports"
         subtitle="View detailed reports to track progress and make informed decisions that help grow your salon."
       />

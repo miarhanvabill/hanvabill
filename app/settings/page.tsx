@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Header } from "@/components/header"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -382,7 +382,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex-1 space-y-6 p-6">
-      <Header
+      <PageHeader
         title="Settings"
         subtitle="Configure your salon management system preferences and business settings."
         action={

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import type React from "react"
 
 import { useState } from "react"
-import { Header } from "@/components/header"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -207,7 +207,7 @@ export default function ImportExportPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header
+      <PageHeader
         title="Import and Export"
         subtitle="Quickly import and export customer, service, product, and booking data for efficient management"
       />

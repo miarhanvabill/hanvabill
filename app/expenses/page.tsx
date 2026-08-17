@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Header } from "@/components/header"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -190,7 +190,7 @@ export default function ExpensesPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header
+      <PageHeader
         title="Expenses"
         subtitle="Track and manage all business expenses, from supplies to utilities and marketing costs."
       />

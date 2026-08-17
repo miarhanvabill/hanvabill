@@ -10,7 +10,7 @@ import { Search, Plus, Phone, Mail, Calendar, Edit, Trash2, User } from 'lucide-
 import { getCustomers, deleteCustomer, type Customer } from "@/app/actions/customers" // Corrected import path
 import { formatCurrency } from "@/lib/currency"
 import Link from "next/link"
-import { Header } from "@/components/header" // Import the Header component
+import { PageHeader } from "@/components/page-header" // Import the Header component
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -93,7 +93,7 @@ export default function CustomersPage() {
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
-      <Header
+      <PageHeader
         title="Customers"
         subtitle="Manage your customer database"
         action={

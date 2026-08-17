@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Header } from "@/components/header"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -240,7 +240,7 @@ export default function WalletManagePage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header
+      <PageHeader
         title="Wallet Management"
         subtitle="Manage customer loyalty points and wallet balances"
         action={
