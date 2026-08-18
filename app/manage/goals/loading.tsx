@@ -1,11 +1,11 @@
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
 export default function StaffRevenueGoalsLoading() {
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader title="Staff Revenue Goals" subtitle="Set and track revenue targets for your team members" />
+      <Header title="Staff Revenue Goals" subtitle="Set and track revenue targets for your team members" />
 
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-7xl mx-auto space-y-6">

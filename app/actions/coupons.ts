@@ -1,9 +1,7 @@
 // app/actions/coupons.ts
 "use server"
 
-import { neon } from "@neondatabase/serverless"
-
-const sql = neon(process.env.DATABASE_URL!)
+import { withTenantAuth } from '@/lib/withTenantAuth'
 
 export interface Coupon {
   id: number
@@ -95,143 +93,158 @@ function mapRow(row: any): Coupon {
 }
 
 export async function getAvailableCoupons(): Promise<Coupon[]> {
-  try {
-    const rows = await sql`
-      SELECT id, code, name, description, discount_type, discount_value, min_order_amount, 
-             max_discount, valid_from, valid_until, usage_limit, used_count, is_active, 
-             created_at, updated_at
-      FROM coupons
-      WHERE is_active = true
-        AND valid_from <= CURRENT_DATE
-        AND valid_until >= CURRENT_DATE
-        AND (usage_limit IS NULL OR used_count < usage_limit)
-      ORDER BY discount_value DESC
-    `
-    return (rows as any[]).map(mapRow)
-  } catch (error) {
-    console.error("getAvailableCoupons DB error, returning fallback:", error)
-    return fallbackCoupons.filter((c) => c.is_active)
-  }
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const rows = await sql`
+        SELECT id, code, name, description, discount_type, discount_value, min_order_amount, 
+               max_discount, valid_from, valid_until, usage_limit, used_count, is_active, 
+               created_at, updated_at
+        FROM coupons
+        WHERE tenant_id = ${tenantId}
+          AND is_active = true
+          AND valid_from <= CURRENT_DATE
+          AND valid_until >= CURRENT_DATE
+          AND (usage_limit IS NULL OR used_count < usage_limit)
+        ORDER BY discount_value DESC
+      `
+      return (rows as any[]).map(mapRow)
+    } catch (error) {
+      console.error("getAvailableCoupons DB error, returning fallback:", error)
+      return fallbackCoupons.filter((c) => c.is_active)
+    }
+  })
 }
 
 export async function validateCoupon(code: string, orderAmount: number) {
-  try {
-    const rows = await sql`
-      SELECT id, code, name, description, discount_type, discount_value, min_order_amount, 
-             max_discount, valid_from, valid_until, usage_limit, used_count, is_active, 
-             created_at, updated_at
-      FROM coupons
-      WHERE UPPER(code) = UPPER(${code})
-        AND is_active = true
-        AND valid_from <= CURRENT_DATE
-        AND valid_until >= CURRENT_DATE
-        AND min_order_amount <= ${orderAmount}
-        AND (usage_limit IS NULL OR used_count < usage_limit)
-      LIMIT 1
-    `
-    if (rows.length === 0) {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const rows = await sql`
+        SELECT id, code, name, description, discount_type, discount_value, min_order_amount, 
+               max_discount, valid_from, valid_until, usage_limit, used_count, is_active, 
+               created_at, updated_at
+        FROM coupons
+        WHERE tenant_id = ${tenantId}
+          AND UPPER(code) = UPPER(${code})
+          AND is_active = true
+          AND valid_from <= CURRENT_DATE
+          AND valid_until >= CURRENT_DATE
+          AND min_order_amount <= ${orderAmount}
+          AND (usage_limit IS NULL OR used_count < usage_limit)
+        LIMIT 1
+      `
+      if (rows.length === 0) {
+        return { success: false, message: "Invalid coupon code or not applicable for this order amount" }
+      }
+      const coupon = mapRow(rows[0])
+      return { success: true, message: "Coupon applied successfully", coupon }
+    } catch (error) {
+      console.error("validateCoupon DB error, using fallback:", error)
+      const coupon = fallbackCoupons.find(
+        (c) => c.code.toLowerCase() === code.toLowerCase() && c.is_active && c.min_order_amount <= orderAmount,
+      )
+      if (coupon) {
+        return { success: true, message: "Coupon applied successfully", coupon }
+      }
       return { success: false, message: "Invalid coupon code or not applicable for this order amount" }
     }
-    const coupon = mapRow(rows[0])
-    return { success: true, message: "Coupon applied successfully", coupon }
-  } catch (error) {
-    console.error("validateCoupon DB error, using fallback:", error)
-    const coupon = fallbackCoupons.find(
-      (c) => c.code.toLowerCase() === code.toLowerCase() && c.is_active && c.min_order_amount <= orderAmount,
-    )
-    if (coupon) {
-      return { success: true, message: "Coupon applied successfully", coupon }
-    }
-    return { success: false, message: "Invalid coupon code or not applicable for this order amount" }
-  }
+  })
 }
 
 export async function getCoupons(): Promise<Coupon[]> {
-  try {
-    const rows = await sql`
-      SELECT id, code, name, description, discount_type, discount_value, min_order_amount, 
-             max_discount, valid_from, valid_until, usage_limit, used_count, is_active, 
-             created_at, updated_at
-      FROM coupons
-      ORDER BY created_at DESC
-    `
-    return (rows as any[]).map(mapRow)
-  } catch (error) {
-    console.error("getCoupons DB error, returning fallback:", error)
-    return fallbackCoupons
-  }
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const rows = await sql`
+        SELECT id, code, name, description, discount_type, discount_value, min_order_amount, 
+               max_discount, valid_from, valid_until, usage_limit, used_count, is_active, 
+               created_at, updated_at
+        FROM coupons
+        WHERE tenant_id = ${tenantId}
+        ORDER BY created_at DESC
+      `
+      return (rows as any[]).map(mapRow)
+    } catch (error) {
+      console.error("getCoupons DB error, returning fallback:", error)
+      return fallbackCoupons
+    }
+  })
 }
 
 export async function createCoupon(
   couponData: Omit<Coupon, "id" | "used_count" | "created_at" | "updated_at">,
 ): Promise<Coupon> {
-  try {
-    const rows = await sql`
-      INSERT INTO coupons (
-        code, name, description, discount_type, discount_value, min_order_amount, 
-        max_discount, valid_from, valid_until, usage_limit, used_count, is_active
-      ) VALUES (
-        ${couponData.code.toUpperCase()}, ${couponData.name}, ${couponData.description}, 
-        ${couponData.discount_type}, ${couponData.discount_value}, ${couponData.min_order_amount},
-        ${couponData.max_discount || null}, ${couponData.valid_from}, ${couponData.valid_until},
-        ${couponData.usage_limit || null}, 0, ${couponData.is_active}
-      )
-      RETURNING id, code, name, description, discount_type, discount_value, min_order_amount, 
-                max_discount, valid_from, valid_until, usage_limit, used_count, is_active, 
-                created_at, updated_at
-    `
-    return mapRow(rows[0])
-  } catch (error) {
-    console.error("createCoupon DB error:", error)
-    throw new Error("Failed to create coupon")
-  }
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const rows = await sql`
+        INSERT INTO coupons (
+          tenant_id, code, name, description, discount_type, discount_value, min_order_amount, 
+          max_discount, valid_from, valid_until, usage_limit, used_count, is_active
+        ) VALUES (
+          ${tenantId}, ${couponData.code.toUpperCase()}, ${couponData.name}, ${couponData.description}, 
+          ${couponData.discount_type}, ${couponData.discount_value}, ${couponData.min_order_amount},
+          ${couponData.max_discount || null}, ${couponData.valid_from}, ${couponData.valid_until},
+          ${couponData.usage_limit || null}, 0, ${couponData.is_active}
+        )
+        RETURNING id, code, name, description, discount_type, discount_value, min_order_amount, 
+                  max_discount, valid_from, valid_until, usage_limit, used_count, is_active, 
+                  created_at, updated_at
+      `
+      return mapRow(rows[0])
+    } catch (error) {
+      console.error("createCoupon DB error:", error)
+      throw new Error("Failed to create coupon")
+    }
+  })
 }
 
 export async function updateCoupon(
   id: number,
   couponData: Partial<Omit<Coupon, "id" | "created_at">>,
 ): Promise<Coupon> {
-  try {
-    const rows = await sql`
-      UPDATE coupons 
-      SET 
-        code = COALESCE(${couponData.code?.toUpperCase() || null}, code),
-        name = COALESCE(${couponData.name || null}, name),
-        description = COALESCE(${couponData.description || null}, description),
-        discount_type = COALESCE(${couponData.discount_type || null}, discount_type),
-        discount_value = COALESCE(${couponData.discount_value || null}, discount_value),
-        min_order_amount = COALESCE(${couponData.min_order_amount || null}, min_order_amount),
-        max_discount = COALESCE(${couponData.max_discount || null}, max_discount),
-        valid_from = COALESCE(${couponData.valid_from || null}, valid_from),
-        valid_until = COALESCE(${couponData.valid_until || null}, valid_until),
-        usage_limit = COALESCE(${couponData.usage_limit || null}, usage_limit),
-        is_active = COALESCE(${couponData.is_active !== undefined ? couponData.is_active : null}, is_active),
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${id}
-      RETURNING id, code, name, description, discount_type, discount_value, min_order_amount, 
-                max_discount, valid_from, valid_until, usage_limit, used_count, is_active, 
-                created_at, updated_at
-    `
-    if (rows.length === 0) {
-      throw new Error("Coupon not found")
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const rows = await sql`
+        UPDATE coupons 
+        SET 
+          code = COALESCE(${couponData.code?.toUpperCase() || null}, code),
+          name = COALESCE(${couponData.name || null}, name),
+          description = COALESCE(${couponData.description || null}, description),
+          discount_type = COALESCE(${couponData.discount_type || null}, discount_type),
+          discount_value = COALESCE(${couponData.discount_value || null}, discount_value),
+          min_order_amount = COALESCE(${couponData.min_order_amount || null}, min_order_amount),
+          max_discount = COALESCE(${couponData.max_discount || null}, max_discount),
+          valid_from = COALESCE(${couponData.valid_from || null}, valid_from),
+          valid_until = COALESCE(${couponData.valid_until || null}, valid_until),
+          usage_limit = COALESCE(${couponData.usage_limit || null}, usage_limit),
+          is_active = COALESCE(${couponData.is_active !== undefined ? couponData.is_active : null}, is_active),
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${id} AND tenant_id = ${tenantId}
+        RETURNING id, code, name, description, discount_type, discount_value, min_order_amount, 
+                  max_discount, valid_from, valid_until, usage_limit, used_count, is_active, 
+                  created_at, updated_at
+      `
+      if (rows.length === 0) {
+        throw new Error("Coupon not found")
+      }
+      return mapRow(rows[0])
+    } catch (error) {
+      console.error("updateCoupon DB error:", error)
+      throw new Error("Failed to update coupon")
     }
-    return mapRow(rows[0])
-  } catch (error) {
-    console.error("updateCoupon DB error:", error)
-    throw new Error("Failed to update coupon")
-  }
+  })
 }
 
 export async function deleteCoupon(id: number): Promise<boolean> {
-  try {
-    const rows = await sql`
-      DELETE FROM coupons 
-      WHERE id = ${id}
-      RETURNING id
-    `
-    return rows.length > 0
-  } catch (error) {
-    console.error("deleteCoupon DB error:", error)
-    throw new Error("Failed to delete coupon")
-  }
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const rows = await sql`
+        DELETE FROM coupons 
+        WHERE id = ${id} AND tenant_id = ${tenantId}
+        RETURNING id
+      `
+      return rows.length > 0
+    } catch (error) {
+      console.error("deleteCoupon DB error:", error)
+      throw new Error("Failed to delete coupon")
+    }
+  })
 }

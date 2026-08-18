@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -145,7 +145,7 @@ export default function AdvancedReportsPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader
+      <Header
         title="Advanced Billing Reports"
         subtitle="Comprehensive analytics and insights for your billing operations"
         action={

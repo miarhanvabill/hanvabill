@@ -1,4 +1,3 @@
-// app/customers/[id]/edit/page.tsx
 import { notFound } from "next/navigation"
 import { getCustomer, updateCustomer } from "@/app/actions/customers"
 import { Button } from "@/components/ui/button"
@@ -28,13 +27,15 @@ async function updateCustomerWithRevalidation(id: string, formData: FormData) {
     notes: (formData.get("notes") as string) || undefined,
   }
 
-  await updateCustomer(id, data)
+  const result = await updateCustomer(id, data)
 
-  revalidatePath("/customers")
-  revalidatePath(`/customers/${id}`)
-  revalidatePath(`/customers/${id}/edit`)
+  if (result.success) {
+    revalidatePath("/customers")
+    revalidatePath(`/customers/${id}`)
+    revalidatePath(`/customers/${id}/edit`)
+  }
 
-  return { success: true }
+  return result
 }
 
 function toInputDate(value?: unknown) {
@@ -53,9 +54,10 @@ function toInputDate(value?: unknown) {
   return `${yyyy}-${mm}-${dd}`
 }
 
-export default async function EditCustomerPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id: customerId } = await params
+export default async function EditCustomerPage({ params }: { params: { id: string } }) {
+  const customerId = params.id
   const customer = await getCustomer(customerId)
+  
   if (!customer) notFound()
 
   return (

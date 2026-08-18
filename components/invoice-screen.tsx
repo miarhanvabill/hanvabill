@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { CheckCircle, Download, PrinterIcon as Print, Share, Plus, User, CreditCard } from "lucide-react"
+import { CheckCircle, Download, Printer as Print, Share, Plus, User, CreditCard } from "lucide-react"
+import { downloadInvoicePDF } from "@/lib/invoice-actions"
 
 interface Customer {
   id: number
@@ -52,19 +53,30 @@ export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
   const handleDownload = async () => {
     setDownloading(true)
     try {
-      // Simulate PDF generation
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      const invoiceData = {
+        invoiceNumber: invoice.id.toString(),
+        invoiceDate: invoice.created_at,
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
+        customerName: invoice.customer.name,
+        customerAddress: invoice.customer.address,
+        customerPhone: invoice.customer.phone,
+        customerEmail: invoice.customer.email,
+        items: invoice.items.map((item, index) => ({
+          id: index + 1,
+          description: item.name,
+          quantity: item.quantity,
+          rate: item.price,
+          amount: item.price * item.quantity,
+        })),
+        subtotal: invoice.subtotal,
+        discount: invoice.discount,
+        placeOfSupply: "Karnataka",
+      }
 
-      // In a real app, this would generate and download a PDF
-      const element = document.createElement("a")
-      const file = new Blob([generateInvoiceText()], { type: "text/plain" })
-      element.href = URL.createObjectURL(file)
-      element.download = `invoice-${invoice.id}.txt`
-      document.body.appendChild(element)
-      element.click()
-      document.body.removeChild(element)
+      await downloadInvoicePDF(invoiceData)
     } catch (error) {
       console.error("Error downloading invoice:", error)
+      alert("Failed to download invoice. Please try again.")
     } finally {
       setDownloading(false)
     }

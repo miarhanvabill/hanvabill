@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { withTenantAuth } from "@/lib/withTenantAuth"
 import {
   getAllMembershipPlans,
   getActiveMemberships,
@@ -17,24 +18,34 @@ export async function GET(request: Request) {
 
     switch (type) {
       case "active":
-        const activePlans = await getActiveMemberships()
+        const activePlans = await withTenantAuth(async ({ sql, tenantId }) => {
+          return await getActiveMemberships()
+        })
         return NextResponse.json(activePlans)
 
       case "stats":
-        const stats = await getMembershipStats()
+        const stats = await withTenantAuth(async ({ sql, tenantId }) => {
+          return await getMembershipStats()
+        })
         return NextResponse.json(stats)
 
       case "customers":
-        const customerMemberships = await getCustomerMemberships()
+        const customerMemberships = await withTenantAuth(async ({ sql, tenantId }) => {
+          return await getCustomerMemberships()
+        })
         return NextResponse.json(customerMemberships)
 
       case "verify":
-        const verification = await verifyMembershipData()
+        const verification = await withTenantAuth(async ({ sql, tenantId }) => {
+          return await verifyMembershipData()
+        })
         return NextResponse.json(verification)
 
       case "all":
       default:
-        const allPlans = await getAllMembershipPlans()
+        const allPlans = await withTenantAuth(async ({ sql, tenantId }) => {
+          return await getAllMembershipPlans()
+        })
         return NextResponse.json(allPlans)
     }
   } catch (error) {
@@ -50,7 +61,9 @@ export async function POST(request: Request) {
     const type = searchParams.get("type")
 
     if (type === "customer") {
-      const result = await createCustomerMembership(body)
+      const result = await withTenantAuth(async ({ sql, tenantId }) => {
+        return await createCustomerMembership(body)
+      })
       if (result.success) {
         return NextResponse.json({ success: true, membership_id: result.membership_id })
       } else {
@@ -59,8 +72,10 @@ export async function POST(request: Request) {
     }
 
     // Default: create membership plan
-    const { createMembershipPlan } = await import("@/app/actions/memberships")
-    const result = await createMembershipPlan(body)
+    const result = await withTenantAuth(async ({ sql, tenantId }) => {
+      const { createMembershipPlan } = await import("@/app/actions/memberships")
+      return await createMembershipPlan(body)
+    })
 
     if (result.success) {
       return NextResponse.json({ success: true })
@@ -86,7 +101,9 @@ export async function PUT(request: Request) {
     const body = await request.json()
 
     if (type === "customer") {
-      const result = await updateCustomerMembership(id, body)
+      const result = await withTenantAuth(async ({ sql, tenantId }) => {
+        return await updateCustomerMembership(id, body)
+      })
       if (result.success) {
         return NextResponse.json({ success: true })
       } else {
@@ -95,7 +112,9 @@ export async function PUT(request: Request) {
     }
 
     // Default: update membership plan
-    const result = await updateMembershipPlan(id, body)
+    const result = await withTenantAuth(async ({ sql, tenantId }) => {
+      return await updateMembershipPlan(id, body)
+    })
 
     if (result.success) {
       return NextResponse.json({ success: true })

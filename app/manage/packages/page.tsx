@@ -48,10 +48,15 @@ export default function PackagesPage() {
   const loadData = async () => {
     try {
       const [packagesData, servicesData] = await Promise.all([getActivePackages(), getServices()])
-      setPackages(packagesData)
-      setServices(servicesData)
+      const safePackagesData = Array.isArray(packagesData) ? packagesData : []
+      const safeServicesData = Array.isArray(servicesData) ? servicesData : []
+
+      setPackages(safePackagesData)
+      setServices(safeServicesData)
     } catch (error) {
       console.error("Error loading data:", error)
+      setPackages([])
+      setServices([])
       toast({
         title: "Error",
         description: "Failed to load packages data",
@@ -163,6 +168,11 @@ export default function PackagesPage() {
   }
 
   const getServiceNames = (serviceIds: number[]) => {
+    if (!Array.isArray(services)) {
+      console.warn("[v0] Services is not an array in getServiceNames:", services)
+      return []
+    }
+
     return serviceIds
       .map((id) => services.find((s) => s.id === id)?.name)
       .filter(Boolean)

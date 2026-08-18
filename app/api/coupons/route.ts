@@ -1,9 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { withTenantAuth } from "@/lib/withTenantAuth"
 import { getCoupons, createCoupon, updateCoupon, deleteCoupon } from "@/app/actions/coupons"
 
 export async function GET() {
   try {
-    const coupons = await getCoupons()
+    const coupons = await withTenantAuth(async ({ sql, tenantId }) => {
+      return await getCoupons(sql, tenantId)
+    })
     return NextResponse.json({ success: true, coupons })
   } catch (error: any) {
     console.error("GET coupons route error:", error)
@@ -17,7 +20,9 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const couponData = await req.json()
-    const coupon = await createCoupon(couponData)
+    const coupon = await withTenantAuth(async ({ sql, tenantId }) => {
+      return await createCoupon(couponData, sql, tenantId)
+    })
     return NextResponse.json({ success: true, coupon })
   } catch (error: any) {
     console.error("POST coupons route error:", error)
@@ -31,7 +36,9 @@ export async function PUT(req: NextRequest) {
     if (!id) {
       return NextResponse.json({ success: false, error: "Coupon ID is required" }, { status: 400 })
     }
-    const coupon = await updateCoupon(id, couponData)
+    const coupon = await withTenantAuth(async ({ sql, tenantId }) => {
+      return await updateCoupon(id, couponData, sql, tenantId)
+    })
     return NextResponse.json({ success: true, coupon })
   } catch (error: any) {
     console.error("PUT coupons route error:", error)
@@ -46,7 +53,9 @@ export async function DELETE(req: NextRequest) {
     if (!id) {
       return NextResponse.json({ success: false, error: "Coupon ID is required" }, { status: 400 })
     }
-    const deleted = await deleteCoupon(Number.parseInt(id))
+    const deleted = await withTenantAuth(async ({ sql, tenantId }) => {
+      return await deleteCoupon(Number.parseInt(id), sql, tenantId)
+    })
     return NextResponse.json({ success: deleted })
   } catch (error: any) {
     console.error("DELETE coupons route error:", error)

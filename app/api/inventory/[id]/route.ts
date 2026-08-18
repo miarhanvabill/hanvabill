@@ -1,7 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { neon } from "@neondatabase/serverless"
-
-const sql = neon(process.env.DATABASE_URL!)
+import { withTenantAuth } from "@/lib/withTenantAuth"
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -16,30 +14,32 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       )
     }
 
-    const result = await sql`
-      UPDATE inventory SET
-        item_item_name = ${item_name},
-        category = ${category},
-        brand = ${brand || null},
-        sku = ${sku || null},
-        quantity = ${quantity},
-        unit_price = ${unit_price},
-        supplier = ${supplier || null},
-        min_stock_level = ${min_stock_level || 0},
-        description = ${description || null},
-        updated_at = NOW()
-      WHERE id = ${id}
-      RETURNING *
-    `
+    return await withTenantAuth(async ({ sql, tenantId }) => {
+      const result = await sql`
+        UPDATE inventory SET
+          item_name = ${item_name},
+          category = ${category},
+          brand = ${brand || null},
+          sku = ${sku || null},
+          quantity = ${quantity},
+          unit_price = ${unit_price},
+          supplier = ${supplier || null},
+          min_stock_level = ${min_stock_level || 0},
+          description = ${description || null},
+          updated_at = NOW()
+        WHERE id = ${id} AND tenant_id = ${tenantId}
+        RETURNING *
+      `
 
-    if (result.length === 0) {
-      return NextResponse.json({ success: false, message: "Inventory item not found" }, { status: 404 })
-    }
+      if (result.length === 0) {
+        return NextResponse.json({ success: false, message: "Inventory item not found" }, { status: 404 })
+      }
 
-    return NextResponse.json({
-      success: true,
-      data: result[0],
-      message: "Inventory item updated successfully",
+      return NextResponse.json({
+        success: true,
+        data: result[0],
+        message: "Inventory item updated successfully",
+      })
     })
   } catch (error) {
     console.error("Error updating inventory item:", error)
@@ -51,19 +51,21 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
   try {
     const id = Number.parseInt(params.id)
 
-    const result = await sql`
-      DELETE FROM inventory 
-      WHERE id = ${id}
-      RETURNING *
-    `
+    return await withTenantAuth(async ({ sql, tenantId }) => {
+      const result = await sql`
+        DELETE FROM inventory 
+        WHERE id = ${id} AND tenant_id = ${tenantId}
+        RETURNING *
+      `
 
-    if (result.length === 0) {
-      return NextResponse.json({ success: false, message: "Inventory item not found" }, { status: 404 })
-    }
+      if (result.length === 0) {
+        return NextResponse.json({ success: false, message: "Inventory item not found" }, { status: 404 })
+      }
 
-    return NextResponse.json({
-      success: true,
-      message: "Inventory item deleted successfully",
+      return NextResponse.json({
+        success: true,
+        message: "Inventory item deleted successfully",
+      })
     })
   } catch (error) {
     console.error("Error deleting inventory item:", error)

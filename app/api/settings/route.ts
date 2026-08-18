@@ -1,9 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getBusinessSettings, updateBusinessSettings, updateAllSettings } from "@/app/actions/settings"
+import { withTenantAuth } from "@/lib/withTenantAuth"
 
 export async function GET() {
   try {
-    const settings = await getBusinessSettings()
+    const settings = await withTenantAuth(async ({ sql, tenantId }) => {
+      return await getBusinessSettings({ sql, tenantId })
+    })
     return NextResponse.json({ success: true, settings })
   } catch (error) {
     console.error("Error fetching settings:", error)
@@ -16,12 +19,13 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { section, data, updateAll } = body
 
-    let result
-    if (updateAll) {
-      result = await updateAllSettings(data)
-    } else {
-      result = await updateBusinessSettings(section, data)
-    }
+    let result = await withTenantAuth(async ({ sql, tenantId }) => {
+      if (updateAll) {
+        return await updateAllSettings(data, { sql, tenantId })
+      } else {
+        return await updateBusinessSettings(section, data, { sql, tenantId })
+      }
+    })
 
     if (result.success) {
       return NextResponse.json(result)
@@ -39,7 +43,9 @@ export async function PUT(request: NextRequest) {
     const body = await request.json()
     const { section, data } = body
 
-    const result = await updateBusinessSettings(section, data)
+    const result = await withTenantAuth(async ({ sql, tenantId }) => {
+      return await updateBusinessSettings(section, data, { sql, tenantId })
+    })
 
     if (result.success) {
       return NextResponse.json(result)

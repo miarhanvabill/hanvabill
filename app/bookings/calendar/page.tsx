@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef, useMemo, memo } from "react"
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -383,7 +383,7 @@ export default function CalendarView() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader
+      <Header
         title="Bookings Calendar"
         subtitle="Real-time view of your salon's appointments, staff schedules, and booking management."
       />

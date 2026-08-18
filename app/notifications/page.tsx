@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -28,10 +28,17 @@ interface Notification {
   type: "appointment" | "payment" | "customer" | "system" | "marketing" | "reminder"
   title: string
   message: string
-  timestamp: string
+  created_at: string
   read: boolean
   priority: "low" | "medium" | "high"
-  actionUrl?: string
+  action_url?: string
+}
+
+interface NotificationStats {
+  total: number
+  unread: number
+  highPriority: number
+  appointments: number
 }
 
 const notificationSettings = {
@@ -69,93 +76,118 @@ const notificationSettings = {
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([])
+  const [stats, setStats] = useState<NotificationStats>({ total: 0, unread: 0, highPriority: 0, appointments: 0 })
   const [activeTab, setActiveTab] = useState("all")
   const [settings, setSettings] = useState(notificationSettings)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    loadNotifications()
+    loadData()
   }, [])
 
-  const loadNotifications = async () => {
+  const loadData = async () => {
     setLoading(true)
-    // Mock notifications data
-    const mockNotifications: Notification[] = [
-      {
-        id: 1,
-        type: "appointment",
-        title: "New Appointment Booked",
-        message: "Rahul Sharma booked Hair Cut and Beard Style for tomorrow at 10:00 AM",
-        timestamp: "2025-01-08T14:30:00Z",
-        read: false,
-        priority: "medium",
-        actionUrl: "/appointments",
-      },
-      {
-        id: 2,
-        type: "payment",
-        title: "Payment Received",
-        message: "₹899 payment received from Priya Patel for Anti Dandruff Hair SPA",
-        timestamp: "2025-01-08T13:15:00Z",
-        read: false,
-        priority: "low",
-        actionUrl: "/reports/daily-revenue",
-      },
-      {
-        id: 3,
-        type: "system",
-        title: "Low Stock Alert",
-        message: "Beardo Hair Serum is running low (2 units remaining)",
-        timestamp: "2025-01-08T12:00:00Z",
-        read: true,
-        priority: "high",
-        actionUrl: "/manage/products",
-      },
-      {
-        id: 4,
-        type: "customer",
-        title: "Customer Birthday",
-        message: "Amit Kumar's birthday is tomorrow. Send wishes!",
-        timestamp: "2025-01-08T09:00:00Z",
-        read: false,
-        priority: "medium",
-        actionUrl: "/customers",
-      },
-      {
-        id: 5,
-        type: "appointment",
-        title: "Appointment Cancelled",
-        message: "Sneha Reddy cancelled her 4:30 PM appointment",
-        timestamp: "2025-01-07T16:45:00Z",
-        read: true,
-        priority: "medium",
-        actionUrl: "/appointments",
-      },
-      {
-        id: 6,
-        type: "marketing",
-        title: "Campaign Performance",
-        message: "Your Instagram ad campaign reached 5,000+ people this week",
-        timestamp: "2025-01-07T10:00:00Z",
-        read: true,
-        priority: "low",
-        actionUrl: "/marketing",
-      },
-    ]
-    setNotifications(mockNotifications)
-    setLoading(false)
+    try {
+      console.log("[v0] Loading notifications data")
+
+      const [notificationsResponse, statsResponse] = await Promise.all([
+        fetch("/api/notifications"),
+        fetch("/api/notifications?stats=true"),
+      ])
+
+      if (notificationsResponse.ok && statsResponse.ok) {
+        const notificationsData = await notificationsResponse.json()
+        const statsData = await statsResponse.json()
+
+        console.log("[v0] Loaded notifications:", notificationsData.length)
+        console.log("[v0] Loaded stats:", statsData)
+
+        setNotifications(notificationsData)
+        setStats(statsData)
+      } else {
+        console.error("[v0] Failed to load notifications data")
+        // Fallback to empty data
+        setNotifications([])
+        setStats({ total: 0, unread: 0, highPriority: 0, appointments: 0 })
+      }
+    } catch (error) {
+      console.error("[v0] Error loading notifications:", error)
+      // Fallback to empty data
+      setNotifications([])
+      setStats({ total: 0, unread: 0, highPriority: 0, appointments: 0 })
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const markAsRead = (id: number) => {
-    setNotifications(notifications.map((notif) => (notif.id === id ? { ...notif, read: true } : notif)))
+  const markAsRead = async (id: number) => {
+    try {
+      console.log("[v0] Marking notification as read:", id)
+
+      const response = await fetch(`/api/notifications/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "mark_read" }),
+      })
+
+      if (response.ok) {
+        setNotifications(notifications.map((notif) => (notif.id === id ? { ...notif, read: true } : notif)))
+        setStats((prev) => ({ ...prev, unread: Math.max(0, prev.unread - 1) }))
+      } else {
+        console.error("[v0] Failed to mark notification as read")
+      }
+    } catch (error) {
+      console.error("[v0] Error marking notification as read:", error)
+    }
   }
 
-  const markAllAsRead = () => {
-    setNotifications(notifications.map((notif) => ({ ...notif, read: true })))
+  const markAllAsRead = async () => {
+    try {
+      console.log("[v0] Marking all notifications as read")
+
+      const response = await fetch("/api/notifications/mark-all-read", {
+        method: "POST",
+      })
+
+      if (response.ok) {
+        setNotifications(notifications.map((notif) => ({ ...notif, read: true })))
+        setStats((prev) => ({ ...prev, unread: 0 }))
+      } else {
+        console.error("[v0] Failed to mark all notifications as read")
+      }
+    } catch (error) {
+      console.error("[v0] Error marking all notifications as read:", error)
+    }
   }
 
-  const deleteNotification = (id: number) => {
-    setNotifications(notifications.filter((notif) => notif.id !== id))
+  const deleteNotification = async (id: number) => {
+    try {
+      console.log("[v0] Deleting notification:", id)
+
+      const response = await fetch(`/api/notifications/${id}`, {
+        method: "DELETE",
+      })
+
+      if (response.ok) {
+        const deletedNotif = notifications.find((n) => n.id === id)
+        setNotifications(notifications.filter((notif) => notif.id !== id))
+        setStats((prev) => ({
+          ...prev,
+          total: Math.max(0, prev.total - 1),
+          unread: deletedNotif && !deletedNotif.read ? Math.max(0, prev.unread - 1) : prev.unread,
+          highPriority:
+            deletedNotif && deletedNotif.priority === "high" ? Math.max(0, prev.highPriority - 1) : prev.highPriority,
+          appointments:
+            deletedNotif && deletedNotif.type === "appointment"
+              ? Math.max(0, prev.appointments - 1)
+              : prev.appointments,
+        }))
+      } else {
+        console.error("[v0] Failed to delete notification")
+      }
+    } catch (error) {
+      console.error("[v0] Error deleting notification:", error)
+    }
   }
 
   const getNotificationIcon = (type: string) => {
@@ -196,7 +228,7 @@ export default function NotificationsPage() {
     return notif.type === activeTab
   })
 
-  const unreadCount = notifications.filter((n) => !n.read).length
+  const unreadCount = stats.unread
 
   if (loading) {
     return (
@@ -211,7 +243,7 @@ export default function NotificationsPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader title="Notifications" subtitle="Stay updated with important alerts and messages from your salon." />
+      <Header title="Notifications" subtitle="Stay updated with important alerts and messages from your salon." />
 
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-4xl mx-auto space-y-6">
@@ -219,29 +251,25 @@ export default function NotificationsPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <Card>
               <CardContent className="p-6 text-center">
-                <div className="text-2xl font-bold text-blue-600">{notifications.length}</div>
+                <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
                 <div className="text-sm text-gray-600">Total Notifications</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-6 text-center">
-                <div className="text-2xl font-bold text-red-600">{unreadCount}</div>
+                <div className="text-2xl font-bold text-red-600">{stats.unread}</div>
                 <div className="text-sm text-gray-600">Unread</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-6 text-center">
-                <div className="text-2xl font-bold text-yellow-600">
-                  {notifications.filter((n) => n.priority === "high").length}
-                </div>
+                <div className="text-2xl font-bold text-yellow-600">{stats.highPriority}</div>
                 <div className="text-sm text-gray-600">High Priority</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-6 text-center">
-                <div className="text-2xl font-bold text-green-600">
-                  {notifications.filter((n) => n.type === "appointment").length}
-                </div>
+                <div className="text-2xl font-bold text-green-600">{stats.appointments}</div>
                 <div className="text-sm text-gray-600">Appointments</div>
               </CardContent>
             </Card>
@@ -325,7 +353,7 @@ export default function NotificationsPage() {
                               <p className="text-gray-600 text-sm mb-2">{notification.message}</p>
                               <div className="flex items-center justify-between">
                                 <span className="text-xs text-gray-500">
-                                  {new Date(notification.timestamp).toLocaleString()}
+                                  {new Date(notification.created_at).toLocaleString()}
                                 </span>
                                 <div className="flex items-center gap-1">
                                   {!notification.read && (

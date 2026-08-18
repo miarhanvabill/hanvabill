@@ -66,6 +66,11 @@ export default function CreateBookingPage() {
       setStaff(staffData.filter((s) => s.is_active))
     } catch (error) {
       console.error("Error loading staff:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load staff members",
+        variant: "destructive",
+      })
     }
   }
 

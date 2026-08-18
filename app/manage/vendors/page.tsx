@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -78,7 +77,6 @@ export default function VendorsPage() {
   if (isLoading) {
     return (
       <div className="flex-1 flex flex-col">
-        <PageHeader title="Vendors" subtitle="Loading vendors data..." />
         <div className="flex-1 p-6 bg-gray-50">
           <div className="max-w-6xl mx-auto">
             <div className="animate-pulse space-y-4">
@@ -92,8 +90,6 @@ export default function VendorsPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader title="Vendors" subtitle="Manage your suppliers and vendors" />
-
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-6xl mx-auto space-y-6">
           <Card>

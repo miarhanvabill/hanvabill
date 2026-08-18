@@ -1,6 +1,6 @@
 "use server"
 
-import { sql } from "@/lib/db"
+import { withTenantAuth } from '@/lib/withTenantAuth'
 
 export interface InventoryItem {
   id: number
@@ -20,6 +20,7 @@ export interface InventoryItem {
   status: string
   created_at: string
   updated_at?: string
+  tenant_id: string
 }
 
 export interface InventoryStats {
@@ -47,6 +48,7 @@ const FALLBACK_INVENTORY: InventoryItem[] = [
     description: "Professional grade shampoo for all hair types",
     status: "active",
     created_at: "2024-01-15T10:30:00Z",
+    tenant_id: "fallback-tenant"
   },
   {
     id: 2,
@@ -64,6 +66,7 @@ const FALLBACK_INVENTORY: InventoryItem[] = [
     description: "Deep conditioning treatment",
     status: "low_stock",
     created_at: "2024-01-16T11:00:00Z",
+    tenant_id: "fallback-tenant"
   },
   {
     id: 3,
@@ -81,6 +84,7 @@ const FALLBACK_INVENTORY: InventoryItem[] = [
     description: "Classic red nail polish",
     status: "out_of_stock",
     created_at: "2024-01-17T09:15:00Z",
+    tenant_id: "fallback-tenant"
   },
   {
     id: 4,
@@ -99,6 +103,7 @@ const FALLBACK_INVENTORY: InventoryItem[] = [
     description: "Intensive hydrating face mask",
     status: "active",
     created_at: "2024-01-18T14:20:00Z",
+    tenant_id: "fallback-tenant"
   },
 ]
 
@@ -110,263 +115,286 @@ const FALLBACK_STATS: InventoryStats = {
 }
 
 export async function getInventory(): Promise<InventoryItem[]> {
-  try {
-    const result = await sql("SELECT * FROM inventory ORDER BY created_at DESC")
-    return result.rows.map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      category: row.category,
-      brand: row.brand,
-      sku: row.sku,
-      quantity: row.quantity,
-      unit: row.unit,
-      cost_price: row.cost_price,
-      selling_price: row.selling_price,
-      supplier: row.supplier,
-      reorder_level: row.reorder_level,
-      expiry_date: row.expiry_date,
-      location: row.location,
-      description: row.description,
-      status: row.status,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-    }))
-  } catch (error) {
-    console.error("Error fetching inventory, using fallback data:", error)
-    return FALLBACK_INVENTORY
-  }
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const result = await sql`
+        SELECT * FROM inventory 
+        WHERE tenant_id = ${tenantId} 
+        ORDER BY created_at DESC
+      `
+      return result.map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        category: row.category,
+        brand: row.brand,
+        sku: row.sku,
+        quantity: row.quantity,
+        unit: row.unit,
+        cost_price: row.cost_price,
+        selling_price: row.selling_price,
+        supplier: row.supplier,
+        reorder_level: row.reorder_level,
+        expiry_date: row.expiry_date,
+        location: row.location,
+        description: row.description,
+        status: row.status,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        tenant_id: row.tenant_id,
+      }))
+    } catch (error) {
+      console.error("Error fetching inventory, using fallback data:", error)
+      return FALLBACK_INVENTORY.map(item => ({ ...item, tenant_id: tenantId }))
+    }
+  })
 }
 
 export async function createInventoryItem(formData: FormData) {
-  try {
-    const name = formData.get("name") as string
-    const category = formData.get("category") as string
-    const brand = formData.get("brand") as string
-    const sku = formData.get("sku") as string
-    const quantity = formData.get("quantity") as string
-    const unit = formData.get("unit") as string
-    const costPrice = formData.get("costPrice") as string
-    const sellingPrice = formData.get("sellingPrice") as string
-    const supplier = formData.get("supplier") as string
-    const reorderLevel = formData.get("reorderLevel") as string
-    const expiryDate = formData.get("expiryDate") as string
-    const location = formData.get("location") as string
-    const description = formData.get("description") as string
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const name = formData.get("name") as string
+      const category = formData.get("category") as string
+      const brand = formData.get("brand") as string
+      const sku = formData.get("sku") as string
+      const quantity = formData.get("quantity") as string
+      const unit = formData.get("unit") as string
+      const costPrice = formData.get("costPrice") as string
+      const sellingPrice = formData.get("sellingPrice") as string
+      const supplier = formData.get("supplier") as string
+      const reorderLevel = formData.get("reorderLevel") as string
+      const expiryDate = formData.get("expiryDate") as string
+      const location = formData.get("location") as string
+      const description = formData.get("description") as string
 
-    // Validate required fields
-    if (!name || !category || !quantity || !unit || !costPrice || !sellingPrice) {
+      // Validate required fields
+      if (!name || !category || !quantity || !unit || !costPrice || !sellingPrice) {
+        return {
+          success: false,
+          message: "Name, category, quantity, unit, cost price, and selling price are required",
+        }
+      }
+
+      const quantityNum = Number.parseInt(quantity)
+      const reorderLevelNum = Number.parseInt(reorderLevel || "0")
+      const costPriceNum = Number.parseFloat(costPrice)
+      const sellingPriceNum = Number.parseFloat(sellingPrice)
+
+      // Determine status based on quantity
+      let status = "active"
+      if (quantityNum === 0) {
+        status = "out_of_stock"
+      } else if (quantityNum <= reorderLevelNum) {
+        status = "low_stock"
+      }
+
+      const result = await sql`
+        INSERT INTO inventory (
+          tenant_id, name, category, brand, sku, quantity, unit, 
+          cost_price, selling_price, supplier, reorder_level, 
+          expiry_date, location, description, status
+        ) VALUES (
+          ${tenantId}, ${name}, ${category}, ${brand || null}, ${sku || null}, 
+          ${quantityNum}, ${unit}, ${costPriceNum}, ${sellingPriceNum}, 
+          ${supplier || null}, ${reorderLevelNum}, ${expiryDate || null}, 
+          ${location || null}, ${description || null}, ${status}
+        )
+        RETURNING *
+      `
+
+      return {
+        success: true,
+        message: "Inventory item created successfully",
+        item: result[0],
+      }
+    } catch (error: any) {
+      console.error("Error creating inventory item:", error)
       return {
         success: false,
-        message: "Name, category, quantity, unit, cost price, and selling price are required",
+        message: error.message || "Failed to create inventory item",
       }
     }
-
-    // Make API call to create inventory item
-    const response = await fetch("/api/inventory", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name,
-        category,
-        brand,
-        sku,
-        quantity,
-        unit,
-        costPrice,
-        sellingPrice,
-        supplier,
-        reorderLevel,
-        expiryDate,
-        location,
-        description,
-      }),
-    })
-
-    const result = await response.json()
-
-    if (!response.ok) {
-      return {
-        success: false,
-        message: result.error || "Failed to create inventory item",
-      }
-    }
-
-    return {
-      success: true,
-      message: "Inventory item created successfully",
-      item: result.item,
-    }
-  } catch (error: any) {
-    console.error("Error creating inventory item:", error)
-    return {
-      success: false,
-      message: error.message || "Failed to create inventory item",
-    }
-  }
+  })
 }
 
 export async function updateInventoryItem(id: number, formData: FormData) {
-  try {
-    const name = formData.get("name") as string
-    const category = formData.get("category") as string
-    const brand = formData.get("brand") as string
-    const sku = formData.get("sku") as string
-    const quantity = formData.get("quantity") as string
-    const unit = formData.get("unit") as string
-    const costPrice = formData.get("costPrice") as string
-    const sellingPrice = formData.get("sellingPrice") as string
-    const supplier = formData.get("supplier") as string
-    const reorderLevel = formData.get("reorderLevel") as string
-    const expiryDate = formData.get("expiryDate") as string
-    const location = formData.get("location") as string
-    const description = formData.get("description") as string
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const name = formData.get("name") as string
+      const category = formData.get("category") as string
+      const brand = formData.get("brand") as string
+      const sku = formData.get("sku") as string
+      const quantity = formData.get("quantity") as string
+      const unit = formData.get("unit") as string
+      const costPrice = formData.get("costPrice") as string
+      const sellingPrice = formData.get("sellingPrice") as string
+      const supplier = formData.get("supplier") as string
+      const reorderLevel = formData.get("reorderLevel") as string
+      const expiryDate = formData.get("expiryDate") as string
+      const location = formData.get("location") as string
+      const description = formData.get("description") as string
 
-    const quantityNum = Number.parseInt(quantity)
-    const reorderLevelNum = Number.parseInt(reorderLevel || "0")
+      const quantityNum = Number.parseInt(quantity)
+      const reorderLevelNum = Number.parseInt(reorderLevel || "0")
 
-    // Determine status based on quantity
-    let status = "active"
-    if (quantityNum === 0) {
-      status = "out_of_stock"
-    } else if (quantityNum <= reorderLevelNum) {
-      status = "low_stock"
-    }
+      // Determine status based on quantity
+      let status = "active"
+      if (quantityNum === 0) {
+        status = "out_of_stock"
+      } else if (quantityNum <= reorderLevelNum) {
+        status = "low_stock"
+      }
 
-    const result = await sql(
+      const result = await sql`
+        UPDATE inventory SET
+          name = ${name}, 
+          category = ${category}, 
+          brand = ${brand || null}, 
+          sku = ${sku || null}, 
+          quantity = ${quantityNum}, 
+          unit = ${unit},
+          cost_price = ${Number.parseFloat(costPrice)}, 
+          selling_price = ${Number.parseFloat(sellingPrice)}, 
+          supplier = ${supplier || null}, 
+          reorder_level = ${reorderLevelNum},
+          expiry_date = ${expiryDate || null}, 
+          location = ${location || null}, 
+          description = ${description || null}, 
+          status = ${status}, 
+          updated_at = NOW()
+        WHERE id = ${id} AND tenant_id = ${tenantId}
+        RETURNING *
       `
-      UPDATE inventory SET
-        name = $1, category = $2, brand = $3, sku = $4, quantity = $5, unit = $6,
-        cost_price = $7, selling_price = $8, supplier = $9, reorder_level = $10,
-        expiry_date = $11, location = $12, description = $13, status = $14, updated_at = NOW()
-      WHERE id = $15
-      RETURNING *
-    `,
-      [
-        name,
-        category,
-        brand || null,
-        sku || null,
-        quantityNum,
-        unit,
-        Number.parseFloat(costPrice),
-        Number.parseFloat(sellingPrice),
-        supplier || null,
-        reorderLevelNum,
-        expiryDate || null,
-        location || null,
-        description || null,
-        status,
-        id,
-      ],
-    )
 
-    if (result.rows.length === 0) {
+      if (result.length === 0) {
+        return {
+          success: false,
+          message: "Inventory item not found",
+        }
+      }
+
+      return {
+        success: true,
+        message: "Inventory item updated successfully",
+        item: result[0],
+      }
+    } catch (error: any) {
+      console.error("Error updating inventory item:", error)
       return {
         success: false,
-        message: "Inventory item not found",
+        message: error.message || "Failed to update inventory item",
       }
     }
-
-    return {
-      success: true,
-      message: "Inventory item updated successfully",
-      item: result.rows[0],
-    }
-  } catch (error: any) {
-    console.error("Error updating inventory item:", error)
-    return {
-      success: false,
-      message: error.message || "Failed to update inventory item",
-    }
-  }
+  })
 }
 
 export async function deleteInventoryItem(id: number) {
-  try {
-    const result = await sql("DELETE FROM inventory WHERE id = $1 RETURNING *", [id])
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const result = await sql`
+        DELETE FROM inventory 
+        WHERE id = ${id} AND tenant_id = ${tenantId}
+        RETURNING *
+      `
 
-    if (result.rows.length === 0) {
+      if (result.length === 0) {
+        return {
+          success: false,
+          message: "Inventory item not found",
+        }
+      }
+
+      return {
+        success: true,
+        message: "Inventory item deleted successfully",
+      }
+    } catch (error: any) {
+      console.error("Error deleting inventory item:", error)
       return {
         success: false,
-        message: "Inventory item not found",
+        message: error.message || "Failed to delete inventory item",
       }
     }
-
-    return {
-      success: true,
-      message: "Inventory item deleted successfully",
-    }
-  } catch (error: any) {
-    console.error("Error deleting inventory item:", error)
-    return {
-      success: false,
-      message: error.message || "Failed to delete inventory item",
-    }
-  }
+  })
 }
 
 export async function getInventoryStats(): Promise<InventoryStats> {
-  try {
-    const totalResult = await sql("SELECT COUNT(*) as total FROM inventory")
-    const lowStockResult = await sql("SELECT COUNT(*) as low_stock FROM inventory WHERE status = 'low_stock'")
-    const outOfStockResult = await sql("SELECT COUNT(*) as out_of_stock FROM inventory WHERE status = 'out_of_stock'")
-    const valueResult = await sql("SELECT SUM(quantity * cost_price) as total_value FROM inventory")
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const totalResult = await sql`
+        SELECT COUNT(*) as total FROM inventory WHERE tenant_id = ${tenantId}
+      `
+      const lowStockResult = await sql`
+        SELECT COUNT(*) as low_stock FROM inventory 
+        WHERE status = 'low_stock' AND tenant_id = ${tenantId}
+      `
+      const outOfStockResult = await sql`
+        SELECT COUNT(*) as out_of_stock FROM inventory 
+        WHERE status = 'out_of_stock' AND tenant_id = ${tenantId}
+      `
+      const valueResult = await sql`
+        SELECT SUM(quantity * cost_price) as total_value FROM inventory 
+        WHERE tenant_id = ${tenantId}
+      `
 
-    return {
-      total_items: totalResult.rows[0]?.total || FALLBACK_STATS.total_items,
-      low_stock_items: lowStockResult.rows[0]?.low_stock || FALLBACK_STATS.low_stock_items,
-      out_of_stock_items: outOfStockResult.rows[0]?.out_of_stock || FALLBACK_STATS.out_of_stock_items,
-      total_value: valueResult.rows[0]?.total_value || FALLBACK_STATS.total_value,
+      return {
+        total_items: totalResult[0]?.total || FALLBACK_STATS.total_items,
+        low_stock_items: lowStockResult[0]?.low_stock || FALLBACK_STATS.low_stock_items,
+        out_of_stock_items: outOfStockResult[0]?.out_of_stock || FALLBACK_STATS.out_of_stock_items,
+        total_value: valueResult[0]?.total_value || FALLBACK_STATS.total_value,
+      }
+    } catch (error) {
+      console.error("Error fetching inventory stats:", error)
+      return FALLBACK_STATS
     }
-  } catch (error) {
-    console.error("Error fetching inventory stats:", error)
-    return FALLBACK_STATS
-  }
+  })
 }
 
 export async function updateStock(id: number, newQuantity: number) {
-  try {
-    // Get current item to check reorder level
-    const currentItem = await sql("SELECT reorder_level FROM inventory WHERE id = $1", [id])
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      // Get current item to check reorder level
+      const currentItem = await sql`
+        SELECT reorder_level FROM inventory 
+        WHERE id = ${id} AND tenant_id = ${tenantId}
+      `
 
-    if (currentItem.rows.length === 0) {
+      if (currentItem.length === 0) {
+        return {
+          success: false,
+          message: "Inventory item not found",
+        }
+      }
+
+      const reorderLevel = currentItem[0].reorder_level || 0
+
+      // Determine status based on quantity
+      let status = "active"
+      if (newQuantity === 0) {
+        status = "out_of_stock"
+      } else if (newQuantity <= reorderLevel) {
+        status = "low_stock"
+      }
+
+      const result = await sql`
+        UPDATE inventory SET 
+          quantity = ${newQuantity}, 
+          status = ${status}, 
+          updated_at = NOW()
+        WHERE id = ${id} AND tenant_id = ${tenantId}
+        RETURNING *
+      `
+
+      return {
+        success: true,
+        message: "Stock updated successfully",
+        item: result[0],
+      }
+    } catch (error: any) {
+      console.error("Error updating stock:", error)
       return {
         success: false,
-        message: "Inventory item not found",
+        message: error.message || "Failed to update stock",
       }
     }
-
-    const reorderLevel = currentItem.rows[0].reorder_level || 0
-
-    // Determine status based on quantity
-    let status = "active"
-    if (newQuantity === 0) {
-      status = "out_of_stock"
-    } else if (newQuantity <= reorderLevel) {
-      status = "low_stock"
-    }
-
-    const result = await sql(
-      `
-      UPDATE inventory SET quantity = $1, status = $2, updated_at = NOW()
-      WHERE id = $3
-      RETURNING *
-    `,
-      [newQuantity, status, id],
-    )
-
-    return {
-      success: true,
-      message: "Stock updated successfully",
-      item: result.rows[0],
-    }
-  } catch (error: any) {
-    console.error("Error updating stock:", error)
-    return {
-      success: false,
-      message: error.message || "Failed to update stock",
-    }
-  }
+  })
 }

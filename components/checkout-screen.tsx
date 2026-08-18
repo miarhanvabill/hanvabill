@@ -98,10 +98,17 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack }: Checkou
 
   const refreshLoyalty = useCallback(async () => {
     try {
+      console.log("[v0] Fetching loyalty data for customer:", customer.id)
       const res = await fetch(`/api/loyalty/customer?id=${encodeURIComponent(String(customer.id))}`, {
         cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+        },
       })
       const json = await res.json()
+
+      console.log("[v0] Raw loyalty API response:", json)
 
       const settings = json?.settings as Partial<LoyaltySettingsUI> | undefined
       const soon = json?.expiringSoon as { days: number; points: number } | undefined
@@ -129,20 +136,34 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack }: Checkou
 
       if (soon) setExpiringSoon(soon)
 
-      // Program is for all customers — if API returns null, create a default object
-      const base = data || { customer_id: customer.id, current_points: 0, total_redeemed: 0 }
-      const ui: UiCustomerLoyalty = {
-        id: String(base.customer_id),
-        customerId: String(base.customer_id),
-        points: Number(base.current_points || 0),
-        tier: calculateTier(Number(base.total_redeemed || 0)),
-        lifetimeSpending: Number(base.total_redeemed || 0),
-        joinDate: new Date().toISOString(),
-        lastActivity: new Date().toISOString(),
+      if (data) {
+        console.log("[v0] Processing existing loyalty data:", data)
+        const ui: UiCustomerLoyalty = {
+          id: String(data.customer_id || customer.id),
+          customerId: String(data.customer_id || customer.id),
+          points: Math.max(0, Number(data.current_points || 0)),
+          tier: calculateTier(Number(data.total_redeemed || 0)),
+          lifetimeSpending: Number(data.total_redeemed || 0),
+          joinDate: data.created_at || new Date().toISOString(),
+          lastActivity: data.updated_at || new Date().toISOString(),
+        }
+        console.log("[v0] Processed loyalty data:", ui)
+        setCustomerLoyalty(ui)
+      } else {
+        console.log("[v0] No loyalty data found, creating default enrollment")
+        const ui: UiCustomerLoyalty = {
+          id: String(customer.id),
+          customerId: String(customer.id),
+          points: 0,
+          tier: calculateTier(0),
+          lifetimeSpending: 0,
+          joinDate: new Date().toISOString(),
+          lastActivity: new Date().toISOString(),
+        }
+        setCustomerLoyalty(ui)
       }
-      setCustomerLoyalty(ui)
-    } catch {
-      // Fallback defaults so the UI still works
+    } catch (error) {
+      console.error("[v0] Error fetching loyalty data:", error)
       setLoyaltySettings({
         is_active: true,
         earn_on_purchase_enabled: true,

@@ -3,23 +3,30 @@ import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import { getCustomer } from "@/app/actions/customers"
 import { getBookingsByCustomerId, getInvoicesByCustomerId } from "@/app/actions/bookings"
-import { CustomerProfileDisplay } from "@/components/customer-profile-display" // Import the new component
+import { CustomerProfileDisplay } from "@/components/customer-profile-display"
 
 async function CustomerDetailsContent({ id }: { id: string }) {
-  const customer = await getCustomer(id)
+  try {
+    const customer = await getCustomer(id)
 
-  if (!customer) {
+    if (!customer) {
+      notFound()
+    }
+
+    // Fetch bookings and invoices in parallel for better performance
+    const [bookings, invoices] = await Promise.all([
+      getBookingsByCustomerId(id),
+      getInvoicesByCustomerId(id)
+    ])
+
+    return <CustomerProfileDisplay customer={customer} bookings={bookings} invoices={invoices} />
+  } catch (error) {
+    console.error("Error loading customer details:", error)
     notFound()
   }
-
-  const bookings = await getBookingsByCustomerId(id)
-  const invoices = await getInvoicesByCustomerId(id)
-
-  return <CustomerProfileDisplay customer={customer} bookings={bookings} invoices={invoices} />
 }
 
-export default async function CustomerDetailsPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function CustomerDetailsPage({ params }: { params: { id: string } }) {
   return (
     <Suspense
       fallback={
@@ -31,7 +38,7 @@ export default async function CustomerDetailsPage({ params }: { params: Promise<
         </div>
       }
     >
-      <CustomerDetailsContent id={id} />
+      <CustomerDetailsContent id={params.id} />
     </Suspense>
   )
 }

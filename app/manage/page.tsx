@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -336,7 +336,7 @@ export default function ManagePage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader
+      <Header
         title="Manage"
         subtitle="Comprehensive management tools for your salon operations, inventory, and services."
       />
@@ -421,9 +421,6 @@ export default function ManagePage() {
                   ))}
                 </div>
               </div>
-
-              {/* Apply the same pattern to all other sections... */}
-              {/* I'll show the pattern for one more section, then apply it to all */}
 
               {/* Inventory Section */}
               <div>

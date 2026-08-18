@@ -1,8 +1,6 @@
+// components/invoice-template.tsx
 "use client"
-
 import { Card, CardContent } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
-import { numberToWords, calculateGST } from "@/lib/currency"
 
 interface InvoiceItem {
   id: number
@@ -10,23 +8,22 @@ interface InvoiceItem {
   quantity: number
   rate: number
   amount: number
-  gstRate?: number
 }
 
 interface InvoiceData {
   invoiceNumber: string
   invoiceDate: string
-  dueDate?: string
+  dueDate: string
   customerName: string
-  customerAddress: string
-  customerPhone: string
+  customerAddress?: string
+  customerPhone?: string
   customerEmail?: string
   customerGSTIN?: string
   items: InvoiceItem[]
   subtotal: number
-  discount?: number
+  discount: number
   gstRate: number
-  isInterState?: boolean
+  isInterState: boolean
   placeOfSupply: string
   businessName: string
   businessAddress: string
@@ -34,243 +31,321 @@ interface InvoiceData {
   businessEmail: string
   businessGSTIN: string
   businessPAN: string
-  sacCode?: string
+  sacCode: string
 }
 
-interface InvoiceTemplateProps {
-  data: InvoiceData
-  className?: string
+interface Tenant {
+  logo: string
+  name: string
+  address: string
+  phone: string
 }
 
-export function InvoiceTemplate({ data, className = "" }: InvoiceTemplateProps) {
-  const gstCalculation = calculateGST(data.subtotal - (data.discount || 0), data.gstRate)
-  const finalAmount =
-    data.subtotal -
-    (data.discount || 0) +
-    (data.isInterState ? gstCalculation.igst : gstCalculation.cgst + gstCalculation.sgst)
+interface Customer {
+  name: string
+  phone: string
+}
+
+interface Invoice {
+  id: string
+  date: string
+  subtotal: number
+  rounding: number
+  total: number
+  upi: number
+}
+
+interface Package {
+  id: string
+  service: string
+  remaining: string
+  expiry: string
+  faceNeck: string
+}
+
+interface Cashback {
+  available: number
+  pending: number
+}
+
+interface Social {
+  instagram: string
+  facebook: string
+}
+
+interface Appointment {
+  link: string
+}
+
+interface InvoicePreviewData {
+  tenant: Tenant
+  customer: Customer
+  invoice: Invoice
+  items: InvoiceItem[]
+  packages: Package[]
+  cashback: Cashback
+  social: Social
+  appointment: Appointment
+}
+
+export function InvoiceTemplate({
+  data,
+  className = "",
+}: { data: InvoiceData | InvoicePreviewData; className?: string }) {
+  const isInvoicePreview = (data: any): data is InvoicePreviewData =>
+    "tenant" in data && "customer" in data && "invoice" in data
+
+  const gstAmount = isInvoicePreview(data) ? 0 : (data.subtotal - data.discount) * (data.gstRate / 100)
+  const totalAmount = isInvoicePreview(data) ? data.invoice.total : data.subtotal - data.discount + gstAmount
 
   return (
-    <Card className={`max-w-4xl mx-auto bg-white ${className}`}>
-      <CardContent className="p-8">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">{data.businessName}</h1>
-          <p className="text-gray-600 mb-1">{data.businessAddress}</p>
-          <p className="text-gray-600 mb-1">
-            Phone: {data.businessPhone} | Email: {data.businessEmail}
-          </p>
-          <p className="text-gray-600">
-            GSTIN: {data.businessGSTIN} | PAN: {data.businessPAN}
-          </p>
-        </div>
-
-        <Separator className="mb-6" />
-
-        {/* Invoice Title */}
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-800 bg-gray-100 py-2 px-4 inline-block rounded">TAX INVOICE</h2>
-        </div>
-
-        {/* Invoice Details */}
-        <div className="grid grid-cols-2 gap-8 mb-8">
-          <div>
-            <h3 className="font-semibold text-gray-800 mb-3 border-b pb-1">Bill To:</h3>
-            <p className="font-semibold text-gray-800">{data.customerName}</p>
-            <p className="text-gray-600 whitespace-pre-line">{data.customerAddress}</p>
-            <p className="text-gray-600">Phone: {data.customerPhone}</p>
-            {data.customerEmail && <p className="text-gray-600">Email: {data.customerEmail}</p>}
-            {data.customerGSTIN && <p className="text-gray-600">GSTIN: {data.customerGSTIN}</p>}
-            <p className="text-gray-600">Place of Supply: {data.placeOfSupply}</p>
+    <Card className={`p-8 ${className}`}>
+      <CardContent className="space-y-8">
+        {/* Header with Logo and Business Info */}
+        {isInvoicePreview(data) && (
+          <div className="text-center mb-6">
+            <div className="mb-4">
+              <img
+                src={data.tenant.logo || "/placeholder.svg"}
+                alt="Business Logo"
+                className="mx-auto w-16 h-16 object-contain"
+              />
+            </div>
+            <h1 className="text-xl font-bold mb-2">{data.tenant.name}</h1>
+            <p className="text-xs text-gray-700 mb-1">{data.tenant.address}</p>
+            <p className="text-xs font-semibold">{data.tenant.phone}</p>
           </div>
+        )}
 
-          <div className="text-right">
-            <div className="bg-gray-50 p-4 rounded">
-              <div className="mb-2">
-                <span className="font-semibold">Invoice No: </span>
-                <span className="text-blue-600 font-mono">{data.invoiceNumber}</span>
-              </div>
-              <div className="mb-2">
-                <span className="font-semibold">Invoice Date: </span>
-                <span>{new Date(data.invoiceDate).toLocaleDateString("en-IN")}</span>
-              </div>
-              {data.dueDate && (
-                <div className="mb-2">
-                  <span className="font-semibold">Due Date: </span>
-                  <span>{new Date(data.dueDate).toLocaleDateString("en-IN")}</span>
-                </div>
-              )}
-              {data.sacCode && (
-                <div>
-                  <span className="font-semibold">SAC Code: </span>
-                  <span>{data.sacCode}</span>
-                </div>
-              )}
+        {/* Customer and Invoice Info */}
+        {isInvoicePreview(data) ? (
+          <div className="flex justify-between mb-6 text-xs">
+            <div>
+              <p className="font-semibold">{data.customer.name}</p>
+              <p>{data.invoice.id}</p>
+            </div>
+            <div className="text-right">
+              <p className="font-semibold">{data.customer.phone}</p>
+              <p>{data.invoice.date}</p>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-2xl font-bold">{data.businessName}</h1>
+              <p className="text-sm whitespace-pre-line text-gray-600">{data.businessAddress}</p>
+              <p className="text-sm text-gray-600">Phone: {data.businessPhone}</p>
+              <p className="text-sm text-gray-600">Email: {data.businessEmail}</p>
+              <p className="text-sm text-gray-600">GSTIN: {data.businessGSTIN}</p>
+              <p className="text-sm text-gray-600">PAN: {data.businessPAN}</p>
+            </div>
+            <div className="text-right">
+              <h2 className="text-xl font-semibold">TAX INVOICE</h2>
+              <p className="text-sm">Invoice No: {data.invoiceNumber}</p>
+              <p className="text-sm">Invoice Date: {new Date(data.invoiceDate).toLocaleDateString("en-IN")}</p>
+              <p className="text-sm">Due Date: {new Date(data.dueDate).toLocaleDateString("en-IN")}</p>
+              <p className="text-sm">Place of Supply: {data.placeOfSupply}</p>
+            </div>
+          </div>
+        )}
 
         {/* Items Table */}
-        <div className="mb-8">
-          <table className="w-full border-collapse border border-gray-300">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border border-gray-300 px-4 py-3 text-left font-semibold">S.No.</th>
-                <th className="border border-gray-300 px-4 py-3 text-left font-semibold">Description of Services</th>
-                <th className="border border-gray-300 px-4 py-3 text-center font-semibold">Qty</th>
-                <th className="border border-gray-300 px-4 py-3 text-right font-semibold">Rate (₹)</th>
-                <th className="border border-gray-300 px-4 py-3 text-right font-semibold">Amount (₹)</th>
+        <table className="w-full border-collapse border text-sm">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border p-2 text-left">#</th>
+              <th className="border p-2 text-left">Description</th>
+              <th className="border p-2 text-right">Qty</th>
+              <th className="border p-2 text-right">Rate</th>
+              <th className="border p-2 text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.items.map((item) => (
+              <tr key={item.id}>
+                <td className="border p-2">{item.id}</td>
+                <td className="border p-2">{item.description}</td>
+                <td className="border p-2 text-right">{item.quantity}</td>
+                <td className="border p-2 text-right">₹{item.rate.toFixed(2)}</td>
+                <td className="border p-2 text-right">₹{item.amount.toFixed(2)}</td>
               </tr>
-            </thead>
-            <tbody>
-              {data.items.map((item, index) => (
-                <tr key={item.id} className="hover:bg-gray-50">
-                  <td className="border border-gray-300 px-4 py-3 text-center">{index + 1}</td>
-                  <td className="border border-gray-300 px-4 py-3">{item.description}</td>
-                  <td className="border border-gray-300 px-4 py-3 text-center">{item.quantity}</td>
-                  <td className="border border-gray-300 px-4 py-3 text-right">
-                    {item.rate.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                  <td className="border border-gray-300 px-4 py-3 text-right font-semibold">
-                    {item.amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              ))}
+            ))}
+          </tbody>
+        </table>
 
-              {/* Subtotal Row */}
-              <tr className="bg-gray-50">
-                <td colSpan={4} className="border border-gray-300 px-4 py-3 text-right font-semibold">
-                  Subtotal:
-                </td>
-                <td className="border border-gray-300 px-4 py-3 text-right font-semibold">
-                  ₹{data.subtotal.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </td>
-              </tr>
-
-              {/* Discount Row */}
-              {data.discount && data.discount > 0 && (
-                <tr>
-                  <td colSpan={4} className="border border-gray-300 px-4 py-3 text-right font-semibold">
-                    Discount:
-                  </td>
-                  <td className="border border-gray-300 px-4 py-3 text-right font-semibold text-red-600">
-                    -₹{data.discount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </td>
-                </tr>
-              )}
-
-              {/* Taxable Amount */}
-              <tr className="bg-gray-50">
-                <td colSpan={4} className="border border-gray-300 px-4 py-3 text-right font-semibold">
-                  Taxable Amount:
-                </td>
-                <td className="border border-gray-300 px-4 py-3 text-right font-semibold">
-                  ₹
-                  {(data.subtotal - (data.discount || 0)).toLocaleString("en-IN", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </td>
-              </tr>
-
-              {/* GST Rows */}
-              {data.isInterState ? (
-                <tr>
-                  <td colSpan={4} className="border border-gray-300 px-4 py-3 text-right font-semibold">
-                    IGST ({data.gstRate}%):
-                  </td>
-                  <td className="border border-gray-300 px-4 py-3 text-right font-semibold">
-                    ₹
-                    {gstCalculation.igst.toLocaleString("en-IN", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </td>
-                </tr>
-              ) : (
-                <>
-                  <tr>
-                    <td colSpan={4} className="border border-gray-300 px-4 py-3 text-right font-semibold">
-                      CGST ({data.gstRate / 2}%):
-                    </td>
-                    <td className="border border-gray-300 px-4 py-3 text-right font-semibold">
-                      ₹
-                      {gstCalculation.cgst.toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td colSpan={4} className="border border-gray-300 px-4 py-3 text-right font-semibold">
-                      SGST ({data.gstRate / 2}%):
-                    </td>
-                    <td className="border border-gray-300 px-4 py-3 text-right font-semibold">
-                      ₹
-                      {gstCalculation.sgst.toLocaleString("en-IN", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </td>
-                  </tr>
-                </>
-              )}
-
-              {/* Total Row */}
-              <tr className="bg-blue-50 border-2 border-blue-200">
-                <td colSpan={4} className="border border-gray-300 px-4 py-4 text-right font-bold text-lg">
-                  Total Amount:
-                </td>
-                <td className="border border-gray-300 px-4 py-4 text-right font-bold text-lg text-blue-600">
-                  ₹{finalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* Amount in Words */}
-        <div className="mb-8 bg-gray-50 p-4 rounded">
-          <p className="font-semibold text-gray-800">
-            Amount in Words: <span className="font-normal italic">{numberToWords(Math.round(finalAmount))}</span>
-          </p>
-        </div>
-
-        {/* Terms and Conditions */}
-        <div className="mb-8">
-          <h3 className="font-semibold text-gray-800 mb-3 border-b pb-1">Terms & Conditions:</h3>
-          <ul className="text-sm text-gray-600 space-y-1">
-            <li>• Payment is due within 30 days of invoice date</li>
-            <li>• Late payment charges may apply after due date</li>
-            <li>• All disputes subject to local jurisdiction</li>
-            <li>• This is a computer generated invoice and does not require signature</li>
-          </ul>
-        </div>
-
-        {/* Footer */}
-        <div className="grid grid-cols-2 gap-8 pt-8 border-t">
-          <div>
-            <p className="text-sm text-gray-600 mb-2">Bank Details:</p>
-            <p className="text-sm text-gray-600">Account Name: {data.businessName}</p>
-            <p className="text-sm text-gray-600">Account No: XXXX-XXXX-XXXX</p>
-            <p className="text-sm text-gray-600">IFSC Code: XXXXXXXX</p>
-            <p className="text-sm text-gray-600">Bank: State Bank of India</p>
+        {/* Totals */}
+        <div className="flex justify-end">
+          <div className="w-64 space-y-2">
+            <div className="flex justify-between">
+              <span>Subtotal</span>
+              <span>₹{data.subtotal.toFixed(2)}</span>
+            </div>
+            {isInvoicePreview(data) ? (
+              <>
+                <div className="flex justify-between py-1">
+                  <span>Rounding</span>
+                  <span>₹{data.invoice.rounding.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between py-1 font-semibold border-t border-gray-300 pt-2">
+                  <span>Total</span>
+                  <span>₹{data.invoice.total.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between py-1">
+                  <span>UPI</span>
+                  <span>₹{data.invoice.upi.toFixed(2)}</span>
+                </div>
+              </>
+            ) : (
+              <>
+                {data.discount > 0 && (
+                  <div className="flex justify-between">
+                    <span>Discount</span>
+                    <span>-₹{data.discount.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span>GST ({data.gstRate}%)</span>
+                  <span>₹{gstAmount.toFixed(2)}</span>
+                </div>
+                <div className="border-t pt-2 flex justify-between font-semibold">
+                  <span>Total</span>
+                  <span>₹{totalAmount.toFixed(2)}</span>
+                </div>
+              </>
+            )}
           </div>
+        </div>
 
-          <div className="text-right">
-            <p className="text-sm text-gray-600 mb-8">For {data.businessName}</p>
-            <div className="border-t border-gray-300 pt-2 mt-12">
-              <p className="text-sm text-gray-600">Authorized Signatory</p>
+        {/* Active Packages */}
+        {isInvoicePreview(data) && (
+          <div className="mb-6">
+            <h3 className="font-semibold text-xs mb-2">Active Packages</h3>
+            <div className="text-xs space-y-1">
+              {data.packages.map((pkg) => (
+                <div key={pkg.id}>
+                  <div className="flex justify-between">
+                    <span>{pkg.id}</span>
+                    <span>{pkg.expiry}</span>
+                  </div>
+                  <div>{pkg.service}</div>
+                  <div>{pkg.remaining}</div>
+                  <div>{pkg.faceNeck}</div>
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Declaration */}
-        <div className="mt-8 text-center">
-          <p className="text-xs text-gray-500">
-            This is a computer generated invoice and is valid without signature and seal.
-          </p>
-        </div>
+        {/* Cashback Balance */}
+        {isInvoicePreview(data) && (
+          <div className="mb-6 text-xs">
+            <div className="flex justify-between">
+              <span>Your Cashback Balance</span>
+              <span>
+                Available: ₹{data.cashback.available.toFixed(2)} | Pending: ₹{data.cashback.pending.toFixed(2)}
+              </span>
+            </div>
+            <p className="text-xs text-gray-600 mt-1">
+              Note: Pending balances will be added based on program terms. For more details contact store manager.
+            </p>
+          </div>
+        )}
+
+        {/* Referral Program */}
+        {isInvoicePreview(data) && (
+          <div className="mb-4 text-xs">
+            <p className="font-semibold">
+              When you refer your friend, you get 5% and your friend gets 5% cashback for the next service.
+            </p>
+            <p className="text-gray-600">Disc: Discount, CB: Cashback, Cpn: Coupon, Mmbr: Membership</p>
+          </div>
+        )}
+
+        {/* Review Section */}
+        {isInvoicePreview(data) && (
+          <div className="mb-6 text-xs text-center">
+            <p className="mb-2">Hey, enjoyed our service?</p>
+            <p className="mb-2">Take a minute of your time to review, it means the world to us. ⭐⭐⭐⭐⭐</p>
+          </div>
+        )}
+
+        {/* Footer */}
+        {isInvoicePreview(data) ? (
+          <div className="text-center">
+            <button className="bg-gray-800 text-white px-6 py-2 rounded text-xs mb-4">
+              Book your next appointment
+            </button>
+            <div className="flex justify-center space-x-4">
+              <a href={data.social.instagram} className="text-gray-600">
+                📷
+              </a>
+              <a href={data.social.facebook} className="text-gray-600">
+                📘
+              </a>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center text-xs text-gray-500 pt-6 border-t">
+            <p>SAC Code: {data.sacCode}</p>
+            <p>This is a system generated invoice. No signature required.</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   )
+}
+
+export function InvoicePreview() {
+  const sampleData: InvoicePreviewData = {
+    tenant: {
+      logo: "/placeholder.svg?height=64&width=64",
+      name: "CHEAP AND BEST GB PALYA",
+      address:
+        "No.10/35, Raj Arcade 7th Main Road, near Hosur Road, Mica layout, Garvebhavi Palya, Bengaluru, Karnataka, India",
+      phone: "+919743434423",
+    },
+    customer: {
+      name: "sanju",
+      phone: "+91*****815",
+    },
+    invoice: {
+      id: "#1377161 INV-015138",
+      date: "14-Sep-2025 11:19 AM",
+      subtotal: 220.0,
+      rounding: 0.0,
+      total: 220.0,
+      upi: 220.0,
+    },
+    items: [
+      {
+        id: 1,
+        description: "Change Of Style Hair Cut and Beard Trim",
+        quantity: 1,
+        rate: 220.0,
+        amount: 220.0,
+      },
+    ],
+    packages: [
+      {
+        id: "1. COMBO399",
+        service: "Beard Trim - x1 left",
+        remaining: "Men Haircut - x1 left",
+        expiry: "02-Feb-2026",
+        faceNeck: "Face & Neck De-Tan for Men - x1 left",
+      },
+    ],
+    cashback: {
+      available: 0.0,
+      pending: 22.0,
+    },
+    social: {
+      instagram: "https://instagram.com",
+      facebook: "https://facebook.com",
+    },
+    appointment: {
+      link: "https://booking.example.com",
+    },
+  }
+
+  return <InvoiceTemplate data={sampleData} className="max-w-2xl mx-auto" />
 }

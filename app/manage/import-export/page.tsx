@@ -1,11 +1,9 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-
 import type React from "react"
-
 import { useState } from "react"
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress"
 import { toast } from "@/hooks/use-toast"
 import { Upload, Download, FileText, Database, Users, Calendar, Package, AlertCircle, CheckCircle } from "lucide-react"
+import { bulkUploadCustomers } from "@/app/actions/customers"
+import { bulkUploadServices } from "@/app/actions/services"
+import { bulkUploadBookings } from "@/app/actions/bookings"
+import { downloadCSVTemplate, getTemplateByType } from "@/lib/csv-templates"
 
 interface ImportExportOperation {
   id: string
@@ -76,46 +78,74 @@ export default function ImportExportPage() {
       status: "processing",
       progress: 0,
       recordsProcessed: 0,
-      totalRecords: 100, // Mock total
+      totalRecords: 0,
       createdAt: new Date().toISOString(),
       fileName: selectedFile.name,
     }
 
     setOperations([newOperation, ...operations])
 
-    // Simulate import process
-    let progress = 0
-    const interval = setInterval(() => {
-      progress += Math.random() * 20
-      if (progress >= 100) {
-        progress = 100
-        clearInterval(interval)
+    try {
+      let result: { success: boolean; message: string; recordsProcessed?: number }
 
-        const completedOperation = {
-          ...newOperation,
-          status: "completed" as const,
-          progress: 100,
-          recordsProcessed: 100,
-        }
+      // Call the appropriate server action based on data type
+      switch (selectedDataType) {
+        case "customers":
+          result = await bulkUploadCustomers(selectedFile)
+          break
+        case "services":
+          result = await bulkUploadServices(selectedFile)
+          break
+        case "bookings":
+          result = await bulkUploadBookings(selectedFile)
+          break
+        default:
+          throw new Error(`Import not yet implemented for ${selectedDataType}`)
+      }
 
-        setOperations((prev) => prev.map((op) => (op.id === newOperation.id ? completedOperation : op)))
+      const completedOperation = {
+        ...newOperation,
+        status: result.success ? ("completed" as const) : ("failed" as const),
+        progress: 100,
+        recordsProcessed: result.recordsProcessed || 0,
+        totalRecords: result.recordsProcessed || 0,
+        errorMessage: result.success ? undefined : result.message,
+      }
 
-        setIsProcessing(false)
-        setSelectedFile(null)
-        setSelectedDataType("")
+      setOperations((prev) => prev.map((op) => (op.id === newOperation.id ? completedOperation : op)))
 
+      if (result.success) {
         toast({
           title: "Import Completed",
-          description: `Successfully imported ${completedOperation.recordsProcessed} records`,
+          description: result.message,
         })
       } else {
-        setOperations((prev) =>
-          prev.map((op) =>
-            op.id === newOperation.id ? { ...op, progress, recordsProcessed: Math.floor((progress / 100) * 100) } : op,
-          ),
-        )
+        toast({
+          title: "Import Failed",
+          description: result.message,
+          variant: "destructive",
+        })
       }
-    }, 500)
+    } catch (error) {
+      const failedOperation = {
+        ...newOperation,
+        status: "failed" as const,
+        progress: 100,
+        errorMessage: error instanceof Error ? error.message : "Unknown error occurred",
+      }
+
+      setOperations((prev) => prev.map((op) => (op.id === newOperation.id ? failedOperation : op)))
+
+      toast({
+        title: "Import Failed",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
+      setSelectedFile(null)
+      setSelectedDataType("")
+    }
   }
 
   const handleExport = async (dataType: string) => {
@@ -128,55 +158,93 @@ export default function ImportExportPage() {
       status: "processing",
       progress: 0,
       recordsProcessed: 0,
-      totalRecords: 150, // Mock total
+      totalRecords: 0,
       createdAt: new Date().toISOString(),
       fileName: `${dataType}_export_${new Date().toISOString().split("T")[0]}.csv`,
     }
 
     setOperations([newOperation, ...operations])
 
-    // Simulate export process
-    let progress = 0
-    const interval = setInterval(() => {
-      progress += Math.random() * 25
-      if (progress >= 100) {
-        progress = 100
-        clearInterval(interval)
+    try {
+      // Fetch real data from the database via API
+      const response = await fetch(`/api/export/${dataType}`)
 
-        const completedOperation = {
-          ...newOperation,
-          status: "completed" as const,
-          progress: 100,
-          recordsProcessed: 150,
-        }
-
-        setOperations((prev) => prev.map((op) => (op.id === newOperation.id ? completedOperation : op)))
-
-        setIsProcessing(false)
-
-        // Simulate file download
-        const blob = new Blob([`Sample ${dataType} data`], { type: "text/csv" })
-        const url = window.URL.createObjectURL(blob)
-        const a = document.createElement("a")
-        a.href = url
-        a.download = completedOperation.fileName || `${dataType}_export.csv`
-        document.body.appendChild(a)
-        a.click()
-        window.URL.revokeObjectURL(url)
-        document.body.removeChild(a)
-
-        toast({
-          title: "Export Completed",
-          description: `Successfully exported ${completedOperation.recordsProcessed} records`,
-        })
-      } else {
-        setOperations((prev) =>
-          prev.map((op) =>
-            op.id === newOperation.id ? { ...op, progress, recordsProcessed: Math.floor((progress / 100) * 150) } : op,
-          ),
-        )
+      if (!response.ok) {
+        throw new Error(`Export failed: ${response.statusText}`)
       }
-    }, 400)
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = newOperation.fileName || `${dataType}_export.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      // Get the actual record count from response headers if available
+      const recordCount = Number.parseInt(response.headers.get("X-Record-Count") || "0")
+
+      const completedOperation = {
+        ...newOperation,
+        status: "completed" as const,
+        progress: 100,
+        recordsProcessed: recordCount,
+        totalRecords: recordCount,
+      }
+
+      setOperations((prev) => prev.map((op) => (op.id === newOperation.id ? completedOperation : op)))
+
+      toast({
+        title: "Export Completed",
+        description: `Successfully exported ${recordCount} ${dataType} records`,
+      })
+    } catch (error) {
+      const failedOperation = {
+        ...newOperation,
+        status: "failed" as const,
+        progress: 100,
+        errorMessage: error instanceof Error ? error.message : "Export failed",
+      }
+
+      setOperations((prev) => prev.map((op) => (op.id === newOperation.id ? failedOperation : op)))
+
+      toast({
+        title: "Export Failed",
+        description: error instanceof Error ? error.message : "Export failed",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleDownloadTemplate = (dataType: string) => {
+    try {
+      if (!["customers", "services", "bookings"].includes(dataType)) {
+        toast({
+          title: "Template Not Available",
+          description: `Template for ${dataType} is not yet available`,
+          variant: "destructive",
+        })
+        return
+      }
+
+      const template = getTemplateByType(dataType as "customers" | "services" | "bookings")
+      downloadCSVTemplate(template, true)
+
+      toast({
+        title: "Template Downloaded",
+        description: `${dataType} template with sample data has been downloaded`,
+      })
+    } catch (error) {
+      toast({
+        title: "Download Failed",
+        description: "Failed to download template",
+        variant: "destructive",
+      })
+    }
   }
 
   const getStatusIcon = (status: string) => {
@@ -207,7 +275,7 @@ export default function ImportExportPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader
+      <Header
         title="Import and Export"
         subtitle="Quickly import and export customer, service, product, and booking data for efficient management"
       />
@@ -255,6 +323,26 @@ export default function ImportExportPage() {
                     <FileText className="w-4 h-4 text-blue-600" />
                     <span className="text-sm font-medium">{selectedFile.name}</span>
                     <span className="text-xs text-gray-500">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+                  </div>
+                </div>
+              )}
+
+              {selectedDataType && (
+                <div className="p-3 bg-green-50 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium">Need a template?</span>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleDownloadTemplate(selectedDataType)}
+                      disabled={!["customers", "services", "bookings"].includes(selectedDataType)}
+                    >
+                      <Download className="w-4 h-4 mr-2" />
+                      Download Template
+                    </Button>
                   </div>
                 </div>
               )}

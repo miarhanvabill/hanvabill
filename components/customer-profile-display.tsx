@@ -329,9 +329,9 @@ export function CustomerProfileDisplay({ customer, bookings, invoices }: Custome
                           {invoices.map((invoice) => (
                             <tr key={invoice.id} className="hover:bg-gray-50">
                               <td className="p-4">{invoice.invoice_number}</td>
-                              <td className="p-4">{formatDate(invoice.payment_date)}</td>
+                              <td className="p-4">{formatDate(invoice.invoice_date)}</td>
                               <td className="p-4 font-semibold text-green-600">{formatCurrency(invoice.amount)}</td>
-                              <td className="p-4">{invoice.method}</td>
+                              <td className="p-4">{invoice.payment_method}</td>
                               <td className="p-4">
                                 <Badge variant={invoice.status === "completed" ? "secondary" : "outline"}>
                                   {invoice.status}

@@ -390,10 +390,29 @@ export function ServiceSelectionScreen({
       setPackages(pkgs)
       setMemberships(mems)
 
-      // Staff (no fallback mock; we show "Any Staff" only if empty)
-      const normalizedStaff: Staff[] = (Array.isArray(stf) ? stf : [])
-        .map((row: StaffRowFromAPI) => ({ id: Number(row.id), name: s(row.name) }))
+      console.log("[v0] Raw staff API response:", stf)
+
+      // Handle both direct array and wrapped response formats
+      let staffArray = []
+      if (Array.isArray(stf)) {
+        staffArray = stf
+      } else if (stf && Array.isArray(stf.staff)) {
+        staffArray = stf.staff
+      } else if (stf && stf.success && Array.isArray(stf.staff)) {
+        staffArray = stf.staff
+      }
+
+      const normalizedStaff: Staff[] = staffArray
+        .map((row: any) => {
+          console.log("[v0] Processing staff row:", row)
+          return {
+            id: Number(row.id),
+            name: s(row.name),
+          }
+        })
         .filter((r) => Number.isFinite(r.id) && r.name.length > 0)
+
+      console.log("[v0] Normalized staff data:", normalizedStaff)
       setStaff(normalizedStaff)
 
       console.log("[ServiceSelection] loaded counts:", {
@@ -428,6 +447,11 @@ export function ServiceSelectionScreen({
 
   const filteredServices = useMemo(() => {
     const q = lower(searchTerm)
+    if (!Array.isArray(services)) {
+      console.warn("[v0] Services is not an array:", services)
+      return []
+    }
+
     return services.filter((sv) => {
       const match = lower(sv.name).includes(q) || lower(sv.description).includes(q)
       return match && (selectedCategory === "all" || s(sv.category) === selectedCategory)

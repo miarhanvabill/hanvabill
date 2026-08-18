@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -65,7 +65,7 @@ export default function EnquiryPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader
+      <Header
         title="Enquiry"
         subtitle="Manage customer inquiries in one place, ensuring no questions or service requests go unanswered."
       />

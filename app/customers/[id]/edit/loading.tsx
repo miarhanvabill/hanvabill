@@ -1,4 +1,5 @@
-// app/customers/[id]/edit/loading.tsx
+"use client"
+
 export default function Loading() {
   return <div className="p-6">Loading…</div>
 }

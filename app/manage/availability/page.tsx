@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -159,12 +159,14 @@ export default function StaffAvailabilityPage() {
 
   const handleManualRefresh = useCallback(() => {
     fetchStaffMembers(true)
+    loadAvailabilities(true)
   }, [fetchStaffMembers])
 
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true)
       fetchStaffMembers(true)
+      loadAvailabilities(true)
     }
 
     const handleOffline = () => {
@@ -182,24 +184,74 @@ export default function StaffAvailabilityPage() {
 
   useEffect(() => {
     fetchStaffMembers()
+    loadAvailabilities()
 
     const interval = setInterval(() => {
       if (isOnline) {
         fetchStaffMembers()
+        loadAvailabilities()
       }
     }, 30000) // Poll every 30 seconds
 
     return () => clearInterval(interval)
   }, [fetchStaffMembers, isOnline])
 
-  useEffect(() => {
-    loadAvailabilities()
-  }, [])
-
-  const loadAvailabilities = async () => {
+  const loadAvailabilities = async (showRefreshIndicator = false) => {
     try {
-      setLoading(true)
-      // Simulate API call
+      if (showRefreshIndicator) {
+        setIsRefreshing(true)
+      } else {
+        setLoading(true)
+      }
+
+      console.log("[v0] Fetching availability data from API...")
+      const response = await fetch("/api/availability", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cache: "no-store",
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log("[v0] Availability API response:", data)
+
+      if (data.success && Array.isArray(data.availability)) {
+        const formattedAvailabilities = data.availability.map((availability: any) => ({
+          id: availability.id?.toString() || "",
+          staff_id: availability.staff_id?.toString() || "",
+          staff_name: availability.staff_name || "Unknown",
+          staff_role: availability.staff_role || "Staff Member",
+          day_of_week: Number(availability.day_of_week) || 0,
+          start_time: availability.start_time || "09:00",
+          end_time: availability.end_time || "17:00",
+          is_available: Boolean(availability.is_available),
+          break_start: availability.break_start || undefined,
+          break_end: availability.break_end || undefined,
+          notes: availability.notes || undefined,
+          created_at: availability.created_at || new Date().toISOString(),
+        }))
+
+        setAvailabilities(formattedAvailabilities)
+        setIsOnline(true)
+        console.log("[v0] Successfully loaded", formattedAvailabilities.length, "availability records")
+      } else {
+        throw new Error("Invalid response format")
+      }
+    } catch (error) {
+      console.error("[v0] Error loading availability:", error)
+      setIsOnline(false)
+      toast({
+        title: "Error",
+        description: "Failed to load staff availability. Using offline data.",
+        variant: "destructive",
+      })
+
+      // Fallback to mock data when API fails
       const mockAvailabilities: StaffAvailability[] = [
         {
           id: "1",
@@ -228,42 +280,11 @@ export default function StaffAvailabilityPage() {
           break_end: "13:00",
           created_at: "2024-01-15T10:00:00Z",
         },
-        {
-          id: "3",
-          staff_id: "2",
-          staff_name: "Mike Chen",
-          staff_role: "Hair Colorist",
-          day_of_week: 1,
-          start_time: "10:00",
-          end_time: "18:00",
-          is_available: true,
-          break_start: "13:00",
-          break_end: "14:00",
-          notes: "Specializes in color treatments",
-          created_at: "2024-01-15T10:00:00Z",
-        },
-        {
-          id: "4",
-          staff_id: "3",
-          staff_name: "Emma Davis",
-          staff_role: "Nail Technician",
-          day_of_week: 0,
-          start_time: "11:00",
-          end_time: "19:00",
-          is_available: false,
-          notes: "Not available on Sundays",
-          created_at: "2024-01-15T10:00:00Z",
-        },
       ]
       setAvailabilities(mockAvailabilities)
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to load staff availability",
-        variant: "destructive",
-      })
     } finally {
       setLoading(false)
+      setIsRefreshing(false)
     }
   }
 
@@ -279,44 +300,44 @@ export default function StaffAvailabilityPage() {
         return
       }
 
-      // Check if availability already exists for this staff and day
-      const existingAvailability = availabilities.find(
-        (a) => a.staff_id === formData.staff_id && a.day_of_week === formData.day_of_week,
-      )
+      console.log("[v0] Creating availability with data:", formData)
+      const response = await fetch("/api/availability", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          staff_id: Number(formData.staff_id),
+          day_of_week: formData.day_of_week,
+          start_time: formData.start_time,
+          end_time: formData.end_time,
+          is_available: formData.is_available,
+          break_start: formData.break_start || null,
+          break_end: formData.break_end || null,
+          notes: formData.notes || null,
+        }),
+      })
 
-      if (existingAvailability) {
+      const result = await response.json()
+      console.log("[v0] Create availability result:", result)
+
+      if (result.success) {
+        await loadAvailabilities() // Refresh the list
+        setIsCreateDialogOpen(false)
+        resetForm()
+        toast({
+          title: "Success",
+          description: result.message || "Staff availability created successfully",
+        })
+      } else {
         toast({
           title: "Error",
-          description: "Availability already exists for this staff member on this day",
+          description: result.message || "Failed to create staff availability",
           variant: "destructive",
         })
-        return
       }
-
-      const newAvailability: StaffAvailability = {
-        id: Date.now().toString(),
-        staff_id: formData.staff_id,
-        staff_name: selectedStaff.name,
-        staff_role: selectedStaff.role,
-        day_of_week: formData.day_of_week,
-        start_time: formData.start_time,
-        end_time: formData.end_time,
-        is_available: formData.is_available,
-        break_start: formData.break_start || undefined,
-        break_end: formData.break_end || undefined,
-        notes: formData.notes || undefined,
-        created_at: new Date().toISOString(),
-      }
-
-      setAvailabilities([...availabilities, newAvailability])
-      setIsCreateDialogOpen(false)
-      resetForm()
-
-      toast({
-        title: "Success",
-        description: "Staff availability created successfully",
-      })
     } catch (error) {
+      console.error("[v0] Error creating availability:", error)
       toast({
         title: "Error",
         description: "Failed to create staff availability",
@@ -332,30 +353,46 @@ export default function StaffAvailabilityPage() {
       const selectedStaff = staffMembers.find((s) => s.id === formData.staff_id)
       if (!selectedStaff) return
 
-      const updatedAvailability = {
-        ...selectedAvailability,
-        staff_id: formData.staff_id,
-        staff_name: selectedStaff.name,
-        staff_role: selectedStaff.role,
-        day_of_week: formData.day_of_week,
-        start_time: formData.start_time,
-        end_time: formData.end_time,
-        is_available: formData.is_available,
-        break_start: formData.break_start || undefined,
-        break_end: formData.break_end || undefined,
-        notes: formData.notes || undefined,
-      }
-
-      setAvailabilities(availabilities.map((a) => (a.id === selectedAvailability.id ? updatedAvailability : a)))
-      setIsEditDialogOpen(false)
-      setSelectedAvailability(null)
-      resetForm()
-
-      toast({
-        title: "Success",
-        description: "Staff availability updated successfully",
+      console.log("[v0] Updating availability with data:", formData)
+      const response = await fetch("/api/availability", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: Number(selectedAvailability.id),
+          staff_id: Number(formData.staff_id),
+          day_of_week: formData.day_of_week,
+          start_time: formData.start_time,
+          end_time: formData.end_time,
+          is_available: formData.is_available,
+          break_start: formData.break_start || null,
+          break_end: formData.break_end || null,
+          notes: formData.notes || null,
+        }),
       })
+
+      const result = await response.json()
+      console.log("[v0] Update availability result:", result)
+
+      if (result.success) {
+        await loadAvailabilities() // Refresh the list
+        setIsEditDialogOpen(false)
+        setSelectedAvailability(null)
+        resetForm()
+        toast({
+          title: "Success",
+          description: result.message || "Staff availability updated successfully",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to update staff availability",
+          variant: "destructive",
+        })
+      }
     } catch (error) {
+      console.error("[v0] Error updating availability:", error)
       toast({
         title: "Error",
         description: "Failed to update staff availability",
@@ -368,12 +405,32 @@ export default function StaffAvailabilityPage() {
     if (!confirm("Are you sure you want to delete this availability schedule?")) return
 
     try {
-      setAvailabilities(availabilities.filter((a) => a.id !== id))
-      toast({
-        title: "Success",
-        description: "Staff availability deleted successfully",
+      console.log("[v0] Deleting availability with ID:", id)
+      const response = await fetch(`/api/availability?id=${id}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
       })
+
+      const result = await response.json()
+      console.log("[v0] Delete availability result:", result)
+
+      if (result.success) {
+        await loadAvailabilities() // Refresh the list
+        toast({
+          title: "Success",
+          description: result.message || "Staff availability deleted successfully",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to delete staff availability",
+          variant: "destructive",
+        })
+      }
     } catch (error) {
+      console.error("[v0] Error deleting availability:", error)
       toast({
         title: "Error",
         description: "Failed to delete staff availability",
@@ -430,7 +487,7 @@ export default function StaffAvailabilityPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader title="Staff Availability" subtitle="Manage staff working hours and availability schedules" />
+      <Header title="Staff Availability" subtitle="Manage staff working hours and availability schedules" />
 
       <div className="bg-white border-b px-6 py-2">
         <div className="max-w-7xl mx-auto flex items-center justify-between text-sm">

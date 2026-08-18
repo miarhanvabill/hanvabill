@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -109,7 +109,7 @@ export default function LoyaltyPage() {
   if (isLoading) {
     return (
       <div className="flex-1 flex flex-col">
-        <PageHeader title="Loyalty Program" subtitle="Manage your customer loyalty and rewards program" />
+        <Header title="Loyalty Program" subtitle="Manage your customer loyalty and rewards program" />
         <div className="flex-1 p-6 bg-gray-50">
           <div className="max-w-4xl mx-auto">
             <div className="animate-pulse space-y-4">
@@ -124,7 +124,7 @@ export default function LoyaltyPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader title="Loyalty Program" subtitle="Manage your customer loyalty and rewards program" />
+      <Header title="Loyalty Program" subtitle="Manage your customer loyalty and rewards program" />
 
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-5xl mx-auto space-y-6">

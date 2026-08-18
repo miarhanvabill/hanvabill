@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -107,7 +107,7 @@ export default function GiftCardsPage() {
   if (isLoading) {
     return (
       <div className="flex-1 flex flex-col">
-        <PageHeader title="Gift Cards" subtitle="Loading gift cards data..." />
+        <Header title="Gift Cards" subtitle="Loading gift cards data..." />
         <div className="flex-1 p-6 bg-gray-50">
           <div className="max-w-6xl mx-auto">
             <div className="animate-pulse space-y-4">
@@ -122,7 +122,7 @@ export default function GiftCardsPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader title="Gift Cards" subtitle="Manage gift cards and track redemptions" />
+      <Header title="Gift Cards" subtitle="Manage gift cards and track redemptions" />
 
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-6xl mx-auto space-y-6">

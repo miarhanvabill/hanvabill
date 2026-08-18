@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -36,6 +36,7 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react"
+import { getGoals, createGoal, updateGoal, deleteGoal, type Goal } from "@/app/actions/goals"
 
 interface StaffMember {
   id: string
@@ -48,23 +49,8 @@ interface StaffMember {
   updated_at: string
 }
 
-interface RevenueGoal {
-  id: string
-  staff_id: string
-  staff_name: string
-  staff_role: string
-  goal_type: "monthly" | "quarterly" | "yearly"
-  target_amount: number
-  current_amount: number
-  start_date: string
-  end_date: string
-  status: "active" | "completed" | "overdue"
-  description: string
-  created_at: string
-}
-
 export default function StaffRevenueGoalsPage() {
-  const [goals, setGoals] = useState<RevenueGoal[]>([])
+  const [goals, setGoals] = useState<Goal[]>([])
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([])
   const [loading, setLoading] = useState(true)
   const [staffLoading, setStaffLoading] = useState(true)
@@ -75,16 +61,17 @@ export default function StaffRevenueGoalsPage() {
   const [filterType, setFilterType] = useState<string>("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [selectedGoal, setSelectedGoal] = useState<RevenueGoal | null>(null)
+  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null)
 
   // Form state
   const [formData, setFormData] = useState({
     staff_id: "",
-    goal_type: "monthly" as const,
-    target_amount: 0,
+    goal_type: "revenue" as const,
+    target_value: 0,
+    period_type: "monthly" as const,
     start_date: "",
     end_date: "",
-    description: "",
+    reward_amount: 0,
   })
 
   // Real-time staff fetching function
@@ -240,70 +227,26 @@ export default function StaffRevenueGoalsPage() {
   const loadGoals = async () => {
     try {
       setLoading(true)
-      // Simulate API call
-      const mockGoals: RevenueGoal[] = [
-        {
-          id: "1",
-          staff_id: "1",
-          staff_name: "Sarah Johnson",
-          staff_role: "Senior Stylist",
-          goal_type: "monthly",
-          target_amount: 8000,
-          current_amount: 6200,
-          start_date: "2024-01-01",
-          end_date: "2024-01-31",
-          status: "active",
-          description: "Monthly revenue target for January",
-          created_at: "2024-01-01T10:00:00Z",
-        },
-        {
-          id: "2",
-          staff_id: "2",
-          staff_name: "Mike Chen",
-          staff_role: "Hair Colorist",
-          goal_type: "monthly",
-          target_amount: 6000,
-          current_amount: 6500,
-          start_date: "2024-01-01",
-          end_date: "2024-01-31",
-          status: "completed",
-          description: "Monthly revenue target for January",
-          created_at: "2024-01-01T10:00:00Z",
-        },
-        {
-          id: "3",
-          staff_id: "3",
-          staff_name: "Emma Davis",
-          staff_role: "Nail Technician",
-          goal_type: "quarterly",
-          target_amount: 15000,
-          current_amount: 8200,
-          start_date: "2024-01-01",
-          end_date: "2024-03-31",
-          status: "active",
-          description: "Q1 revenue target",
-          created_at: "2024-01-01T10:00:00Z",
-        },
-        {
-          id: "4",
-          staff_id: "4",
-          staff_name: "Alex Rodriguez",
-          staff_role: "Massage Therapist",
-          goal_type: "monthly",
-          target_amount: 4000,
-          current_amount: 2800,
-          start_date: "2023-12-01",
-          end_date: "2023-12-31",
-          status: "overdue",
-          description: "December revenue target",
-          created_at: "2023-12-01T10:00:00Z",
-        },
-      ]
-      setGoals(mockGoals)
+      console.log("[v0] Loading goals from database...")
+
+      const result = await getGoals()
+
+      if (result.success) {
+        setGoals(result.goals)
+        console.log("[v0] Goals loaded successfully:", result.goals.length)
+      } else {
+        console.error("[v0] Failed to load goals:", result.error)
+        toast({
+          title: "Error",
+          description: result.error || "Failed to load goals",
+          variant: "destructive",
+        })
+      }
     } catch (error) {
+      console.error("[v0] Error loading goals:", error)
       toast({
         title: "Error",
-        description: "Failed to load revenue goals",
+        description: "Failed to load goals",
         variant: "destructive",
       })
     } finally {
@@ -323,33 +266,40 @@ export default function StaffRevenueGoalsPage() {
         return
       }
 
-      const newGoal: RevenueGoal = {
-        id: Date.now().toString(),
-        staff_id: formData.staff_id,
-        staff_name: selectedStaff.name,
-        staff_role: selectedStaff.role,
+      console.log("[v0] Creating goal with data:", formData)
+
+      const result = await createGoal({
+        staff_id: Number.parseInt(formData.staff_id),
         goal_type: formData.goal_type,
-        target_amount: formData.target_amount,
-        current_amount: 0,
+        target_value: formData.target_value,
+        period_type: formData.period_type,
         start_date: formData.start_date,
         end_date: formData.end_date,
-        status: "active",
-        description: formData.description,
-        created_at: new Date().toISOString(),
-      }
-
-      setGoals([...goals, newGoal])
-      setIsCreateDialogOpen(false)
-      resetForm()
-
-      toast({
-        title: "Success",
-        description: "Revenue goal created successfully",
+        reward_amount: formData.reward_amount,
       })
+
+      if (result.success) {
+        // Reload goals to get fresh data
+        await loadGoals()
+        setIsCreateDialogOpen(false)
+        resetForm()
+
+        toast({
+          title: "Success",
+          description: "Goal created successfully",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to create goal",
+          variant: "destructive",
+        })
+      }
     } catch (error) {
+      console.error("[v0] Error creating goal:", error)
       toast({
         title: "Error",
-        description: "Failed to create revenue goal",
+        description: "Failed to create goal",
         variant: "destructive",
       })
     }
@@ -362,63 +312,88 @@ export default function StaffRevenueGoalsPage() {
       const selectedStaff = staffMembers.find((s) => s.id === formData.staff_id)
       if (!selectedStaff) return
 
-      const updatedGoal = {
-        ...selectedGoal,
-        staff_id: formData.staff_id,
-        staff_name: selectedStaff.name,
-        staff_role: selectedStaff.role,
+      console.log("[v0] Updating goal:", selectedGoal.id, formData)
+
+      const result = await updateGoal(selectedGoal.id, {
+        staff_id: Number.parseInt(formData.staff_id),
         goal_type: formData.goal_type,
-        target_amount: formData.target_amount,
+        target_value: formData.target_value,
+        period_type: formData.period_type,
         start_date: formData.start_date,
         end_date: formData.end_date,
-        description: formData.description,
-      }
-
-      setGoals(goals.map((g) => (g.id === selectedGoal.id ? updatedGoal : g)))
-      setIsEditDialogOpen(false)
-      setSelectedGoal(null)
-      resetForm()
-
-      toast({
-        title: "Success",
-        description: "Revenue goal updated successfully",
+        reward_amount: formData.reward_amount,
       })
+
+      if (result.success) {
+        // Reload goals to get fresh data
+        await loadGoals()
+        setIsEditDialogOpen(false)
+        setSelectedGoal(null)
+        resetForm()
+
+        toast({
+          title: "Success",
+          description: "Goal updated successfully",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to update goal",
+          variant: "destructive",
+        })
+      }
     } catch (error) {
+      console.error("[v0] Error updating goal:", error)
       toast({
         title: "Error",
-        description: "Failed to update revenue goal",
+        description: "Failed to update goal",
         variant: "destructive",
       })
     }
   }
 
-  const handleDeleteGoal = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this revenue goal?")) return
+  const handleDeleteGoal = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this goal?")) return
 
     try {
-      setGoals(goals.filter((g) => g.id !== id))
-      toast({
-        title: "Success",
-        description: "Revenue goal deleted successfully",
-      })
+      console.log("[v0] Deleting goal:", id)
+
+      const result = await deleteGoal(id)
+
+      if (result.success) {
+        // Reload goals to get fresh data
+        await loadGoals()
+        toast({
+          title: "Success",
+          description: "Goal deleted successfully",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.error || "Failed to delete goal",
+          variant: "destructive",
+        })
+      }
     } catch (error) {
+      console.error("[v0] Error deleting goal:", error)
       toast({
         title: "Error",
-        description: "Failed to delete revenue goal",
+        description: "Failed to delete goal",
         variant: "destructive",
       })
     }
   }
 
-  const handleEditGoal = (goal: RevenueGoal) => {
+  const handleEditGoal = (goal: Goal) => {
     setSelectedGoal(goal)
     setFormData({
-      staff_id: goal.staff_id,
+      staff_id: goal.staff_id.toString(),
       goal_type: goal.goal_type,
-      target_amount: goal.target_amount,
+      target_value: goal.target_value,
+      period_type: goal.period_type,
       start_date: goal.start_date,
       end_date: goal.end_date,
-      description: goal.description,
+      reward_amount: goal.reward_amount,
     })
     setIsEditDialogOpen(true)
   }
@@ -426,11 +401,12 @@ export default function StaffRevenueGoalsPage() {
   const resetForm = () => {
     setFormData({
       staff_id: "",
-      goal_type: "monthly",
-      target_amount: 0,
+      goal_type: "revenue",
+      target_value: 0,
+      period_type: "monthly",
       start_date: "",
       end_date: "",
-      description: "",
+      reward_amount: 0,
     })
   }
 
@@ -462,12 +438,12 @@ export default function StaffRevenueGoalsPage() {
   const completedGoals = goals.filter((g) => g.status === "completed").length
   const activeGoals = goals.filter((g) => g.status === "active").length
   const overdueGoals = goals.filter((g) => g.status === "overdue").length
-  const totalTargetAmount = goals.reduce((sum, g) => sum + g.target_amount, 0)
-  const totalCurrentAmount = goals.reduce((sum, g) => sum + g.current_amount, 0)
+  const totalTargetAmount = goals.reduce((sum, g) => sum + g.target_value, 0)
+  const totalCurrentAmount = goals.reduce((sum, g) => sum + g.current_value, 0)
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader title="Staff Revenue Goals" subtitle="Set and track revenue targets for your team members" />
+      <Header title="Staff Goals" subtitle="Set and track goals for your team members" />
 
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-7xl mx-auto space-y-6">
@@ -676,6 +652,7 @@ export default function StaffRevenueGoalsPage() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
+                              <SelectItem value="revenue">Revenue</SelectItem>
                               <SelectItem value="monthly">Monthly</SelectItem>
                               <SelectItem value="quarterly">Quarterly</SelectItem>
                               <SelectItem value="yearly">Yearly</SelectItem>
@@ -685,13 +662,13 @@ export default function StaffRevenueGoalsPage() {
                       </div>
 
                       <div>
-                        <Label htmlFor="target_amount">Target Amount ($)</Label>
+                        <Label htmlFor="target_value">Target Value ($)</Label>
                         <Input
-                          id="target_amount"
+                          id="target_value"
                           type="number"
-                          value={formData.target_amount}
+                          value={formData.target_value}
                           onChange={(e) =>
-                            setFormData({ ...formData, target_amount: Number.parseFloat(e.target.value) || 0 })
+                            setFormData({ ...formData, target_value: Number.parseFloat(e.target.value) || 0 })
                           }
                           placeholder="5000"
                         />
@@ -716,6 +693,19 @@ export default function StaffRevenueGoalsPage() {
                             onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
                           />
                         </div>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="reward_amount">Reward Amount ($)</Label>
+                        <Input
+                          id="reward_amount"
+                          type="number"
+                          value={formData.reward_amount}
+                          onChange={(e) =>
+                            setFormData({ ...formData, reward_amount: Number.parseFloat(e.target.value) || 0 })
+                          }
+                          placeholder="1000"
+                        />
                       </div>
 
                       <div>
@@ -746,8 +736,8 @@ export default function StaffRevenueGoalsPage() {
           {/* Goals Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Revenue Goals</CardTitle>
-              <CardDescription>Track progress towards individual staff revenue targets</CardDescription>
+              <CardTitle>Goals</CardTitle>
+              <CardDescription>Track progress towards individual staff goals</CardDescription>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -770,7 +760,7 @@ export default function StaffRevenueGoalsPage() {
                   </TableHeader>
                   <TableBody>
                     {filteredGoals.map((goal) => {
-                      const progress = getProgressPercentage(goal.current_amount, goal.target_amount)
+                      const progress = getProgressPercentage(goal.current_value, goal.target_value)
                       return (
                         <TableRow key={goal.id}>
                           <TableCell>
@@ -782,8 +772,16 @@ export default function StaffRevenueGoalsPage() {
                           <TableCell>
                             <Badge variant="outline">{goal.goal_type}</Badge>
                           </TableCell>
-                          <TableCell>${goal.target_amount.toLocaleString()}</TableCell>
-                          <TableCell>${goal.current_amount.toLocaleString()}</TableCell>
+                          <TableCell>
+                            {goal.goal_type === "revenue"
+                              ? `$${goal.target_value.toLocaleString()}`
+                              : goal.target_value.toString()}
+                          </TableCell>
+                          <TableCell>
+                            {goal.goal_type === "revenue"
+                              ? `$${goal.current_value.toLocaleString()}`
+                              : goal.current_value.toString()}
+                          </TableCell>
                           <TableCell>
                             <div className="space-y-2">
                               <div className="flex justify-between text-sm">
@@ -873,7 +871,7 @@ export default function StaffRevenueGoalsPage() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="edit_goal_type">Goal Period</Label>
+                <Label htmlFor="edit_goal_type">Goal Type</Label>
                 <Select
                   value={formData.goal_type}
                   onValueChange={(value: any) => setFormData({ ...formData, goal_type: value })}
@@ -882,6 +880,7 @@ export default function StaffRevenueGoalsPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="revenue">Revenue</SelectItem>
                     <SelectItem value="monthly">Monthly</SelectItem>
                     <SelectItem value="quarterly">Quarterly</SelectItem>
                     <SelectItem value="yearly">Yearly</SelectItem>
@@ -891,12 +890,12 @@ export default function StaffRevenueGoalsPage() {
             </div>
 
             <div>
-              <Label htmlFor="edit_target_amount">Target Amount ($)</Label>
+              <Label htmlFor="edit_target_value">Target Value ($)</Label>
               <Input
-                id="edit_target_amount"
+                id="edit_target_value"
                 type="number"
-                value={formData.target_amount}
-                onChange={(e) => setFormData({ ...formData, target_amount: Number.parseFloat(e.target.value) || 0 })}
+                value={formData.target_value}
+                onChange={(e) => setFormData({ ...formData, target_value: Number.parseFloat(e.target.value) || 0 })}
                 placeholder="5000"
               />
             </div>
@@ -920,6 +919,17 @@ export default function StaffRevenueGoalsPage() {
                   onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
                 />
               </div>
+            </div>
+
+            <div>
+              <Label htmlFor="edit_reward_amount">Reward Amount ($)</Label>
+              <Input
+                id="edit_reward_amount"
+                type="number"
+                value={formData.reward_amount}
+                onChange={(e) => setFormData({ ...formData, reward_amount: Number.parseFloat(e.target.value) || 0 })}
+                placeholder="1000"
+              />
             </div>
 
             <div>

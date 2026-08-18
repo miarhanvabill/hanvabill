@@ -1,23 +1,43 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { getBusinessAnalytics } from "@/app/actions/analytics"
+import { withTenantAuth } from "@/lib/withTenantAuth"
 
-export async function GET(request: Request) {
+function escapeCSVValue(value: string | number): string {
+  if (typeof value === "number") return value.toString()
+  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+    return `"${value.replace(/"/g, '""')}"`
+  }
+  return value
+}
+
+export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const dateRange = searchParams.get("dateRange") || "30"
 
-    const analyticsData = await getBusinessAnalytics(dateRange)
+    // Use withTenantAuth to get tenant context and SQL client
+    const analyticsData = await withTenantAuth(async ({ sql, tenantId }) => {
+      return await getBusinessAnalytics(dateRange, tenantId, sql)
+    })
 
-    // Convert to CSV format
-    const csvData = [
+    // Prepare CSV rows
+    const csvData: (string | number)[][] = [
       ["Metric", "Value", "Growth %"],
       [
         "Total Revenue",
         `₹${analyticsData.totalRevenue.toLocaleString()}`,
         `${analyticsData.revenueGrowth.toFixed(1)}%`,
       ],
-      ["Total Customers", analyticsData.totalCustomers.toString(), `${analyticsData.customerGrowth.toFixed(1)}%`],
-      ["Total Bookings", analyticsData.totalBookings.toString(), `${analyticsData.bookingGrowth.toFixed(1)}%`],
+      [
+        "Total Customers",
+        analyticsData.totalCustomers,
+        `${analyticsData.customerGrowth.toFixed(1)}%`,
+      ],
+      [
+        "Total Bookings",
+        analyticsData.totalBookings,
+        `${analyticsData.bookingGrowth.toFixed(1)}%`,
+      ],
       [
         "Avg Service Time",
         `${analyticsData.avgServiceTime.toFixed(0)}m`,
@@ -28,17 +48,18 @@ export async function GET(request: Request) {
       ["Monthly Recurring Revenue", `₹${analyticsData.monthlyRecurringRevenue.toLocaleString()}`, ""],
       [],
       ["Top Services", "Bookings", "Revenue"],
-      ...analyticsData.topServices.map((s) => [s.name, s.bookings.toString(), `₹${s.revenue.toLocaleString()}`]),
+      ...analyticsData.topServices.map((s) => [s.name, s.bookings, `₹${s.revenue.toLocaleString()}`]),
       [],
       ["Staff Performance", "Bookings", "Revenue"],
-      ...analyticsData.staffPerformance.map((s) => [s.name, s.bookings.toString(), `₹${s.revenue.toLocaleString()}`]),
+      ...analyticsData.staffPerformance.map((s) => [s.name, s.bookings, `₹${s.revenue.toLocaleString()}`]),
     ]
 
-    const csv = csvData.map((row) => row.join(",")).join("\n")
+    // Convert rows to CSV string with escaping
+    const csv = csvData.map((row) => row.map(escapeCSVValue).join(",")).join("\n")
 
     return new NextResponse(csv, {
       headers: {
-        "Content-Type": "text/csv",
+        "Content-Type": "text/csv; charset=utf-8",
         "Content-Disposition": `attachment; filename="analytics-report-${dateRange}days.csv"`,
       },
     })

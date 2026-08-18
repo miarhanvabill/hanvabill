@@ -1,9 +1,9 @@
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 
 export default function GiftCardsLoading() {
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader title="Gift Cards" subtitle="Loading gift cards data..." />
+      <Header title="Gift Cards" subtitle="Loading gift cards data..." />
       <div className="flex-1 p-6 bg-gray-50">
         <div className="max-w-6xl mx-auto space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

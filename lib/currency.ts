@@ -1,9 +1,9 @@
 // lib/currency.ts
 
-export function formatCurrency(amount: number, currency = "INR", fractionDigits = 2): string {
+export function formatCurrency(amount: number, fractionDigits = 2): string {
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency,
+    currency: "INR",
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   }).format(amount ?? 0)
@@ -31,7 +31,18 @@ export function numberToWords(num: number): string {
   if (!Number.isFinite(num)) return "Zero"
 
   const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"]
-  const teens = ["Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
+  const teens = [
+    "Ten",
+    "Eleven",
+    "Twelve",
+    "Thirteen",
+    "Fourteen",
+    "Fifteen",
+    "Sixteen",
+    "Seventeen",
+    "Eighteen",
+    "Nineteen",
+  ]
   const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
 
   const two = (n: number): string => {
@@ -54,9 +65,12 @@ export function numberToWords(num: number): string {
   if (abs === 0) return "Zero"
 
   let n = abs
-  const crore = Math.floor(n / 10000000); n %= 10000000
-  const lakh = Math.floor(n / 100000); n %= 100000
-  const thousand = Math.floor(n / 1000); n %= 1000
+  const crore = Math.floor(n / 10000000)
+  n %= 10000000
+  const lakh = Math.floor(n / 100000)
+  n %= 100000
+  const thousand = Math.floor(n / 1000)
+  n %= 1000
   const last = n
 
   const parts: string[] = []
@@ -100,11 +114,7 @@ export function calculateGST(
 }
 
 // For base amount → add GST
-export function addGST(
-  baseAmount: number,
-  gstRate = 18,
-  interState = false,
-) {
+export function addGST(baseAmount: number, gstRate = 18, interState = false) {
   const safeBase = Number(baseAmount) || 0
   const totalGst = (safeBase * gstRate) / 100
   const igst = interState ? totalGst : 0
@@ -119,5 +129,31 @@ export function addGST(
     igst: Math.round(igst * 100) / 100,
     totalGst: Math.round(totalGst * 100) / 100,
     totalAmount: Math.round(totalAmount * 100) / 100,
+  }
+}
+
+export function calculateTotal(
+  subtotal: number,
+  taxRate = 18,
+  serviceChargeRate = 0,
+): {
+  subtotal: number
+  tax: number
+  serviceCharge: number
+  total: number
+} {
+  const safeSubtotal = Number(subtotal) || 0
+  const safeTaxRate = Number(taxRate) || 0
+  const safeServiceChargeRate = Number(serviceChargeRate) || 0
+
+  const tax = (safeSubtotal * safeTaxRate) / 100
+  const serviceCharge = (safeSubtotal * safeServiceChargeRate) / 100
+  const total = safeSubtotal + tax + serviceCharge
+
+  return {
+    subtotal: Math.round(safeSubtotal * 100) / 100,
+    tax: Math.round(tax * 100) / 100,
+    serviceCharge: Math.round(serviceCharge * 100) / 100,
+    total: Math.round(total * 100) / 100,
   }
 }

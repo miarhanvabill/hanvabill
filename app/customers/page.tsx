@@ -1,3 +1,4 @@
+// app/customers/page.tsx
 "use client"
 
 import { useState, useEffect } from "react"
@@ -6,17 +7,20 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Plus, Phone, Mail, Calendar, Edit, Trash2, User } from 'lucide-react'
-import { getCustomers, deleteCustomer, type Customer } from "@/app/actions/customers" // Corrected import path
+import { Search, Plus, Phone, Mail, Calendar, Edit, Trash2, User, Upload } from "lucide-react"
+import { getCustomers, deleteCustomer, bulkUploadCustomers, type Customer } from "@/app/actions/customers"
 import { formatCurrency } from "@/lib/currency"
 import Link from "next/link"
-import { PageHeader } from "@/components/page-header" // Import the Header component
+import { BulkUploadModal } from "@/components/bulk-upload-modal"
+import { customerTemplate } from "@/lib/csv-templates"
+import { toast } from "@/hooks/use-toast"
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(true)
+  const [showBulkUpload, setShowBulkUpload] = useState(false)
 
   useEffect(() => {
     loadCustomers()
@@ -44,6 +48,11 @@ export default function CustomersPage() {
       setFilteredCustomers(data)
     } catch (error) {
       console.error("Error loading customers:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load customers",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -51,14 +60,40 @@ export default function CustomersPage() {
 
   const handleDeleteCustomer = async (id: string) => {
     if (!confirm("Are you sure you want to delete this customer?")) return
-
     try {
       await deleteCustomer(id)
       await loadCustomers()
+      toast({
+        title: "Success",
+        description: "Customer deleted successfully",
+      })
     } catch (error) {
       console.error("Error deleting customer:", error)
-      alert("Failed to delete customer")
+      toast({
+        title: "Error",
+        description: "Failed to delete customer",
+        variant: "destructive",
+      })
     }
+  }
+
+  const handleBulkUpload = async (file: File) => {
+    const result = await bulkUploadCustomers(file)
+    if (result.success) {
+      // Reload customers after successful upload
+      await loadCustomers()
+      toast({
+        title: "Success",
+        description: result.message,
+      })
+    } else {
+      toast({
+        title: "Upload Failed",
+        description: result.message,
+        variant: "destructive",
+      })
+    }
+    return result
   }
 
   const getInitials = (name?: string | null) => {
@@ -92,18 +127,30 @@ export default function CustomersPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <PageHeader
-        title="Customers"
-        subtitle="Manage your customer database"
-        action={
-          <Link href="/customers/create">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Customer
-            </Button>
-          </Link>
-        }
+
+      {/* Action Buttons */}
+      <div className="flex justify-end gap-2">
+        <Button onClick={() => setShowBulkUpload(true)} variant="outline">
+          <Upload className="h-4 w-4 mr-2" />
+          Bulk Upload
+        </Button>
+        <Link href="/customers/create">
+          <Button>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Customer
+          </Button>
+        </Link>
+      </div>
+
+      {/* Bulk Upload Modal */}
+      <BulkUploadModal
+        isOpen={showBulkUpload}
+        onClose={() => setShowBulkUpload(false)}
+        title="Bulk Upload Customers"
+        description="Upload multiple customers at once using a CSV file. Download the sample template to get started."
+        sampleHeaders={customerTemplate.headers}
+        onUpload={handleBulkUpload}
+        entityType="customers"
       />
 
       {/* Search */}
@@ -135,13 +182,11 @@ export default function CustomersPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {
-                customers.filter((c) => {
-                  const created = new Date(c.created_at)
-                  const now = new Date()
-                  return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear()
-                }).length
-              }
+              {customers.filter((c) => {
+                const created = new Date(c.created_at)
+                const now = new Date()
+                return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear()
+              }).length}
             </div>
           </CardContent>
         </Card>

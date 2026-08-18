@@ -45,10 +45,15 @@ export function PackageSelectionModal({ open, onClose, onApply, selectedPackages
     setLoading(true)
     try {
       const [packagesData, servicesData] = await Promise.all([getActivePackages(), getServices()])
-      setPackages(packagesData)
-      setServices(servicesData)
+      const safePackagesData = Array.isArray(packagesData) ? packagesData : []
+      const safeServicesData = Array.isArray(servicesData) ? servicesData : []
+
+      setPackages(safePackagesData)
+      setServices(safeServicesData)
     } catch (error) {
       console.error("Error loading packages and services:", error)
+      setPackages([])
+      setServices([])
     } finally {
       setLoading(false)
     }
@@ -61,6 +66,11 @@ export function PackageSelectionModal({ open, onClose, onApply, selectedPackages
   )
 
   const getServiceNames = (serviceIds: number[]) => {
+    if (!Array.isArray(services)) {
+      console.warn("[v0] Services is not an array in getServiceNames:", services)
+      return []
+    }
+
     return serviceIds
       .map((id) => {
         const service = services.find((s) => s.id === id)

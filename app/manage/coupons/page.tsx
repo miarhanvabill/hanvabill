@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -363,36 +362,40 @@ export default function CouponsManagePage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader
-        title="Coupons Management"
-        subtitle="Create and manage discount coupons for your customers"
-        action={
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full text-sm">
-              {connectionStatus === "connected" ? (
-                <Wifi className="w-3 h-3 text-green-600" />
-              ) : connectionStatus === "connecting" ? (
-                <RefreshCw className="w-3 h-3 text-blue-600 animate-spin" />
-              ) : (
-                <WifiOff className="w-3 h-3 text-red-600" />
-              )}
-              <span className="text-xs text-gray-600">
-                {connectionStatus === "connected" && `${coupons.length} coupons`}
-                {connectionStatus === "connecting" && "Syncing..."}
-                {connectionStatus === "disconnected" && "Offline"}
-              </span>
-              {lastFetch && <span className="text-xs text-gray-500">{lastFetch.toLocaleTimeString()}</span>}
+      {/* Header component has been removed from here */}
+
+      <main className="flex-1 p-6 bg-gray-50">
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* Add Coupon Button and Connection Status */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 px-3 py-1 bg-gray-100 rounded-full text-sm">
+                {connectionStatus === "connected" ? (
+                  <Wifi className="w-3 h-3 text-green-600" />
+                ) : connectionStatus === "connecting" ? (
+                  <RefreshCw className="w-3 h-3 text-blue-600 animate-spin" />
+                ) : (
+                  <WifiOff className="w-3 h-3 text-red-600" />
+                )}
+                <span className="text-xs text-gray-600">
+                  {connectionStatus === "connected" && `${coupons.length} coupons`}
+                  {connectionStatus === "connecting" && "Syncing..."}
+                  {connectionStatus === "disconnected" && "Offline"}
+                </span>
+                {lastFetch && <span className="text-xs text-gray-500">{lastFetch.toLocaleTimeString()}</span>}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchCoupons}
+                disabled={connectionStatus === "connecting"}
+                className="gap-1 bg-transparent"
+              >
+                <RefreshCw className={`w-3 h-3 ${connectionStatus === "connecting" ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={fetchCoupons}
-              disabled={connectionStatus === "connecting"}
-              className="gap-1 bg-transparent"
-            >
-              <RefreshCw className={`w-3 h-3 ${connectionStatus === "connecting" ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
+            
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
                 <Button className="gap-2">
@@ -557,11 +560,7 @@ export default function CouponsManagePage() {
               </DialogContent>
             </Dialog>
           </div>
-        }
-      />
 
-      <main className="flex-1 p-6 bg-gray-50">
-        <div className="max-w-7xl mx-auto space-y-6">
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <Card>

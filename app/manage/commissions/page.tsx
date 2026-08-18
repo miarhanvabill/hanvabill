@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,28 +21,14 @@ import {
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus, Edit, Trash2, DollarSign, Percent, Users, TrendingUp, Search, Filter } from "lucide-react"
-
-interface CommissionProfile {
-  id: string
-  name: string
-  description: string
-  commission_type: "percentage" | "fixed" | "tiered"
-  base_rate: number
-  min_threshold: number
-  max_threshold: number
-  applies_to: "services" | "products" | "both"
-  staff_count: number
-  is_active: boolean
-  created_at: string
-}
-
-interface CommissionTier {
-  id: string
-  profile_id: string
-  min_amount: number
-  max_amount: number
-  rate: number
-}
+import {
+  getCommissionProfiles,
+  createCommissionProfile,
+  updateCommissionProfile,
+  deleteCommissionProfile,
+  type CommissionProfile,
+  type CommissionTier,
+} from "@/app/actions/commissions"
 
 export default function CommissionProfilesPage() {
   const [profiles, setProfiles] = useState<CommissionProfile[]>([])
@@ -79,50 +65,12 @@ export default function CommissionProfilesPage() {
   const loadProfiles = async () => {
     try {
       setLoading(true)
-      // Simulate API call
-      const mockProfiles: CommissionProfile[] = [
-        {
-          id: "1",
-          name: "Standard Service Commission",
-          description: "Standard commission for all services",
-          commission_type: "percentage",
-          base_rate: 15,
-          min_threshold: 0,
-          max_threshold: 0,
-          applies_to: "services",
-          staff_count: 8,
-          is_active: true,
-          created_at: "2024-01-15T10:00:00Z",
-        },
-        {
-          id: "2",
-          name: "Product Sales Commission",
-          description: "Commission for product sales",
-          commission_type: "percentage",
-          base_rate: 10,
-          min_threshold: 100,
-          max_threshold: 0,
-          applies_to: "products",
-          staff_count: 5,
-          is_active: true,
-          created_at: "2024-01-10T10:00:00Z",
-        },
-        {
-          id: "3",
-          name: "Senior Stylist Tiered",
-          description: "Tiered commission for senior stylists",
-          commission_type: "tiered",
-          base_rate: 0,
-          min_threshold: 0,
-          max_threshold: 0,
-          applies_to: "both",
-          staff_count: 3,
-          is_active: true,
-          created_at: "2024-01-05T10:00:00Z",
-        },
-      ]
-      setProfiles(mockProfiles)
+      console.log("[v0] Loading commission profiles...")
+      const fetchedProfiles = await getCommissionProfiles()
+      setProfiles(fetchedProfiles)
+      console.log("[v0] Successfully loaded", fetchedProfiles.length, "commission profiles")
     } catch (error) {
+      console.error("[v0] Error loading commission profiles:", error)
       toast({
         title: "Error",
         description: "Failed to load commission profiles",
@@ -135,23 +83,26 @@ export default function CommissionProfilesPage() {
 
   const handleCreateProfile = async () => {
     try {
-      // Simulate API call
-      const newProfile: CommissionProfile = {
-        id: Date.now().toString(),
-        ...formData,
-        staff_count: 0,
-        created_at: new Date().toISOString(),
+      console.log("[v0] Creating commission profile with data:", formData)
+      const result = await createCommissionProfile(formData)
+
+      if (result.success && result.data) {
+        setProfiles([...profiles, result.data])
+        setIsCreateDialogOpen(false)
+        resetForm()
+        toast({
+          title: "Success",
+          description: result.message,
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive",
+        })
       }
-
-      setProfiles([...profiles, newProfile])
-      setIsCreateDialogOpen(false)
-      resetForm()
-
-      toast({
-        title: "Success",
-        description: "Commission profile created successfully",
-      })
     } catch (error) {
+      console.error("[v0] Error creating commission profile:", error)
       toast({
         title: "Error",
         description: "Failed to create commission profile",
@@ -164,21 +115,27 @@ export default function CommissionProfilesPage() {
     if (!selectedProfile) return
 
     try {
-      const updatedProfile = {
-        ...selectedProfile,
-        ...formData,
+      console.log("[v0] Updating commission profile:", selectedProfile.id, formData)
+      const result = await updateCommissionProfile(selectedProfile.id, formData)
+
+      if (result.success && result.data) {
+        setProfiles(profiles.map((p) => (p.id === selectedProfile.id ? result.data! : p)))
+        setIsEditDialogOpen(false)
+        setSelectedProfile(null)
+        resetForm()
+        toast({
+          title: "Success",
+          description: result.message,
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive",
+        })
       }
-
-      setProfiles(profiles.map((p) => (p.id === selectedProfile.id ? updatedProfile : p)))
-      setIsEditDialogOpen(false)
-      setSelectedProfile(null)
-      resetForm()
-
-      toast({
-        title: "Success",
-        description: "Commission profile updated successfully",
-      })
     } catch (error) {
+      console.error("[v0] Error updating commission profile:", error)
       toast({
         title: "Error",
         description: "Failed to update commission profile",
@@ -191,12 +148,24 @@ export default function CommissionProfilesPage() {
     if (!confirm("Are you sure you want to delete this commission profile?")) return
 
     try {
-      setProfiles(profiles.filter((p) => p.id !== id))
-      toast({
-        title: "Success",
-        description: "Commission profile deleted successfully",
-      })
+      console.log("[v0] Deleting commission profile:", id)
+      const result = await deleteCommissionProfile(id)
+
+      if (result.success) {
+        setProfiles(profiles.filter((p) => p.id !== id))
+        toast({
+          title: "Success",
+          description: result.message,
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive",
+        })
+      }
     } catch (error) {
+      console.error("[v0] Error deleting commission profile:", error)
       toast({
         title: "Error",
         description: "Failed to delete commission profile",
@@ -257,7 +226,7 @@ export default function CommissionProfilesPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader title="Commission Profiles" subtitle="Manage commission structures and rates for your staff" />
+      <Header title="Commission Profiles" subtitle="Manage commission structures and rates for your staff" />
 
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-7xl mx-auto space-y-6">

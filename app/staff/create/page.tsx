@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Save, X, Plus } from 'lucide-react'
+import { ArrowLeft, Save, X, Plus } from "lucide-react"
 import Link from "next/link"
 import { createStaff, type Staff } from "@/app/actions/staff"
 import { useToast } from "@/hooks/use-toast"
@@ -36,7 +36,7 @@ const COMMON_SPECIALTIES = [
 ]
 
 export default function CreateStaffPage() {
-  console.log("Rendering CreateStaffPage for /staff/create"); // This log should appear!
+  console.log("Rendering CreateStaffPage for /staff/create") // This log should appear!
   const router = useRouter()
   const { toast } = useToast()
   const [isPending, startTransition] = useTransition()
@@ -230,7 +230,8 @@ export default function CreateStaffPage() {
                         className={errors.email ? "border-red-500" : ""}
                         placeholder="Enter email address"
                       />
-                    {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+                      {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
+                    </div>
                   </div>
                   <div>
                     <Label htmlFor="phone">Phone Number</Label>
@@ -252,268 +253,257 @@ export default function CreateStaffPage() {
                       onChange={(e) => handleInputChange("date_of_birth", e.target.value)}
                     />
                   </div>
-                </div>
-                <div>
-                  <Label htmlFor="address">Address</Label>
-                  <Textarea
-                    id="address"
-                    value={formData.address}
-                    onChange={(e) => handleInputChange("address", e.target.value)}
-                    rows={3}
-                    placeholder="Enter full address"
-                  />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            {/* Employment Details */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Employment Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="position">Position *</Label>
-                    <Select value={formData.position} onValueChange={(value) => handleInputChange("position", value)}>
-                      <SelectTrigger className={errors.position ? "border-red-500" : ""}>
-                        <SelectValue placeholder="Select position" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Hair Stylist">Hair Stylist</SelectItem>
-                        <SelectItem value="Barber">Barber</SelectItem>
-                        <SelectItem value="Nail Technician">Nail Technician</SelectItem>
-                        <SelectItem value="Esthetician">Esthetician</SelectItem>
-                        <SelectItem value="Massage Therapist">Massage Therapist</SelectItem>
-                        <SelectItem value="Receptionist">Receptionist</SelectItem>
-                        <SelectItem value="Manager">Manager</SelectItem>
-                        <SelectItem value="Assistant">Assistant</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {errors.position && <p className="text-red-500 text-sm mt-1">{errors.position}</p>}
-                  </div>
-                  <div>
-                    <Label htmlFor="department">Department</Label>
-                    <Select
-                      value={formData.department}
-                      onValueChange={(value) => handleInputChange("department", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select department" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Hair Care">Hair Care</SelectItem>
-                        <SelectItem value="Skin Care">Skin Care</SelectItem>
-                        <SelectItem value="Nail Care">Nail Care</SelectItem>
-                        <SelectItem value="Body Care">Body Care</SelectItem>
-                        <SelectItem value="Administration">Administration</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="hire_date">Hire Date</Label>
-                    <Input
-                      id="hire_date"
-                      type="date"
-                      value={formData.hire_date}
-                      onChange={(e) => handleInputChange("hire_date", e.target.value)}
-                    />
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="is_active"
-                      checked={formData.is_active}
-                      onCheckedChange={(checked) => handleInputChange("is_active", checked)}
-                    />
-                    <Label htmlFor="is_active">Active Employee</Label>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Compensation */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Compensation</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="salary">Monthly Salary (₹)</Label>
-                    <Input
-                      id="salary"
-                      type="number"
-                      min="0"
-                      step="100"
-                      value={formData.salary}
-                      onChange={(e) => handleInputChange("salary", e.target.value)}
-                      className={errors.salary ? "border-red-500" : ""}
-                      placeholder="Enter monthly salary"
-                    />
-                    {errors.salary && <p className="text-red-500 text-sm mt-1">{errors.salary}</p>}
-                  </div>
-                  <div>
-                    <Label htmlFor="commission_rate">Commission Rate (%)</Label>
-                    <Input
-                      id="commission_rate"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.1"
-                      value={formData.commission_rate}
-                      onChange={(e) => handleInputChange("commission_rate", e.target.value)}
-                      className={errors.commission_rate ? "border-red-500" : ""}
-                      placeholder="Enter commission rate"
-                    />
-                    {errors.commission_rate && <p className="text-red-500 text-sm mt-1">{errors.commission_rate}</p>}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Specialties */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Specialties</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label>Select Specialties</Label>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
-                    {COMMON_SPECIALTIES.map((specialty) => (
-                      <div
-                        key={specialty}
-                        onClick={() => handleSpecialtyToggle(specialty)}
-                        className={`p-2 border rounded cursor-pointer text-sm text-center transition-colors ${
-                          formData.specialties.includes(specialty)
-                            ? "bg-blue-100 border-blue-500 text-blue-700"
-                            : "bg-gray-50 border-gray-200 hover:bg-gray-100"
-                        }`}
+              {/* Employment Details */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Employment Details</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="position">Position *</Label>
+                      <Select value={formData.position} onValueChange={(value) => handleInputChange("position", value)}>
+                        <SelectTrigger className={errors.position ? "border-red-500" : ""}>
+                          <SelectValue placeholder="Select position" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Hair Stylist">Hair Stylist</SelectItem>
+                          <SelectItem value="Barber">Barber</SelectItem>
+                          <SelectItem value="Nail Technician">Nail Technician</SelectItem>
+                          <SelectItem value="Esthetician">Esthetician</SelectItem>
+                          <SelectItem value="Massage Therapist">Massage Therapist</SelectItem>
+                          <SelectItem value="Receptionist">Receptionist</SelectItem>
+                          <SelectItem value="Manager">Manager</SelectItem>
+                          <SelectItem value="Assistant">Assistant</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {errors.position && <p className="text-red-500 text-sm mt-1">{errors.position}</p>}
+                    </div>
+                    <div>
+                      <Label htmlFor="department">Department</Label>
+                      <Select
+                        value={formData.department}
+                        onValueChange={(value) => handleInputChange("department", value)}
                       >
-                        {specialty}
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Hair Care">Hair Care</SelectItem>
+                          <SelectItem value="Skin Care">Skin Care</SelectItem>
+                          <SelectItem value="Nail Care">Nail Care</SelectItem>
+                          <SelectItem value="Body Care">Body Care</SelectItem>
+                          <SelectItem value="Administration">Administration</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="hire_date">Hire Date</Label>
+                      <Input
+                        id="hire_date"
+                        type="date"
+                        value={formData.hire_date}
+                        onChange={(e) => handleInputChange("hire_date", e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="is_active"
+                        checked={formData.is_active}
+                        onCheckedChange={(checked) => handleInputChange("is_active", checked)}
+                      />
+                      <Label htmlFor="is_active">Active Employee</Label>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Compensation */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Compensation</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="salary">Monthly Salary (₹)</Label>
+                      <Input
+                        id="salary"
+                        type="number"
+                        min="0"
+                        step="100"
+                        value={formData.salary}
+                        onChange={(e) => handleInputChange("salary", e.target.value)}
+                        className={errors.salary ? "border-red-500" : ""}
+                        placeholder="Enter monthly salary"
+                      />
+                      {errors.salary && <p className="text-red-500 text-sm mt-1">{errors.salary}</p>}
+                    </div>
+                    <div>
+                      <Label htmlFor="commission_rate">Commission Rate (%)</Label>
+                      <Input
+                        id="commission_rate"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.1"
+                        value={formData.commission_rate}
+                        onChange={(e) => handleInputChange("commission_rate", e.target.value)}
+                        className={errors.commission_rate ? "border-red-500" : ""}
+                        placeholder="Enter commission rate"
+                      />
+                      {errors.commission_rate && <p className="text-red-500 text-sm mt-1">{errors.commission_rate}</p>}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Specialties */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Specialties</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <Label>Select Specialties</Label>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-2">
+                      {COMMON_SPECIALTIES.map((specialty) => (
+                        <div
+                          key={specialty}
+                          onClick={() => handleSpecialtyToggle(specialty)}
+                          className={`p-2 border rounded cursor-pointer text-sm text-center transition-colors ${
+                            formData.specialties.includes(specialty)
+                              ? "bg-blue-100 border-blue-500 text-blue-700"
+                              : "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                          }`}
+                        >
+                          {specialty}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label>Add Custom Specialty</Label>
+                    <div className="flex gap-2 mt-2">
+                      <Input
+                        value={customSpecialty}
+                        onChange={(e) => setCustomSpecialty(e.target.value)}
+                        placeholder="Enter custom specialty"
+                        onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddCustomSpecialty())}
+                      />
+                      <Button type="button" onClick={handleAddCustomSpecialty} size="sm">
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {formData.specialties.length > 0 && (
+                    <div>
+                      <Label>Selected Specialties</Label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {formData.specialties.map((specialty) => (
+                          <Badge key={specialty} variant="secondary" className="cursor-pointer">
+                            {specialty}
+                            <X className="h-3 w-3 ml-1" onClick={() => handleRemoveSpecialty(specialty)} />
+                          </Badge>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
-                <div>
-                  <Label>Add Custom Specialty</Label>
-                  <div className="flex gap-2 mt-2">
-                    <Input
-                      value={customSpecialty}
-                      onChange={(e) => setCustomSpecialty(e.target.value)}
-                      placeholder="Enter custom specialty"
-                      onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddCustomSpecialty())}
+              {/* Notes */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Additional Notes</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div>
+                    <Label htmlFor="notes">Notes</Label>
+                    <Textarea
+                      id="notes"
+                      value={formData.notes}
+                      onChange={(e) => handleInputChange("notes", e.target.value)}
+                      rows={4}
+                      placeholder="Any additional notes about the staff member..."
                     />
-                    <Button type="button" onClick={handleAddCustomSpecialty} size="sm">
-                      <Plus className="h-4 w-4" />
-                    </Button>
                   </div>
-                </div>
+                </CardContent>
+              </Card>
+            </div>
 
-                {formData.specialties.length > 0 && (
-                  <div>
-                    <Label>Selected Specialties</Label>
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {formData.specialties.map((specialty) => (
-                        <Badge key={specialty} variant="secondary" className="cursor-pointer">
-                          {specialty}
-                          <X className="h-3 w-3 ml-1" onClick={() => handleRemoveSpecialty(specialty)} />
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Notes */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Additional Notes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div>
-                  <Label htmlFor="notes">Notes</Label>
-                  <Textarea
-                    id="notes"
-                    value={formData.notes}
-                    onChange={(e) => handleInputChange("notes", e.target.value)}
-                    rows={4}
-                    placeholder="Any additional notes about the staff member..."
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Actions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Actions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Button type="submit" className="w-full" disabled={isPending}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {isPending ? "Creating..." : "Create Staff Member"}
-                </Button>
-                <Link href="/staff" className="w-full">
-                  <Button type="button" variant="outline" className="w-full bg-transparent">
-                    <X className="h-4 w-4 mr-2" />
-                    Cancel
+            {/* Sidebar */}
+            <div className="space-y-6">
+              {/* Actions */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Actions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Button type="submit" className="w-full" disabled={isPending}>
+                    <Save className="h-4 w-4 mr-2" />
+                    {isPending ? "Creating..." : "Create Staff Member"}
                   </Button>
-                </Link>
-              </CardContent>
-            </Card>
+                  <Link href="/staff" className="w-full">
+                    <Button type="button" variant="outline" className="w-full bg-transparent">
+                      <X className="h-4 w-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
 
-            {/* Preview */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Preview</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Name</span>
-                  <span className="font-medium">{formData.name || "Not set"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Position</span>
-                  <span className="font-medium">{formData.position || "Not set"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Department</span>
-                  <span className="font-medium">{formData.department || "Not set"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500">Status</span>
-                  <span className={`font-medium ${formData.is_active ? "text-green-600" : "text-red-600"}`}>
-                    {formData.is_active ? "Active" : "Inactive"}
-                  </span>
-                </div>
-                {formData.specialties.length > 0 && (
-                  <div>
-                    <span className="text-sm text-gray-500">Specialties</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {formData.specialties.slice(0, 3).map((specialty) => (
-                        <Badge key={specialty} variant="outline" className="text-xs">
-                          {specialty}
-                        </Badge>
-                      ))}
-                      {formData.specialties.length > 3 && (
-                        <Badge variant="outline" className="text-xs">
-                          +{formData.specialties.length - 3} more
-                        </Badge>
-                      )}
-                    </div>
+              {/* Preview */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Preview</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-500">Name</span>
+                    <span className="font-medium">{formData.name || "Not set"}</span>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-500">Position</span>
+                    <span className="font-medium">{formData.position || "Not set"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-500">Department</span>
+                    <span className="font-medium">{formData.department || "Not set"}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-500">Status</span>
+                    <span className={`font-medium ${formData.is_active ? "text-green-600" : "text-red-600"}`}>
+                      {formData.is_active ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                  {formData.specialties.length > 0 && (
+                    <div>
+                      <span className="text-sm text-gray-500">Specialties</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {formData.specialties.slice(0, 3).map((specialty) => (
+                          <Badge key={specialty} variant="outline" className="text-xs">
+                            {specialty}
+                          </Badge>
+                        ))}
+                        {formData.specialties.length > 3 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{formData.specialties.length - 3} more
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        </div>
-      </form>
+        </form>
       </div>
     </div>
   )

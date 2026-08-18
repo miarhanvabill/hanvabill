@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { formatCurrency } from "@/lib/currency"
-import { getBookingById, updateBookingStatus } from "@/app/actions/bookings"
+import { getBookingById, updateBookingStatus, getBookingServices } from "@/app/actions/bookings"
 import { getCustomerById } from "@/app/actions/customers"
 import { getStaffById } from "@/app/actions/staff"
 import { CheckoutScreen } from "@/components/checkout-screen"
@@ -96,28 +96,9 @@ export default function BookingDetailsPage() {
 
         setBooking(bookingData)
 
-        const { neon } = await import("@neondatabase/serverless")
-        const sql = neon(process.env.NEXT_PUBLIC_DATABASE_URL!)
-
-        const services = await sql`
-          SELECT 
-            bs.service_id,
-            s.name as service_name,
-            bs.price,
-            bs.quantity
-          FROM booking_services bs
-          JOIN services s ON bs.service_id = s.id
-          WHERE bs.booking_id = ${bookingId}
-        `
-
-        setBookingServices(
-          services.map((service) => ({
-            service_id: Number(service.service_id),
-            service_name: service.service_name,
-            price: Number(service.price),
-            quantity: Number(service.quantity),
-          })),
-        )
+        // Use server action to get booking services with tenant isolation
+        const services = await getBookingServices(bookingId)
+        setBookingServices(services)
 
         const [customerData, staffData] = await Promise.all([
           getCustomerById(bookingData.customer_id.toString()),

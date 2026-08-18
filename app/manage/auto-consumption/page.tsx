@@ -15,52 +15,20 @@ import { useToast } from "@/hooks/use-toast"
 import { useRealTimeSync } from "@/lib/websocket"
 import { Plus, Search, RefreshCw, Settings, CheckCircle, TrendingUp, Edit, Trash2, Eye, Activity } from "lucide-react"
 
-interface AutoConsumptionRule {
-  id: string
-  name: string
-  serviceId: string
-  serviceName: string
-  productId: string
-  productName: string
-  consumptionAmount: number
-  unit: string
-  isActive: boolean
-  triggerType: "automatic" | "manual" | "conditional"
-  conditions?: string[]
-  createdAt: string
-  updatedAt: string
-  lastTriggered?: string
-  totalConsumptions: number
-  estimatedCost: number
-}
-
-interface ConsumptionLog {
-  id: string
-  ruleId: string
-  ruleName: string
-  serviceBookingId: string
-  customerName: string
-  staffName: string
-  productConsumed: string
-  amount: number
-  unit: string
-  cost: number
-  timestamp: string
-  status: "completed" | "pending" | "failed"
-}
-
-interface ConsumptionStats {
-  totalRules: number
-  activeRules: number
-  totalConsumptions: number
-  totalCost: number
-  avgConsumptionPerService: number
-  topConsumedProducts: Array<{
-    productName: string
-    totalAmount: number
-    totalCost: number
-  }>
-}
+import {
+  getAutoConsumptionRules,
+  getConsumptionLogs,
+  getConsumptionStats,
+  createAutoConsumptionRule,
+  updateAutoConsumptionRule,
+  deleteAutoConsumptionRule,
+  toggleRuleStatus,
+  getAvailableServices,
+  getAvailableProducts,
+  type AutoConsumptionRule,
+  type ConsumptionLog,
+  type ConsumptionStats,
+} from "@/app/actions/auto-consumption"
 
 export default function AutoConsumptionPage() {
   const [rules, setRules] = useState<AutoConsumptionRule[]>([])
@@ -74,6 +42,8 @@ export default function AutoConsumptionPage() {
   const [editingRule, setEditingRule] = useState<AutoConsumptionRule | null>(null)
   const [selectedRule, setSelectedRule] = useState<AutoConsumptionRule | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [availableServices, setAvailableServices] = useState<Array<{ id: string; name: string }>>([])
+  const [availableProducts, setAvailableProducts] = useState<Array<{ id: string; name: string; unit: string }>>([])
 
   const { toast } = useToast()
   const { isConnected, subscribe, broadcast } = useRealTimeSync([
@@ -82,162 +52,30 @@ export default function AutoConsumptionPage() {
     "rule_status_change",
   ])
 
-  // Mock data
-  const mockRules: AutoConsumptionRule[] = [
-    {
-      id: "1",
-      name: "Hair Color - Developer Consumption",
-      serviceId: "svc_1",
-      serviceName: "Hair Coloring",
-      productId: "prod_1",
-      productName: "Hair Developer 20 Vol",
-      consumptionAmount: 50,
-      unit: "ml",
-      isActive: true,
-      triggerType: "automatic",
-      conditions: ["service_started"],
-      createdAt: "2024-01-15T10:00:00Z",
-      updatedAt: "2024-01-20T14:30:00Z",
-      lastTriggered: "2024-01-20T14:30:00Z",
-      totalConsumptions: 45,
-      estimatedCost: 2.25,
-    },
-    {
-      id: "2",
-      name: "Facial - Cleanser Usage",
-      serviceId: "svc_2",
-      serviceName: "Deep Cleansing Facial",
-      productId: "prod_2",
-      productName: "Gentle Face Cleanser",
-      consumptionAmount: 15,
-      unit: "ml",
-      isActive: true,
-      triggerType: "automatic",
-      conditions: ["service_started"],
-      createdAt: "2024-01-10T09:00:00Z",
-      updatedAt: "2024-01-18T11:15:00Z",
-      lastTriggered: "2024-01-19T16:45:00Z",
-      totalConsumptions: 32,
-      estimatedCost: 1.8,
-    },
-    {
-      id: "3",
-      name: "Manicure - Base Coat Application",
-      serviceId: "svc_3",
-      serviceName: "Classic Manicure",
-      productId: "prod_3",
-      productName: "Nail Base Coat",
-      consumptionAmount: 2,
-      unit: "ml",
-      isActive: false,
-      triggerType: "manual",
-      createdAt: "2024-01-05T08:30:00Z",
-      updatedAt: "2024-01-15T13:20:00Z",
-      totalConsumptions: 18,
-      estimatedCost: 0.5,
-    },
-    {
-      id: "4",
-      name: "Massage - Oil Consumption",
-      serviceId: "svc_4",
-      serviceName: "Relaxing Massage",
-      productId: "prod_4",
-      productName: "Aromatherapy Massage Oil",
-      consumptionAmount: 25,
-      unit: "ml",
-      isActive: true,
-      triggerType: "conditional",
-      conditions: ["service_duration > 30min"],
-      createdAt: "2024-01-12T12:00:00Z",
-      updatedAt: "2024-01-19T10:30:00Z",
-      lastTriggered: "2024-01-19T15:20:00Z",
-      totalConsumptions: 28,
-      estimatedCost: 3.75,
-    },
-  ]
-
-  const mockLogs: ConsumptionLog[] = [
-    {
-      id: "1",
-      ruleId: "1",
-      ruleName: "Hair Color - Developer Consumption",
-      serviceBookingId: "booking_1",
-      customerName: "Sarah Johnson",
-      staffName: "Emma Wilson",
-      productConsumed: "Hair Developer 20 Vol",
-      amount: 50,
-      unit: "ml",
-      cost: 2.25,
-      timestamp: "2024-01-20T14:30:00Z",
-      status: "completed",
-    },
-    {
-      id: "2",
-      ruleId: "2",
-      ruleName: "Facial - Cleanser Usage",
-      serviceBookingId: "booking_2",
-      customerName: "Michael Brown",
-      staffName: "Lisa Chen",
-      productConsumed: "Gentle Face Cleanser",
-      amount: 15,
-      unit: "ml",
-      cost: 1.8,
-      timestamp: "2024-01-19T16:45:00Z",
-      status: "completed",
-    },
-    {
-      id: "3",
-      ruleId: "4",
-      ruleName: "Massage - Oil Consumption",
-      serviceBookingId: "booking_3",
-      customerName: "Jennifer Davis",
-      staffName: "Alex Rodriguez",
-      productConsumed: "Aromatherapy Massage Oil",
-      amount: 25,
-      unit: "ml",
-      cost: 3.75,
-      timestamp: "2024-01-19T15:20:00Z",
-      status: "completed",
-    },
-    {
-      id: "4",
-      ruleId: "1",
-      ruleName: "Hair Color - Developer Consumption",
-      serviceBookingId: "booking_4",
-      customerName: "David Wilson",
-      staffName: "Emma Wilson",
-      productConsumed: "Hair Developer 20 Vol",
-      amount: 50,
-      unit: "ml",
-      cost: 2.25,
-      timestamp: "2024-01-19T11:15:00Z",
-      status: "pending",
-    },
-  ]
-
-  const mockStats: ConsumptionStats = {
-    totalRules: 4,
-    activeRules: 3,
-    totalConsumptions: 123,
-    totalCost: 245.5,
-    avgConsumptionPerService: 2.8,
-    topConsumedProducts: [
-      { productName: "Hair Developer 20 Vol", totalAmount: 2250, totalCost: 101.25 },
-      { productName: "Aromatherapy Massage Oil", totalAmount: 700, totalCost: 105.0 },
-      { productName: "Gentle Face Cleanser", totalAmount: 480, totalCost: 57.6 },
-    ],
-  }
-
-  // Real-time data loading
   const loadData = useCallback(async () => {
     setIsLoading(true)
     try {
-      // Simulate API calls with real-time data
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      setRules(mockRules)
-      setLogs(mockLogs)
-      setStats(mockStats)
+      console.log("[v0] Loading auto-consumption data...")
+
+      const [rulesData, logsData, statsData, servicesData, productsData] = await Promise.all([
+        getAutoConsumptionRules(),
+        getConsumptionLogs(),
+        getConsumptionStats(),
+        getAvailableServices(),
+        getAvailableProducts(),
+      ])
+
+      console.log("[v0] Loaded rules:", rulesData.length)
+      console.log("[v0] Loaded logs:", logsData.length)
+      console.log("[v0] Loaded stats:", statsData)
+
+      setRules(rulesData)
+      setLogs(logsData)
+      setStats(statsData)
+      setAvailableServices(servicesData)
+      setAvailableProducts(productsData)
     } catch (error) {
+      console.error("[v0] Error loading auto-consumption data:", error)
       toast({
         title: "Error",
         description: "Failed to load auto-consumption data",
@@ -306,18 +144,26 @@ export default function AutoConsumptionPage() {
     return matchesSearch && matchesStatus && matchesType
   })
 
-  // Toggle rule status
-  const toggleRuleStatus = async (ruleId: string, isActive: boolean) => {
+  const handleToggleRuleStatus = async (ruleId: string, isActive: boolean) => {
     try {
-      setRules((prev) => prev.map((rule) => (rule.id === ruleId ? { ...rule, isActive } : rule)))
+      const result = await toggleRuleStatus(ruleId, isActive)
 
-      broadcast("rule_status_change", { ruleId, isActive })
-
-      toast({
-        title: isActive ? "Rule Activated" : "Rule Deactivated",
-        description: `Auto-consumption rule has been ${isActive ? "activated" : "deactivated"}`,
-      })
+      if (result.success) {
+        setRules((prev) => prev.map((rule) => (rule.id === ruleId ? { ...rule, isActive } : rule)))
+        broadcast("rule_status_change", { ruleId, isActive })
+        toast({
+          title: isActive ? "Rule Activated" : "Rule Deactivated",
+          description: result.message,
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive",
+        })
+      }
     } catch (error) {
+      console.error("[v0] Error toggling rule status:", error)
       toast({
         title: "Error",
         description: "Failed to update rule status",
@@ -326,37 +172,37 @@ export default function AutoConsumptionPage() {
     }
   }
 
-  // Create new rule
-  const handleCreateRule = async (ruleData: Partial<AutoConsumptionRule>) => {
+  const handleCreateRule = async (ruleData: {
+    name: string
+    serviceId: string
+    productId: string
+    consumptionAmount: number
+    unit: string
+    triggerType: "automatic" | "manual" | "conditional"
+    conditions?: string[]
+  }) => {
     try {
-      const newRule: AutoConsumptionRule = {
-        id: Date.now().toString(),
-        name: ruleData.name || "",
-        serviceId: ruleData.serviceId || "",
-        serviceName: ruleData.serviceName || "",
-        productId: ruleData.productId || "",
-        productName: ruleData.productName || "",
-        consumptionAmount: ruleData.consumptionAmount || 0,
-        unit: ruleData.unit || "ml",
-        isActive: true,
-        triggerType: ruleData.triggerType || "automatic",
-        conditions: ruleData.conditions || [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        totalConsumptions: 0,
-        estimatedCost: 0,
+      const result = await createAutoConsumptionRule(ruleData)
+
+      if (result.success && result.rule) {
+        setRules((prev) => [result.rule!, ...prev])
+        setShowCreateModal(false)
+        broadcast("auto_consumption_update", result.rule)
+        toast({
+          title: "Rule Created",
+          description: result.message,
+        })
+        // Refresh data to get updated stats
+        await loadData()
+      } else {
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive",
+        })
       }
-
-      setRules((prev) => [newRule, ...prev])
-      setShowCreateModal(false)
-
-      broadcast("auto_consumption_update", newRule)
-
-      toast({
-        title: "Rule Created",
-        description: `${newRule.name} has been created successfully`,
-      })
     } catch (error) {
+      console.error("[v0] Error creating rule:", error)
       toast({
         title: "Error",
         description: "Failed to create auto-consumption rule",
@@ -365,19 +211,63 @@ export default function AutoConsumptionPage() {
     }
   }
 
-  // Delete rule
   const handleDeleteRule = async (ruleId: string) => {
     try {
-      setRules((prev) => prev.filter((rule) => rule.id !== ruleId))
+      const result = await deleteAutoConsumptionRule(ruleId)
 
-      toast({
-        title: "Rule Deleted",
-        description: "Auto-consumption rule has been deleted",
-      })
+      if (result.success) {
+        setRules((prev) => prev.filter((rule) => rule.id !== ruleId))
+        toast({
+          title: "Rule Deleted",
+          description: result.message,
+        })
+        // Refresh data to get updated stats
+        await loadData()
+      } else {
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive",
+        })
+      }
     } catch (error) {
+      console.error("[v0] Error deleting rule:", error)
       toast({
         title: "Error",
         description: "Failed to delete rule",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleUpdateRule = async (ruleId: string, updates: Partial<AutoConsumptionRule>) => {
+    try {
+      const result = await updateAutoConsumptionRule(ruleId, updates)
+
+      if (result.success) {
+        setRules((prev) =>
+          prev.map((rule) =>
+            rule.id === ruleId ? { ...rule, ...updates, updatedAt: new Date().toISOString() } : rule,
+          ),
+        )
+        setEditingRule(null)
+        broadcast("auto_consumption_update", { id: ruleId, ...updates })
+        toast({
+          title: "Rule Updated",
+          description: result.message,
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("[v0] Error updating rule:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update rule",
         variant: "destructive",
       })
     }
@@ -456,7 +346,9 @@ export default function AutoConsumptionPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.totalConsumptions}</div>
-              <p className="text-xs text-muted-foreground">Avg {stats.avgConsumptionPerService} per service</p>
+              <p className="text-xs text-muted-foreground">
+                Avg {stats.avgConsumptionPerService.toFixed(1)} per service
+              </p>
             </CardContent>
           </Card>
 
@@ -479,7 +371,7 @@ export default function AutoConsumptionPage() {
             <CardContent>
               <div className="text-2xl font-bold">{stats.activeRules}</div>
               <p className="text-xs text-muted-foreground">
-                {((stats.activeRules / stats.totalRules) * 100).toFixed(0)}% of total
+                {stats.totalRules > 0 ? ((stats.activeRules / stats.totalRules) * 100).toFixed(0) : 0}% of total
               </p>
             </CardContent>
           </Card>
@@ -555,10 +447,13 @@ export default function AutoConsumptionPage() {
                     <div className="flex-1">
                       <CardTitle className="text-lg">{rule.name}</CardTitle>
                       <CardDescription className="mt-1">
-                        {rule.serviceName} → {rule.productName}
+                        {rule.serviceName || "Unknown Service"} → {rule.productName || "Unknown Product"}
                       </CardDescription>
                     </div>
-                    <Switch checked={rule.isActive} onCheckedChange={(checked) => toggleRuleStatus(rule.id, checked)} />
+                    <Switch
+                      checked={rule.isActive}
+                      onCheckedChange={(checked) => handleToggleRuleStatus(rule.id, checked)}
+                    />
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -639,36 +534,44 @@ export default function AutoConsumptionPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {logs.map((log) => (
-                  <div key={log.id} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-medium">{log.ruleName}</h4>
-                        <Badge
-                          variant={
-                            log.status === "completed"
-                              ? "default"
-                              : log.status === "pending"
-                                ? "secondary"
-                                : "destructive"
-                          }
-                        >
-                          {log.status}
-                        </Badge>
+                {logs.length > 0 ? (
+                  logs.map((log) => (
+                    <div key={log.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-medium">{log.ruleName}</h4>
+                          <Badge
+                            variant={
+                              log.status === "completed"
+                                ? "default"
+                                : log.status === "pending"
+                                  ? "secondary"
+                                  : "destructive"
+                            }
+                          >
+                            {log.status}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {log.customerName} • {log.staffName} • {log.productConsumed}
+                        </p>
+                        <p className="text-xs text-muted-foreground">{new Date(log.timestamp).toLocaleString()}</p>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {log.customerName} • {log.staffName} • {log.productConsumed}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{new Date(log.timestamp).toLocaleString()}</p>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-medium">
-                        {log.amount} {log.unit}
+                      <div className="text-right">
+                        <div className="font-medium">
+                          {log.amount} {log.unit}
+                        </div>
+                        <div className="text-sm text-muted-foreground">${log.cost.toFixed(2)}</div>
                       </div>
-                      <div className="text-sm text-muted-foreground">${log.cost.toFixed(2)}</div>
                     </div>
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium mb-2">No Consumption Logs</h3>
+                    <p className="text-muted-foreground">No product consumptions have been logged yet.</p>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>
@@ -682,38 +585,49 @@ export default function AutoConsumptionPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {stats?.topConsumedProducts.map((product, index) => (
-                    <div key={index} className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">{product.productName}</div>
-                        <div className="text-sm text-muted-foreground">{product.totalAmount} units consumed</div>
+                  {stats?.topConsumedProducts && stats.topConsumedProducts.length > 0 ? (
+                    stats.topConsumedProducts.map((product, index) => (
+                      <div key={index} className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">{product.productName}</div>
+                          <div className="text-sm text-muted-foreground">{product.totalAmount} units consumed</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-medium">${product.totalCost.toFixed(2)}</div>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <div className="font-medium">${product.totalCost.toFixed(2)}</div>
-                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8">
+                      <TrendingUp className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-muted-foreground">No consumption data available yet.</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Consumption Trends</CardTitle>
+                <CardTitle className="text-lg">Consumption Overview</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm">This Week</span>
-                    <span className="font-medium">45 consumptions</span>
+                    <span className="text-sm">Total Rules</span>
+                    <span className="font-medium">{stats?.totalRules || 0}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm">Last Week</span>
-                    <span className="font-medium">38 consumptions</span>
+                    <span className="text-sm">Active Rules</span>
+                    <span className="font-medium">{stats?.activeRules || 0}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm">Growth</span>
-                    <Badge variant="default">+18.4%</Badge>
+                    <span className="text-sm">Total Consumptions</span>
+                    <span className="font-medium">{stats?.totalConsumptions || 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">Total Cost</span>
+                    <span className="font-medium">${(stats?.totalCost || 0).toFixed(2)}</span>
                   </div>
                 </div>
               </CardContent>
@@ -723,18 +637,23 @@ export default function AutoConsumptionPage() {
       </Tabs>
 
       {/* Create Rule Modal */}
-      {showCreateModal && <CreateRuleModal onClose={() => setShowCreateModal(false)} onSave={handleCreateRule} />}
+      {showCreateModal && (
+        <CreateRuleModal
+          onClose={() => setShowCreateModal(false)}
+          onSave={handleCreateRule}
+          availableServices={availableServices}
+          availableProducts={availableProducts}
+        />
+      )}
 
       {/* Edit Rule Modal */}
       {editingRule && (
         <EditRuleModal
           rule={editingRule}
           onClose={() => setEditingRule(null)}
-          onSave={(updatedRule) => {
-            setRules((prev) => prev.map((rule) => (rule.id === updatedRule.id ? updatedRule : rule)))
-            setEditingRule(null)
-            broadcast("auto_consumption_update", updatedRule)
-          }}
+          onSave={(updates) => handleUpdateRule(editingRule.id, updates)}
+          availableServices={availableServices}
+          availableProducts={availableProducts}
         />
       )}
 
@@ -744,20 +663,29 @@ export default function AutoConsumptionPage() {
   )
 }
 
-// Create Rule Modal Component
 function CreateRuleModal({
   onClose,
   onSave,
+  availableServices,
+  availableProducts,
 }: {
   onClose: () => void
-  onSave: (rule: Partial<AutoConsumptionRule>) => void
+  onSave: (rule: {
+    name: string
+    serviceId: string
+    productId: string
+    consumptionAmount: number
+    unit: string
+    triggerType: "automatic" | "manual" | "conditional"
+    conditions?: string[]
+  }) => void
+  availableServices: Array<{ id: string; name: string }>
+  availableProducts: Array<{ id: string; name: string; unit: string }>
 }) {
   const [formData, setFormData] = useState({
     name: "",
     serviceId: "",
-    serviceName: "",
     productId: "",
-    productName: "",
     consumptionAmount: 0,
     unit: "ml",
     triggerType: "automatic" as const,
@@ -794,22 +722,17 @@ function CreateRuleModal({
                 <Label htmlFor="service">Service</Label>
                 <Select
                   value={formData.serviceId}
-                  onValueChange={(value) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      serviceId: value,
-                      serviceName: value === "svc_1" ? "Hair Coloring" : "Other Service",
-                    }))
-                  }
+                  onValueChange={(value) => setFormData((prev) => ({ ...prev, serviceId: value }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select service" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="svc_1">Hair Coloring</SelectItem>
-                    <SelectItem value="svc_2">Deep Cleansing Facial</SelectItem>
-                    <SelectItem value="svc_3">Classic Manicure</SelectItem>
-                    <SelectItem value="svc_4">Relaxing Massage</SelectItem>
+                    {availableServices.map((service) => (
+                      <SelectItem key={service.id} value={service.id}>
+                        {service.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -818,22 +741,24 @@ function CreateRuleModal({
                 <Label htmlFor="product">Product</Label>
                 <Select
                   value={formData.productId}
-                  onValueChange={(value) =>
+                  onValueChange={(value) => {
+                    const product = availableProducts.find((p) => p.id === value)
                     setFormData((prev) => ({
                       ...prev,
                       productId: value,
-                      productName: value === "prod_1" ? "Hair Developer 20 Vol" : "Other Product",
+                      unit: product?.unit || "ml",
                     }))
-                  }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select product" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="prod_1">Hair Developer 20 Vol</SelectItem>
-                    <SelectItem value="prod_2">Gentle Face Cleanser</SelectItem>
-                    <SelectItem value="prod_3">Nail Base Coat</SelectItem>
-                    <SelectItem value="prod_4">Aromatherapy Massage Oil</SelectItem>
+                    {availableProducts.map((product) => (
+                      <SelectItem key={product.id} value={product.id}>
+                        {product.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -906,21 +831,29 @@ function CreateRuleModal({
   )
 }
 
-// Edit Rule Modal Component
 function EditRuleModal({
   rule,
   onClose,
   onSave,
+  availableServices,
+  availableProducts,
 }: {
   rule: AutoConsumptionRule
   onClose: () => void
-  onSave: (rule: AutoConsumptionRule) => void
+  onSave: (updates: Partial<AutoConsumptionRule>) => void
+  availableServices: Array<{ id: string; name: string }>
+  availableProducts: Array<{ id: string; name: string; unit: string }>
 }) {
-  const [formData, setFormData] = useState(rule)
+  const [formData, setFormData] = useState({
+    name: rule.name,
+    consumptionAmount: rule.consumptionAmount,
+    unit: rule.unit,
+    triggerType: rule.triggerType,
+  })
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    onSave({ ...formData, updatedAt: new Date().toISOString() })
+    onSave(formData)
   }
 
   return (
@@ -999,7 +932,7 @@ function EditRuleModal({
               <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
-              <Button type="submit">Save Changes</Button>
+              <Button type="submit">Update Rule</Button>
             </div>
           </form>
         </CardContent>
@@ -1020,18 +953,29 @@ function RuleDetailsModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <Card className="w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <CardHeader>
-          <CardTitle>{rule.name}</CardTitle>
-          <CardDescription>Auto-consumption rule details and statistics</CardDescription>
+          <CardTitle>Rule Details</CardTitle>
+          <CardDescription>View auto-consumption rule information</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Rule Name</Label>
+              <p className="font-medium">{rule.name}</p>
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Badge variant={rule.isActive ? "default" : "secondary"}>{rule.isActive ? "Active" : "Inactive"}</Badge>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Service</Label>
-              <p className="font-medium">{rule.serviceName}</p>
+              <p className="font-medium">{rule.serviceName || "Unknown Service"}</p>
             </div>
             <div>
               <Label>Product</Label>
-              <p className="font-medium">{rule.productName}</p>
+              <p className="font-medium">{rule.productName || "Unknown Product"}</p>
             </div>
           </div>
 
@@ -1050,7 +994,7 @@ function RuleDetailsModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Total Consumptions</Label>
+              <Label>Total Uses</Label>
               <p className="font-medium">{rule.totalConsumptions}</p>
             </div>
             <div>
@@ -1077,7 +1021,7 @@ function RuleDetailsModal({
             </div>
           )}
 
-          <div className="flex justify-end">
+          <div className="flex justify-end pt-4">
             <Button onClick={onClose}>Close</Button>
           </div>
         </CardContent>

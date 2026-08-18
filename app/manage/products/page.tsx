@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { formatCurrency } from "@/lib/currency"
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -186,7 +187,11 @@ export default function ProductsPage() {
 
   const totalProducts = products.length
   const lowStockProducts = products.filter((p) => p.stock_quantity <= p.min_stock_level).length
-  const totalValue = products.reduce((sum, p) => sum + p.price * p.stock_quantity, 0)
+  const totalValue = products.reduce((sum, p) => {
+    const price = Number(p.price) || 0
+    const quantity = Number(p.stock_quantity) || 0
+    return sum + price * quantity
+  }, 0)
 
   if (loading) {
     return <div className="flex items-center justify-center h-64">Loading...</div>
@@ -342,7 +347,7 @@ export default function ProductsPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₹{totalValue.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(totalValue)}</div>
           </CardContent>
         </Card>
       </div>

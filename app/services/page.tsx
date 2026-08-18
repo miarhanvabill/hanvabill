@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +25,7 @@ import {
   MoreVertical,
   BarChart3,
   RefreshCw,
+  Upload,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -39,8 +40,11 @@ import {
   updateService,
   deleteService,
   toggleServiceStatus,
+  bulkUploadServices,
   type Service,
 } from "@/app/actions/services"
+import { BulkUploadModal } from "@/components/bulk-upload-modal"
+import { serviceTemplate } from "@/lib/csv-templates"
 
 const serviceCategories = [
   { id: "Hair Services", name: "Hair Services", icon: Scissors, color: "bg-blue-500" },
@@ -60,6 +64,7 @@ export default function ServicesPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [showBulkUpload, setShowBulkUpload] = useState(false)
   const [editingService, setEditingService] = useState<Service | null>(null)
   const [formData, setFormData] = useState({
     name: "",
@@ -86,11 +91,17 @@ export default function ServicesPage() {
         getServiceCategories(),
       ])
 
-      setServices(servicesData)
+      const safeServicesData = Array.isArray(servicesData) ? servicesData : []
+      const safeCategoriesData = Array.isArray(categoriesData) ? categoriesData : []
+
+      setServices(safeServicesData)
       setStats(statsData)
-      setCategories(categoriesData)
+      setCategories(safeCategoriesData)
     } catch (error) {
       console.error("Error fetching data:", error)
+      setServices([])
+      setCategories([])
+      setStats({ total: 0, active: 0, categories: 0, avgPrice: 0 })
       toast({
         title: "Error",
         description: "Failed to fetch services data",
@@ -105,6 +116,17 @@ export default function ServicesPage() {
   const handleRefresh = async () => {
     setRefreshing(true)
     await fetchData()
+  }
+
+  const handleBulkUpload = async (file: File) => {
+    const result = await bulkUploadServices(file)
+
+    if (result.success) {
+      // Reload services after successful upload
+      await fetchData()
+    }
+
+    return result
   }
 
   useEffect(() => {
@@ -256,7 +278,7 @@ export default function ServicesPage() {
   if (loading) {
     return (
       <div className="content-wrapper">
-        <PageHeader title="Services" subtitle="Manage your salon services and pricing" />
+        <Header title="Services" subtitle="Manage your salon services and pricing" />
         <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             {[...Array(4)].map((_, i) => (
@@ -278,8 +300,19 @@ export default function ServicesPage() {
 
   return (
     <div className="content-wrapper">
-      <PageHeader title="Services" subtitle="Manage your salon services and pricing" />
+      <Header title="Services" subtitle="Manage your salon services and pricing" />
       <PageProgress sections={sections} />
+
+      {/* Bulk Upload Modal */}
+      <BulkUploadModal
+        isOpen={showBulkUpload}
+        onClose={() => setShowBulkUpload(false)}
+        title="Bulk Upload Services"
+        description="Upload multiple services at once using a CSV file. Download the sample template to get started."
+        sampleHeaders={serviceTemplate.headers}
+        onUpload={handleBulkUpload}
+        entityType="services"
+      />
 
       <div className="p-6 space-y-8">
         {/* Service Overview */}
@@ -299,6 +332,10 @@ export default function ServicesPage() {
               >
                 <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
                 Refresh
+              </Button>
+              <Button onClick={() => setShowBulkUpload(true)} variant="outline">
+                <Upload className="h-4 w-4 mr-2" />
+                Bulk Upload
               </Button>
               <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                 <DialogTrigger asChild>

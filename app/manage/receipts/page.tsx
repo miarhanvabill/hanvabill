@@ -22,6 +22,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Plus, Search, Eye, FileText, TrendingUp, Package } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { getReceipts, createReceipt, getVendors, getProducts } from "@/app/actions/receipts"
+import { formatCurrency } from "@/lib/currency"
 
 interface Receipt {
   id: number
@@ -155,7 +156,10 @@ export default function ReceiptsPage() {
 
   const totalReceipts = receipts.length
   const pendingReceipts = receipts.filter((r) => r.status === "pending").length
-  const totalValue = receipts.reduce((sum, r) => sum + r.total_amount, 0)
+  const totalValue = receipts.reduce((sum, r) => {
+    const amount = Number(r.total_amount) || 0
+    return sum + amount
+  }, 0)
 
   if (loading) {
     return <div className="flex items-center justify-center h-64">Loading...</div>
@@ -298,7 +302,7 @@ export default function ReceiptsPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₹{totalValue.toFixed(2)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(totalValue)}</div>
           </CardContent>
         </Card>
       </div>
@@ -349,7 +353,7 @@ export default function ReceiptsPage() {
                 <TableRow key={receipt.id}>
                   <TableCell className="font-medium">{receipt.receipt_number}</TableCell>
                   <TableCell>{receipt.vendor_name}</TableCell>
-                  <TableCell>₹{receipt.total_amount.toFixed(2)}</TableCell>
+                  <TableCell>{formatCurrency(Number(receipt.total_amount) || 0)}</TableCell>
                   <TableCell>
                     <Badge
                       variant={
@@ -421,15 +425,15 @@ export default function ReceiptsPage() {
                       <TableRow key={item.id}>
                         <TableCell>{item.product_name}</TableCell>
                         <TableCell>{item.quantity}</TableCell>
-                        <TableCell>₹{item.unit_cost}</TableCell>
-                        <TableCell>₹{item.total_cost}</TableCell>
+                        <TableCell>{formatCurrency(item.unit_cost)}</TableCell>
+                        <TableCell>{formatCurrency(item.total_cost)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
               <div className="text-right">
-                <p className="text-lg font-bold">Total: ₹{viewingReceipt.total_amount.toFixed(2)}</p>
+                <p className="text-lg font-bold">Total: {formatCurrency(Number(viewingReceipt.total_amount) || 0)}</p>
               </div>
             </div>
           )}

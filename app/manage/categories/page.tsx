@@ -271,17 +271,6 @@ export default function CategoriesPage() {
         </Dialog>
       </div>
 
-      {/* Enhanced Debug Info */}
-      <div className="bg-gray-100 p-4 rounded text-sm space-y-2">
-        <div>
-          <strong>Debug Info:</strong>
-        </div>
-        <div>Categories in state: {categories.length}</div>
-        <div>Loading: {loading.toString()}</div>
-        <div>Error: {error || "None"}</div>
-        <div>Sample category: {categories[0] ? JSON.stringify(categories[0]) : "None"}</div>
-      </div>
-
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>

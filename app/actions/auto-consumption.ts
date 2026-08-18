@@ -1,57 +1,9 @@
 "use server"
 
-import { neon } from "@neondatabase/serverless"
+import { withTenantAuth } from "@/lib/withTenantAuth"
+import type { AutoConsumptionRule, ConsumptionLog, ConsumptionStats } from "@/types/auto-consumption"
 
-const sql = neon(process.env.DATABASE_URL!)
-
-export interface AutoConsumptionRule {
-  id: string
-  name: string
-  serviceId: string
-  serviceName: string
-  productId: string
-  productName: string
-  consumptionAmount: number
-  unit: string
-  isActive: boolean
-  triggerType: "automatic" | "manual" | "conditional"
-  conditions?: string[]
-  createdAt: string
-  updatedAt: string
-  lastTriggered?: string
-  totalConsumptions: number
-  estimatedCost: number
-}
-
-export interface ConsumptionLog {
-  id: string
-  ruleId: string
-  ruleName: string
-  serviceBookingId: string
-  customerName: string
-  staffName: string
-  productConsumed: string
-  amount: number
-  unit: string
-  cost: number
-  timestamp: string
-  status: "completed" | "pending" | "failed"
-}
-
-export interface ConsumptionStats {
-  totalRules: number
-  activeRules: number
-  totalConsumptions: number
-  totalCost: number
-  avgConsumptionPerService: number
-  topConsumedProducts: Array<{
-    productName: string
-    totalAmount: number
-    totalCost: number
-  }>
-}
-
-export async function getAutoConsumptionRules(): Promise<AutoConsumptionRule[]> {
+export const getAutoConsumptionRules = withTenantAuth(async ({ sql, tenantId }): Promise<AutoConsumptionRule[]> => {
   try {
     const rules = await sql`
       SELECT 
@@ -72,9 +24,10 @@ export async function getAutoConsumptionRules(): Promise<AutoConsumptionRule[]> 
         COUNT(acl.id) as "totalConsumptions",
         COALESCE(SUM(acl.cost), 0) as "estimatedCost"
       FROM auto_consumption_rules acr
-      LEFT JOIN services s ON acr.service_id = s.id
-      LEFT JOIN products p ON acr.product_id = p.id
-      LEFT JOIN auto_consumption_logs acl ON acr.id = acl.rule_id
+      LEFT JOIN services s ON acr.service_id = s.id AND s.tenant_id = ${tenantId}
+      LEFT JOIN products p ON acr.product_id = p.id AND p.tenant_id = ${tenantId}
+      LEFT JOIN auto_consumption_logs acl ON acr.id = acl.rule_id AND acl.tenant_id = ${tenantId}
+      WHERE acr.tenant_id = ${tenantId}
       GROUP BY acr.id, s.name, p.name
       ORDER BY acr.created_at DESC
     `
@@ -92,9 +45,9 @@ export async function getAutoConsumptionRules(): Promise<AutoConsumptionRule[]> 
     console.error("Error fetching auto consumption rules:", error)
     return []
   }
-}
+})
 
-export async function getConsumptionLogs(): Promise<ConsumptionLog[]> {
+export const getConsumptionLogs = withTenantAuth(async ({ sql, tenantId }): Promise<ConsumptionLog[]> => {
   try {
     const logs = await sql`
       SELECT 
@@ -111,11 +64,12 @@ export async function getConsumptionLogs(): Promise<ConsumptionLog[]> {
         acl.triggered_at as timestamp,
         acl.status
       FROM auto_consumption_logs acl
-      LEFT JOIN auto_consumption_rules acr ON acl.rule_id = acr.id
-      LEFT JOIN products p ON acl.product_id = p.id
-      LEFT JOIN bookings b ON acl.service_booking_id = b.id
-      LEFT JOIN customers c ON b.customer_id = c.id
-      LEFT JOIN staff st ON b.staff_id = st.id
+      LEFT JOIN auto_consumption_rules acr ON acl.rule_id = acr.id AND acr.tenant_id = ${tenantId}
+      LEFT JOIN products p ON acl.product_id = p.id AND p.tenant_id = ${tenantId}
+      LEFT JOIN bookings b ON acl.service_booking_id = b.id AND b.tenant_id = ${tenantId}
+      LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+      LEFT JOIN staff st ON b.staff_id = st.id AND st.tenant_id = ${tenantId}
+      WHERE acl.tenant_id = ${tenantId}
       ORDER BY acl.triggered_at DESC
       LIMIT 50
     `
@@ -135,9 +89,9 @@ export async function getConsumptionLogs(): Promise<ConsumptionLog[]> {
     console.error("Error fetching consumption logs:", error)
     return []
   }
-}
+})
 
-export async function getConsumptionStats(): Promise<ConsumptionStats> {
+export const getConsumptionStats = withTenantAuth(async ({ sql, tenantId }): Promise<ConsumptionStats> => {
   try {
     const [rulesStats, consumptionStats, topProducts] = await Promise.all([
       sql`
@@ -145,6 +99,7 @@ export async function getConsumptionStats(): Promise<ConsumptionStats> {
           COUNT(*) as total_rules,
           COUNT(CASE WHEN is_active = true THEN 1 END) as active_rules
         FROM auto_consumption_rules
+        WHERE tenant_id = ${tenantId}
       `,
       sql`
         SELECT 
@@ -152,7 +107,7 @@ export async function getConsumptionStats(): Promise<ConsumptionStats> {
           COALESCE(SUM(cost), 0) as total_cost,
           COALESCE(AVG(amount_consumed), 0) as avg_consumption_per_service
         FROM auto_consumption_logs
-        WHERE status = 'completed'
+        WHERE status = 'completed' AND tenant_id = ${tenantId}
       `,
       sql`
         SELECT 
@@ -160,8 +115,8 @@ export async function getConsumptionStats(): Promise<ConsumptionStats> {
           SUM(acl.amount_consumed) as total_amount,
           SUM(acl.cost) as total_cost
         FROM auto_consumption_logs acl
-        LEFT JOIN products p ON acl.product_id = p.id
-        WHERE acl.status = 'completed'
+        LEFT JOIN products p ON acl.product_id = p.id AND p.tenant_id = ${tenantId}
+        WHERE acl.status = 'completed' AND acl.tenant_id = ${tenantId}
         GROUP BY p.name
         ORDER BY total_cost DESC
         LIMIT 5
@@ -194,22 +149,26 @@ export async function getConsumptionStats(): Promise<ConsumptionStats> {
       topConsumedProducts: [],
     }
   }
-}
+})
 
-export async function createAutoConsumptionRule(ruleData: {
-  name: string
-  serviceId: string
-  productId: string
-  consumptionAmount: number
-  unit: string
-  triggerType: "automatic" | "manual" | "conditional"
-  conditions?: string[]
-}): Promise<{ success: boolean; message: string; rule?: AutoConsumptionRule }> {
-  try {
-    const result = await sql`
+export const createAutoConsumptionRule = withTenantAuth(
+  async (
+    { sql, tenantId },
+    ruleData: {
+      name: string
+      serviceId: string
+      productId: string
+      consumptionAmount: number
+      unit: string
+      triggerType: "automatic" | "manual" | "conditional"
+      conditions?: string[]
+    },
+  ): Promise<{ success: boolean; message: string; rule?: AutoConsumptionRule }> => {
+    try {
+      const result = await sql`
       INSERT INTO auto_consumption_rules (
         name, service_id, product_id, consumption_amount, unit, 
-        trigger_type, conditions, is_active
+        trigger_type, conditions, is_active, tenant_id
       ) VALUES (
         ${ruleData.name},
         ${Number.parseInt(ruleData.serviceId)},
@@ -218,204 +177,201 @@ export async function createAutoConsumptionRule(ruleData: {
         ${ruleData.unit},
         ${ruleData.triggerType},
         ${JSON.stringify(ruleData.conditions || [])},
-        true
+        true,
+        ${tenantId}
       )
       RETURNING id, name, created_at
     `
 
-    if (result.length > 0) {
+      if (result.length > 0) {
+        return {
+          success: true,
+          message: "Auto-consumption rule created successfully",
+          rule: {
+            id: result[0].id.toString(),
+            name: result[0].name,
+            serviceId: ruleData.serviceId,
+            serviceName: "",
+            productId: ruleData.productId,
+            productName: "",
+            consumptionAmount: ruleData.consumptionAmount,
+            unit: ruleData.unit,
+            isActive: true,
+            triggerType: ruleData.triggerType,
+            conditions: ruleData.conditions || [],
+            createdAt: result[0].created_at,
+            updatedAt: result[0].created_at,
+            totalConsumptions: 0,
+            estimatedCost: 0,
+          },
+        }
+      }
+
+      return {
+        success: false,
+        message: "Failed to create auto-consumption rule",
+      }
+    } catch (error) {
+      console.error("Error creating auto consumption rule:", error)
+      return {
+        success: false,
+        message: "Failed to create auto-consumption rule",
+      }
+    }
+  },
+)
+
+export const updateAutoConsumptionRule = withTenantAuth(
+  async (
+    { sql, tenantId },
+    ruleId: string,
+    updates: Partial<AutoConsumptionRule>,
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      // Build dynamic update query using tagged template literals
+      const updateFields = []
+      const values = []
+
+      if (updates.name !== undefined) {
+        updateFields.push(sql`name = ${updates.name}`)
+      }
+
+      if (updates.consumptionAmount !== undefined) {
+        updateFields.push(sql`consumption_amount = ${updates.consumptionAmount}`)
+      }
+
+      if (updates.unit !== undefined) {
+        updateFields.push(sql`unit = ${updates.unit}`)
+      }
+
+      if (updates.triggerType !== undefined) {
+        updateFields.push(sql`trigger_type = ${updates.triggerType}`)
+      }
+
+      if (updates.conditions !== undefined) {
+        updateFields.push(sql`conditions = ${JSON.stringify(updates.conditions)}`)
+      }
+
+      if (updates.isActive !== undefined) {
+        updateFields.push(sql`is_active = ${updates.isActive}`)
+      }
+
+      if (updateFields.length === 0) {
+        return {
+          success: false,
+          message: "No updates provided",
+        }
+      }
+
+      // Add updated_at field
+      updateFields.push(sql`updated_at = CURRENT_TIMESTAMP`)
+
+      // Build the final query
+      const query = sql`
+        UPDATE auto_consumption_rules 
+        SET ${sql.join(updateFields, sql`, `)}
+        WHERE id = ${Number.parseInt(ruleId)} AND tenant_id = ${tenantId}
+      `
+
+      await query
+
       return {
         success: true,
-        message: "Auto-consumption rule created successfully",
-        rule: {
-          id: result[0].id.toString(),
-          name: result[0].name,
-          serviceId: ruleData.serviceId,
-          serviceName: "",
-          productId: ruleData.productId,
-          productName: "",
-          consumptionAmount: ruleData.consumptionAmount,
-          unit: ruleData.unit,
-          isActive: true,
-          triggerType: ruleData.triggerType,
-          conditions: ruleData.conditions || [],
-          createdAt: result[0].created_at,
-          updatedAt: result[0].created_at,
-          totalConsumptions: 0,
-          estimatedCost: 0,
-        },
+        message: "Auto-consumption rule updated successfully",
       }
-    }
-
-    return {
-      success: false,
-      message: "Failed to create auto-consumption rule",
-    }
-  } catch (error) {
-    console.error("Error creating auto consumption rule:", error)
-    return {
-      success: false,
-      message: "Failed to create auto-consumption rule",
-    }
-  }
-}
-
-export async function updateAutoConsumptionRule(
-  ruleId: string,
-  updates: Partial<AutoConsumptionRule>,
-): Promise<{ success: boolean; message: string }> {
-  try {
-    const setClause = []
-    const values = []
-    let paramIndex = 1
-
-    if (updates.name !== undefined) {
-      setClause.push(`name = $${paramIndex}`)
-      values.push(updates.name)
-      paramIndex++
-    }
-
-    if (updates.consumptionAmount !== undefined) {
-      setClause.push(`consumption_amount = $${paramIndex}`)
-      values.push(updates.consumptionAmount)
-      paramIndex++
-    }
-
-    if (updates.unit !== undefined) {
-      setClause.push(`unit = $${paramIndex}`)
-      values.push(updates.unit)
-      paramIndex++
-    }
-
-    if (updates.triggerType !== undefined) {
-      setClause.push(`trigger_type = $${paramIndex}`)
-      values.push(updates.triggerType)
-      paramIndex++
-    }
-
-    if (updates.conditions !== undefined) {
-      setClause.push(`conditions = $${paramIndex}`)
-      values.push(JSON.stringify(updates.conditions))
-      paramIndex++
-    }
-
-    if (updates.isActive !== undefined) {
-      setClause.push(`is_active = $${paramIndex}`)
-      values.push(updates.isActive)
-      paramIndex++
-    }
-
-    if (setClause.length === 0) {
+    } catch (error) {
+      console.error("Error updating auto consumption rule:", error)
       return {
         success: false,
-        message: "No updates provided",
+        message: "Failed to update auto-consumption rule",
       }
     }
+  },
+)
 
-    setClause.push(`updated_at = CURRENT_TIMESTAMP`)
-    values.push(Number.parseInt(ruleId))
-
-    const query = `
-      UPDATE auto_consumption_rules 
-      SET ${setClause.join(", ")}
-      WHERE id = $${paramIndex}
-    `
-
-    await sql.unsafe(query, values)
-
-    return {
-      success: true,
-      message: "Auto-consumption rule updated successfully",
-    }
-  } catch (error) {
-    console.error("Error updating auto consumption rule:", error)
-    return {
-      success: false,
-      message: "Failed to update auto-consumption rule",
-    }
-  }
-}
-
-export async function deleteAutoConsumptionRule(ruleId: string): Promise<{ success: boolean; message: string }> {
-  try {
-    // First, delete related logs
-    await sql`
+export const deleteAutoConsumptionRule = withTenantAuth(
+  async ({ sql, tenantId }, ruleId: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      // First, delete related logs
+      await sql`
       DELETE FROM auto_consumption_logs 
-      WHERE rule_id = ${Number.parseInt(ruleId)}
+      WHERE rule_id = ${Number.parseInt(ruleId)} AND tenant_id = ${tenantId}
     `
 
-    // Then delete the rule
-    const result = await sql`
+      // Then delete the rule
+      const result = await sql`
       DELETE FROM auto_consumption_rules 
-      WHERE id = ${Number.parseInt(ruleId)}
+      WHERE id = ${Number.parseInt(ruleId)} AND tenant_id = ${tenantId}
     `
 
-    return {
-      success: true,
-      message: "Auto-consumption rule deleted successfully",
+      return {
+        success: true,
+        message: "Auto-consumption rule deleted successfully",
+      }
+    } catch (error) {
+      console.error("Error deleting auto consumption rule:", error)
+      return {
+        success: false,
+        message: "Failed to delete auto-consumption rule",
+      }
     }
-  } catch (error) {
-    console.error("Error deleting auto consumption rule:", error)
-    return {
-      success: false,
-      message: "Failed to delete auto-consumption rule",
-    }
-  }
-}
+  },
+)
 
-export async function toggleRuleStatus(
-  ruleId: string,
-  isActive: boolean,
-): Promise<{ success: boolean; message: string }> {
-  try {
-    await sql`
+export const toggleRuleStatus = withTenantAuth(
+  async ({ sql, tenantId }, ruleId: string, isActive: boolean): Promise<{ success: boolean; message: string }> => {
+    try {
+      await sql`
       UPDATE auto_consumption_rules 
       SET is_active = ${isActive}, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${Number.parseInt(ruleId)}
+      WHERE id = ${Number.parseInt(ruleId)} AND tenant_id = ${tenantId}
     `
 
-    return {
-      success: true,
-      message: `Rule ${isActive ? "activated" : "deactivated"} successfully`,
-    }
-  } catch (error) {
-    console.error("Error toggling rule status:", error)
-    return {
-      success: false,
-      message: "Failed to update rule status",
-    }
-  }
-}
-
-export async function triggerConsumption(
-  ruleId: string,
-  serviceBookingId: string,
-  staffId: string,
-): Promise<{ success: boolean; message: string }> {
-  try {
-    // Get rule details
-    const rule = await sql`
-      SELECT acr.*, p.cost_per_unit
-      FROM auto_consumption_rules acr
-      LEFT JOIN products p ON acr.product_id = p.id
-      WHERE acr.id = ${Number.parseInt(ruleId)} AND acr.is_active = true
-    `
-
-    if (rule.length === 0) {
+      return {
+        success: true,
+        message: `Rule ${isActive ? "activated" : "deactivated"} successfully`,
+      }
+    } catch (error) {
+      console.error("Error toggling rule status:", error)
       return {
         success: false,
-        message: "Rule not found or inactive",
+        message: "Failed to update rule status",
       }
     }
+  },
+)
 
-    const ruleData = rule[0]
-    const cost = ruleData.consumption_amount * (ruleData.cost_per_unit || 0)
+export const triggerConsumption = withTenantAuth(
+  async (
+    { sql, tenantId },
+    ruleId: string,
+    serviceBookingId: string,
+    staffId: string,
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      // Get rule details
+      const rule = await sql`
+      SELECT acr.*, p.cost_per_unit
+      FROM auto_consumption_rules acr
+      LEFT JOIN products p ON acr.product_id = p.id AND p.tenant_id = ${tenantId}
+      WHERE acr.id = ${Number.parseInt(ruleId)} AND acr.is_active = true AND acr.tenant_id = ${tenantId}
+    `
 
-    // Log the consumption
-    await sql`
+      if (rule.length === 0) {
+        return {
+          success: false,
+          message: "Rule not found or inactive",
+        }
+      }
+
+      const ruleData = rule[0]
+      const cost = ruleData.consumption_amount * (ruleData.cost_per_unit || 0)
+
+      // Log the consumption
+      await sql`
       INSERT INTO auto_consumption_logs (
         rule_id, service_booking_id, product_id, amount_consumed, 
-        unit, cost, status, triggered_at, created_by
+        unit, cost, status, triggered_at, created_by, tenant_id
       ) VALUES (
         ${Number.parseInt(ruleId)},
         ${Number.parseInt(serviceBookingId)},
@@ -425,65 +381,71 @@ export async function triggerConsumption(
         ${cost},
         'completed',
         CURRENT_TIMESTAMP,
-        ${Number.parseInt(staffId)}
+        ${Number.parseInt(staffId)},
+        ${tenantId}
       )
     `
 
-    // Update product inventory if applicable
-    await sql`
+      // Update product inventory if applicable
+      await sql`
       UPDATE products 
       SET stock_quantity = stock_quantity - ${ruleData.consumption_amount}
-      WHERE id = ${ruleData.product_id} AND track_inventory = true
+      WHERE id = ${ruleData.product_id} AND track_inventory = true AND tenant_id = ${tenantId}
     `
 
-    return {
-      success: true,
-      message: "Consumption triggered successfully",
+      return {
+        success: true,
+        message: "Consumption triggered successfully",
+      }
+    } catch (error) {
+      console.error("Error triggering consumption:", error)
+      return {
+        success: false,
+        message: "Failed to trigger consumption",
+      }
     }
-  } catch (error) {
-    console.error("Error triggering consumption:", error)
-    return {
-      success: false,
-      message: "Failed to trigger consumption",
-    }
-  }
-}
+  },
+)
 
-export async function getAvailableServices(): Promise<Array<{ id: string; name: string }>> {
-  try {
-    const services = await sql`
+export const getAvailableServices = withTenantAuth(
+  async ({ sql, tenantId }): Promise<Array<{ id: string; name: string }>> => {
+    try {
+      const services = await sql`
       SELECT id, name 
       FROM services 
-      WHERE is_active = true
+      WHERE is_active = true AND tenant_id = ${tenantId}
       ORDER BY name
     `
 
-    return services.map((service) => ({
-      id: service.id.toString(),
-      name: service.name,
-    }))
-  } catch (error) {
-    console.error("Error fetching services:", error)
-    return []
-  }
-}
+      return services.map((service) => ({
+        id: service.id.toString(),
+        name: service.name,
+      }))
+    } catch (error) {
+      console.error("Error fetching services:", error)
+      return []
+    }
+  },
+)
 
-export async function getAvailableProducts(): Promise<Array<{ id: string; name: string; unit: string }>> {
-  try {
-    const products = await sql`
-      SELECT id, name, unit 
+export const getAvailableProducts = withTenantAuth(
+  async ({ sql, tenantId }): Promise<Array<{ id: string; name: string; unit: string }>> => {
+    try {
+      const products = await sql`
+      SELECT id, name, unit
       FROM products 
-      WHERE is_active = true
+      WHERE is_active = true AND tenant_id = ${tenantId}
       ORDER BY name
     `
 
-    return products.map((product) => ({
-      id: product.id.toString(),
-      name: product.name,
-      unit: product.unit || "ml",
-    }))
-  } catch (error) {
-    console.error("Error fetching products:", error)
-    return []
-  }
-}
+      return products.map((product) => ({
+        id: product.id.toString(),
+        name: product.name,
+        unit: product.unit || "ml",
+      }))
+    } catch (error) {
+      console.error("Error fetching products:", error)
+      return []
+    }
+  },
+)

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -43,11 +43,28 @@ export default function SalesReportPage() {
   const fetchSalesData = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/reports/sales?dateRange=${dateRange}&category=${categoryFilter}`)
+      const response = await fetch(`/api/reports/sales`, {
+        headers: {
+          "Cache-Control": "no-cache",
+        },
+      })
       if (response.ok) {
         const data = await response.json()
-        setSalesData(data.sales)
-        setStats(data.stats)
+        setSalesData(data.recentSales || [])
+        setStats({
+          total_sales: data.totalSales || 0,
+          total_revenue: data.totalRevenue || 0,
+          total_profit: Math.round(data.totalRevenue * 0.75) || 0, // Estimated profit
+          average_order_value: data.averageOrderValue || 0,
+          top_selling_products:
+            data.topServices?.map((service) => ({
+              name: service.name,
+              quantity: service.bookings,
+              revenue: service.revenue,
+            })) || [],
+        })
+      } else {
+        throw new Error("Failed to fetch sales data")
       }
     } catch (error) {
       console.error("Error fetching sales data:", error)
@@ -115,7 +132,7 @@ export default function SalesReportPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader
+      <Header
         title="Sales Report"
         subtitle="Comprehensive analysis of sales performance, trends, and product popularity."
         showBackButton

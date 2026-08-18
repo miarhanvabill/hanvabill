@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { PageHeader } from "@/components/page-header"
+import { Header } from "@/components/header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -33,6 +33,7 @@ import {
   Users,
   RefreshCw,
 } from "lucide-react"
+import { getLoyaltyStats, updateLoyaltyPoints } from "@/app/actions/loyalty"
 
 interface LoyaltyTransaction {
   id: string
@@ -57,6 +58,12 @@ interface LoyaltyStats {
   total_value_redeemed: number
 }
 
+interface Customer {
+  id: number
+  name: string
+  email: string
+}
+
 export default function LoyaltyTransactionsPage() {
   const [transactions, setTransactions] = useState<LoyaltyTransaction[]>([])
   const [stats, setStats] = useState<LoyaltyStats>({
@@ -73,6 +80,7 @@ export default function LoyaltyTransactionsPage() {
   const [filterType, setFilterType] = useState<string>("all")
   const [filterDateRange, setFilterDateRange] = useState<string>("all")
   const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false)
+  const [customers, setCustomers] = useState<Customer[]>([])
 
   // Form state for manual transactions
   const [transactionFormData, setTransactionFormData] = useState({
@@ -82,122 +90,68 @@ export default function LoyaltyTransactionsPage() {
     description: "",
   })
 
-  // Mock customers for dropdown
-  const customers = [
-    { id: "1", name: "Sarah Johnson", email: "sarah@example.com" },
-    { id: "2", name: "Mike Chen", email: "mike@example.com" },
-    { id: "3", name: "Emma Davis", email: "emma@example.com" },
-    { id: "4", name: "Alex Rodriguez", email: "alex@example.com" },
-    { id: "5", name: "Lisa Thompson", email: "lisa@example.com" },
-  ]
-
   useEffect(() => {
     loadData()
+    loadCustomers()
   }, [])
 
   const loadData = async () => {
     try {
       setLoading(true)
+      console.log("[v0] Loading loyalty transactions and stats...")
 
-      // Mock loyalty transactions
-      const mockTransactions: LoyaltyTransaction[] = [
-        {
-          id: "1",
-          customer_id: "1",
-          customer_name: "Sarah Johnson",
-          customer_email: "sarah@example.com",
-          transaction_type: "earned",
-          points: 120,
-          amount: 1200,
-          description: "Points earned from purchase #INV-001",
-          reference_id: "INV-001",
-          created_at: "2024-01-20T14:30:00Z",
-          expires_at: "2025-01-20T14:30:00Z",
-        },
-        {
-          id: "2",
-          customer_id: "1",
-          customer_name: "Sarah Johnson",
-          customer_email: "sarah@example.com",
-          transaction_type: "redeemed",
-          points: 100,
-          amount: 100,
-          description: "Points redeemed for discount",
-          reference_id: "INV-002",
-          created_at: "2024-01-18T10:15:00Z",
-        },
-        {
-          id: "3",
-          customer_id: "2",
-          customer_name: "Mike Chen",
-          customer_email: "mike@example.com",
-          transaction_type: "bonus",
-          points: 50,
-          amount: 0,
-          description: "Birthday bonus points",
-          created_at: "2024-01-15T09:00:00Z",
-          expires_at: "2025-01-15T09:00:00Z",
-        },
-        {
-          id: "4",
-          customer_id: "3",
-          customer_name: "Emma Davis",
-          customer_email: "emma@example.com",
-          transaction_type: "earned",
-          points: 85,
-          amount: 850,
-          description: "Points earned from purchase #INV-003",
-          reference_id: "INV-003",
-          created_at: "2024-01-12T16:45:00Z",
-          expires_at: "2025-01-12T16:45:00Z",
-        },
-        {
-          id: "5",
-          customer_id: "4",
-          customer_name: "Alex Rodriguez",
-          customer_email: "alex@example.com",
-          transaction_type: "expired",
-          points: 25,
-          amount: 0,
-          description: "Points expired after 12 months",
-          created_at: "2024-01-10T00:00:00Z",
-        },
-        {
-          id: "6",
-          customer_id: "2",
-          customer_name: "Mike Chen",
-          customer_email: "mike@example.com",
-          transaction_type: "refund",
-          points: 30,
-          amount: 0,
-          description: "Points refunded for cancelled service",
-          reference_id: "INV-004",
-          created_at: "2024-01-08T11:20:00Z",
-          expires_at: "2025-01-08T11:20:00Z",
-        },
-      ]
+      // Fetch real transactions from API
+      const transactionsResponse = await fetch("/api/loyalty/customer?transactions=1")
+      const transactionsData = await transactionsResponse.json()
 
-      // Calculate stats
-      const mockStats: LoyaltyStats = {
-        total_transactions: mockTransactions.length,
-        total_points_issued: mockTransactions
-          .filter((t) => ["earned", "bonus", "refund"].includes(t.transaction_type))
-          .reduce((sum, t) => sum + t.points, 0),
-        total_points_redeemed: mockTransactions
-          .filter((t) => t.transaction_type === "redeemed")
-          .reduce((sum, t) => sum + t.points, 0),
-        total_points_expired: mockTransactions
-          .filter((t) => t.transaction_type === "expired")
-          .reduce((sum, t) => sum + t.points, 0),
-        active_customers: new Set(mockTransactions.map((t) => t.customer_id)).size,
-        total_value_redeemed: mockTransactions
-          .filter((t) => t.transaction_type === "redeemed")
-          .reduce((sum, t) => sum + t.amount, 0),
+      if (!transactionsData.success) {
+        throw new Error(transactionsData.error || "Failed to fetch transactions")
       }
 
-      setTransactions(mockTransactions)
-      setStats(mockStats)
+      // Fetch real stats from server action
+      const realStats = await getLoyaltyStats()
+
+      // Transform transactions data to match interface
+      const transformedTransactions: LoyaltyTransaction[] = transactionsData.rows.map((row: any) => ({
+        id: row.id.toString(),
+        customer_id: row.customer_id.toString(),
+        customer_name: row.customer_name || "Unknown Customer",
+        customer_email: row.customer_email || "",
+        transaction_type: row.transaction_type,
+        points: Number(row.points) || 0,
+        amount: Number(row.amount) || 0,
+        description: row.description || "",
+        reference_id: row.invoice_id?.toString(),
+        created_at: row.created_at,
+        expires_at: row.expires_at,
+      }))
+
+      // Calculate additional stats from transactions
+      const totalTransactions = transformedTransactions.length
+      const totalPointsRedeemed = transformedTransactions
+        .filter((t) => t.transaction_type === "redeemed")
+        .reduce((sum, t) => sum + t.points, 0)
+      const totalPointsExpired = transformedTransactions
+        .filter((t) => t.transaction_type === "expired")
+        .reduce((sum, t) => sum + t.points, 0)
+      const totalValueRedeemed = transformedTransactions
+        .filter((t) => t.transaction_type === "redeemed")
+        .reduce((sum, t) => sum + t.amount, 0)
+
+      const combinedStats: LoyaltyStats = {
+        total_transactions: totalTransactions,
+        total_points_issued: realStats.total_points_issued,
+        total_points_redeemed: totalPointsRedeemed,
+        total_points_expired: totalPointsExpired,
+        active_customers: realStats.active_members,
+        total_value_redeemed: totalValueRedeemed,
+      }
+
+      setTransactions(transformedTransactions)
+      setStats(combinedStats)
+      console.log("[v0] Loaded", transformedTransactions.length, "transactions")
     } catch (error) {
+      console.error("[v0] Error loading loyalty data:", error)
       toast({
         title: "Error",
         description: "Failed to load loyalty transactions",
@@ -209,6 +163,29 @@ export default function LoyaltyTransactionsPage() {
     }
   }
 
+  const loadCustomers = async () => {
+    try {
+      const response = await fetch("/api/customers")
+      const data = await response.json()
+
+      if (data.success && Array.isArray(data.customers)) {
+        setCustomers(
+          data.customers.map((c: any) => ({
+            id: c.id,
+            name: c.full_name, // Map full_name to name
+            email: c.email || "",
+          })),
+        )
+      } else {
+        console.error("[v0] Invalid customers API response:", data)
+        setCustomers([])
+      }
+    } catch (error) {
+      console.error("[v0] Error loading customers:", error)
+      setCustomers([])
+    }
+  }
+
   const handleRefresh = async () => {
     setRefreshing(true)
     await loadData()
@@ -216,7 +193,7 @@ export default function LoyaltyTransactionsPage() {
 
   const handleAddTransaction = async () => {
     try {
-      const selectedCustomer = customers.find((c) => c.id === transactionFormData.customer_id)
+      const selectedCustomer = customers.find((c) => c.id.toString() === transactionFormData.customer_id)
       if (!selectedCustomer) {
         toast({
           title: "Error",
@@ -226,26 +203,18 @@ export default function LoyaltyTransactionsPage() {
         return
       }
 
-      const newTransaction: LoyaltyTransaction = {
-        id: Date.now().toString(),
-        customer_id: transactionFormData.customer_id,
-        customer_name: selectedCustomer.name,
-        customer_email: selectedCustomer.email,
-        transaction_type: transactionFormData.transaction_type,
-        points: transactionFormData.points,
-        amount: transactionFormData.transaction_type === "redeemed" ? transactionFormData.points : 0,
-        description: transactionFormData.description,
-        created_at: new Date().toISOString(),
-        expires_at: ["earned", "bonus", "refund"].includes(transactionFormData.transaction_type)
-          ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
-          : undefined,
-      }
+      // Use real server action to add transaction
+      await updateLoyaltyPoints(
+        Number(transactionFormData.customer_id),
+        transactionFormData.points,
+        transactionFormData.transaction_type === "bonus" ? "earned" : "redeemed",
+        transactionFormData.description || `${transactionFormData.transaction_type} points`,
+      )
 
-      setTransactions([newTransaction, ...transactions])
       setIsAddTransactionDialogOpen(false)
       resetTransactionForm()
 
-      // Update stats
+      // Reload data to show the new transaction
       await loadData()
 
       toast({
@@ -253,6 +222,7 @@ export default function LoyaltyTransactionsPage() {
         description: "Loyalty transaction added successfully",
       })
     } catch (error) {
+      console.error("[v0] Error adding transaction:", error)
       toast({
         title: "Error",
         description: "Failed to add loyalty transaction",
@@ -344,7 +314,7 @@ export default function LoyaltyTransactionsPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader title="Loyalty Transactions" subtitle="Track and manage customer loyalty points transactions" />
+      <Header title="Loyalty Transactions" subtitle="Track and manage customer loyalty points transactions" />
 
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-7xl mx-auto space-y-6">
@@ -516,7 +486,7 @@ export default function LoyaltyTransactionsPage() {
                             </SelectTrigger>
                             <SelectContent>
                               {customers.map((customer) => (
-                                <SelectItem key={customer.id} value={customer.id}>
+                                <SelectItem key={customer.id} value={customer.id.toString()}>
                                   {customer.name} - {customer.email}
                                 </SelectItem>
                               ))}

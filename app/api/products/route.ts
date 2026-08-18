@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getProducts } from "@/app/actions/products"
+import { withTenantAuth } from "@/lib/withTenantAuth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -12,8 +12,15 @@ const FALLBACK_PRODUCTS = [
 
 export async function GET() {
   try {
-    const products = await getProducts()
-    return NextResponse.json(products)
+    return await withTenantAuth(async ({ sql, tenantId }) => {
+      const products = await sql`
+        SELECT * FROM products 
+        WHERE tenant_id = ${tenantId} 
+        AND is_active = 'true'
+        ORDER BY name
+      `
+      return NextResponse.json(products)
+    })
   } catch (e: any) {
     console.warn("GET /api/products fallback:", e?.message || e)
     return NextResponse.json(FALLBACK_PRODUCTS, { status: 200 })

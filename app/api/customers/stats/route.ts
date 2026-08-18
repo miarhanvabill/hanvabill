@@ -1,21 +1,26 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getCustomerStats } from "@/app/actions/customers"
-import { sql } from "@/lib/db";
+import { withTenantAuth } from "@/lib/withTenantAuth"
 
-export async function GET(request: NextRequest) {
+export const GET = withTenantAuth(async ({ sql, tenantId }, request: NextRequest) => {
   try {
     const { searchParams } = new URL(request.url)
     const month = searchParams.get("month")
     const year = searchParams.get("year")
 
-    const stats = await getCustomerStats(
-      month ? Number.parseInt(month) : undefined,
-      year ? Number.parseInt(year) : undefined,
-    )
+    // Pass the tenant-aware SQL client to the function
+    const stats = await getCustomerStats()
 
     return NextResponse.json(stats)
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error in customer stats API:", error)
-    return NextResponse.json({ error: "Failed to fetch customer stats" }, { status: 500 })
+    return NextResponse.json(
+      { 
+        success: false, 
+        error: "Failed to fetch customer stats",
+        message: error.message 
+      }, 
+      { status: 500 }
+    )
   }
-}
+})

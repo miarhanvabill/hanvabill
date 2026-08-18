@@ -1,12 +1,23 @@
+// app/page.tsx
 import { Suspense } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Users, Calendar, DollarSign, TrendingUp, Clock, Star, ShoppingBag, UserPlus } from "lucide-react"
 import Link from "next/link"
+import { getAuthenticatedSql } from "@/lib/db"
 import { getDashboardStats } from "@/app/actions/dashboard"
+import { auth } from "@clerk/nextjs/server"
 
 async function DashboardStats() {
-  const stats = await getDashboardStats()
+  const { orgId, orgSlug } = await auth()
+  if (!orgId) {
+    throw new Error("Organization required")
+  }
+
+  const tenantKey = orgSlug ?? orgId
+  const { sql, tenantId } = await getAuthenticatedSql(tenantKey)
+  
+  const stats = await getDashboardStats(sql, tenantId)
 
   const safeStats = {
     today: {

@@ -39,7 +39,17 @@ export function ServiceSelectionModal({ open, onClose, onApply, selectedServices
   }, [open, selectedServices])
 
   const loadServices = async () => {
-    const servicesByCategory = await getServicesByCategory()
+    const servicesData = await getServicesByCategory()
+    const servicesArray = Array.isArray(servicesData) ? servicesData : []
+
+    const servicesByCategory: Record<string, Service[]> = {}
+    servicesArray.forEach((service) => {
+      if (!servicesByCategory[service.category]) {
+        servicesByCategory[service.category] = []
+      }
+      servicesByCategory[service.category].push(service)
+    })
+
     setServices(servicesByCategory)
   }
 
@@ -53,7 +63,9 @@ export function ServiceSelectionModal({ open, onClose, onApply, selectedServices
     }
 
     if (searchQuery) {
-      allServices = allServices.filter((service) => service.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      allServices = Array.isArray(allServices)
+        ? allServices.filter((service) => service.name.toLowerCase().includes(searchQuery.toLowerCase()))
+        : []
     }
 
     return allServices
