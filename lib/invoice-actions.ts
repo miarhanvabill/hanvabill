@@ -1,6 +1,5 @@
 "use client"
 
-import html2pdf from "html2pdf.js"
 import { useReactToPrint } from "react-to-print"
 import type { RefObject } from "react"
 
@@ -76,6 +75,8 @@ export async function downloadInvoicePDF(invoiceData: any) {
     }
 
     console.log("[v0] Starting PDF generation with improved settings...")
+    // Dynamically import html2pdf to prevent SSR ReferenceError
+    const html2pdf = (await import("html2pdf.js")).default
     await html2pdf().from(tempDiv).set(opt).save()
     console.log("[v0] PDF generated successfully")
 

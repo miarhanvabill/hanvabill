@@ -178,7 +178,7 @@ export function InvoiceTemplate({
           <div className="w-64 space-y-2">
             <div className="flex justify-between">
               <span>Subtotal</span>
-              <span>₹{data.subtotal.toFixed(2)}</span>
+              <span>₹{(isInvoicePreview(data) ? data.invoice.subtotal : data.subtotal).toFixed(2)}</span>
             </div>
             {isInvoicePreview(data) ? (
               <>
