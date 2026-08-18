@@ -1,6 +1,5 @@
-// middleware.ts
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 
 const isProtectedRoute = createRouteMatcher([
   "/(.*)",
@@ -22,7 +21,7 @@ const isPublicRoute = createRouteMatcher([
   "/debug",
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
+const clerkMw = clerkMiddleware(async (auth, req) => {
   const { pathname } = req.nextUrl;
 
   // 1) Allow public routes
@@ -83,9 +82,24 @@ export default clerkMiddleware(async (auth, req) => {
     return res;
   }
 
-  // Non-API: still forward tenant headers so server components/actions can read them
   return NextResponse.next({ request: { headers: requestHeaders } });
 });
+
+export default async function middleware(req: NextRequest, event: any) {
+  try {
+    return await clerkMw(req, event);
+  } catch (error: any) {
+    console.error("Middleware crash caught:", error);
+    return new NextResponse(
+      JSON.stringify({ 
+        error: "Middleware Error", 
+        message: error?.message || String(error),
+        stack: error?.stack
+      }), 
+      { status: 500, headers: { "Content-Type": "application/json" } }
+    );
+  }
+}
 
 export const config = {
   matcher: [
