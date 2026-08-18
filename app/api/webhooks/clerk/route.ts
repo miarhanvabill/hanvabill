@@ -3,13 +3,14 @@ import { Webhook } from "svix"
 import { headers } from "next/headers"
 import { withTenantAuth } from "@/lib/withTenantAuth"
 
-const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET
-
-if (!WEBHOOK_SECRET) {
-  throw new Error("Please add CLERK_WEBHOOK_SECRET from Clerk Dashboard to .env or .env.local")
-}
-
 export async function POST(req: NextRequest) {
+  const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET
+
+  if (!WEBHOOK_SECRET) {
+    console.error("Please add CLERK_WEBHOOK_SECRET from Clerk Dashboard to .env or .env.local")
+    return new Response("Missing WEBHOOK_SECRET", { status: 500 })
+  }
+
   // Get the headers
   const headerPayload = headers()
   const svix_id = headerPayload.get("svix-id")
