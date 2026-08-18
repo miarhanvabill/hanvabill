@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic"; // Prevents build-time execution
 
 export async function GET() {
   try {
-    const { userId, orgId, orgRole, sessionId } = auth();
+    const { userId, orgId, orgRole, sessionId } = await auth();
 
     return NextResponse.json({
       message: "✅ Debug Tenant Context",

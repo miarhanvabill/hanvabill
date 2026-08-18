@@ -36,12 +36,13 @@ export default clerkMiddleware(async (auth, req) => {
   }
 
   // 3) Resolve tenant from Clerk session claims
-  const claims = auth.sessionClaims || {};
+  const authObject = await auth();
+  const claims = authObject.sessionClaims || {};
   const tenantId =
     (claims.org_id as string) ||
     (claims.tenantId as string) ||
     (claims.tenant_Id as string) ||
-    auth.orgId ||
+    authObject.orgId ||
     null;
 
   const tenantKey =

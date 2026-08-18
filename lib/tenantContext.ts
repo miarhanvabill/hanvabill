@@ -12,8 +12,8 @@ export type TenantContext = {
 /**
  * Helper to extract tenantId (orgId) and userId from Clerk auth()
  */
-export function getTenantContext(request: NextRequest): TenantContext {
-  const { userId, orgId } = auth()
+export async function getTenantContext(request: NextRequest): Promise<TenantContext> {
+  const { userId, orgId } = await auth()
 
   if (!userId) {
     const e: any = new Error("Unauthenticated")

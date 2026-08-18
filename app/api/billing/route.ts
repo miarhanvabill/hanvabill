@@ -7,7 +7,7 @@ import { withTenantAuth } from "@/lib/withTenantAuth"
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId, orgId } = auth()
+    const { userId, orgId } = await auth()
     if (!userId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId, orgId } = auth()
+    const { userId, orgId } = await auth()
     if (!userId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
     }

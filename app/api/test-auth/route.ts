@@ -1,6 +1,6 @@
 // GET /api/tenant-health
 export async function GET() {
-  const { orgId } = auth()
+  const { orgId } = await auth()
   if (!orgId) return Response.json({ error: "Unauthorized" }, { status: 401 })
 
   const result = await sql`
