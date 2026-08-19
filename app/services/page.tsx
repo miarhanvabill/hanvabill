@@ -25,6 +25,14 @@ import {
   BarChart3,
   RefreshCw,
   Upload,
+  Wand2,
+  Smile,
+  Droplets,
+  Flower2,
+  Activity,
+  Wind,
+  Flame,
+  Leaf,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -53,6 +61,23 @@ const serviceCategories = [
   { id: "Massage Therapy", name: "Massage Therapy", icon: Heart, color: "bg-orange-500" },
   { id: "Makeup Services", name: "Makeup Services", icon: Sparkles, color: "bg-red-500" },
 ]
+
+
+function getSmartIcon(name: string) {
+  const n = name.toLowerCase();
+  if (n.includes("massage") || n.includes("spa") || n.includes("therapy")) return { icon: Activity, color: "bg-orange-500" };
+  if (n.includes("facial") || n.includes("face") || n.includes("cleanse") || n.includes("scrub") || n.includes("glow")) return { icon: Smile, color: "bg-pink-500" };
+  if (n.includes("bleach") || n.includes("dtan") || n.includes("whitening")) return { icon: Sparkles, color: "bg-yellow-500" };
+  if (n.includes("hair") || n.includes("shave") || n.includes("cut") || n.includes("trim")) return { icon: Scissors, color: "bg-blue-500" };
+  if (n.includes("color") || n.includes("dye") || n.includes("highlight")) return { icon: Palette, color: "bg-purple-500" };
+  if (n.includes("wax") || n.includes("thread") || n.includes("remove")) return { icon: Flame, color: "bg-red-500" };
+  if (n.includes("nail") || n.includes("pedicure") || n.includes("manicure")) return { icon: Flower2, color: "bg-green-500" };
+  if (n.includes("wash") || n.includes("shampoo")) return { icon: Droplets, color: "bg-cyan-500" };
+  if (n.includes("oil") || n.includes("head") || n.includes("cooling")) return { icon: Wind, color: "bg-teal-500" };
+  if (n.includes("herbal") || n.includes("natural")) return { icon: Leaf, color: "bg-emerald-500" };
+  
+  return { icon: Wand2, color: "bg-indigo-500" };
+}
 
 export default function ServicesPage() {
   const [services, setServices] = useState<Service[]>([])
@@ -570,8 +595,11 @@ export default function ServicesPage() {
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center space-x-3">
-                        <div className={`p-2 rounded-lg ${category?.color || "bg-gray-500"}`}>
-                          {category?.icon && <category.icon className="h-5 w-5 text-white" />}
+                                                <div className={`p-2 rounded-lg ${getSmartIcon(service.name).color}`}>
+                          {(() => {
+                            const SmartIcon = getSmartIcon(service.name).icon;
+                            return <SmartIcon className="h-5 w-5 text-white" />;
+                          })()}
                         </div>
                         <div>
                           <CardTitle className="text-lg font-semibold">{service.name}</CardTitle>
