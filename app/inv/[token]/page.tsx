@@ -20,6 +20,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     quantity: item.quantity || 1,
     rate: item.price || item.rate || 0,
     amount: (item.price || item.rate || 0) * (item.quantity || 1),
+    staffName: item.staff_name || item.staffName,
     staffName: item.staff_name,
   }))
 

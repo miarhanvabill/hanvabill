@@ -96,8 +96,24 @@ export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
         placeOfSupply: "Karnataka",
       }
 
-      // Force window.print() for download as well to get the perfect Tailwind layout
-      window.print()
+
+      // Capture the invoice template DOM element
+      const element = document.getElementById('invoice-template-wrapper');
+      if (!element) {
+        throw new Error('Invoice template not found');
+      }
+      
+      const opt = {
+        margin: 0.5,
+        filename: `invoice-${invoice.id}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
+      };
+
+      const html2pdf = (await import('html2pdf.js')).default;
+      await html2pdf().from(element).set(opt).save();
+
     } catch (error) {
       console.error("Error downloading invoice:", error)
       alert("Failed to download invoice. Please try again.")
@@ -202,7 +218,7 @@ Thank you for your business!
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Invoice Content */}
         <div className="lg:col-span-2 overflow-x-auto print:col-span-3">
-          <div className="w-full">
+          <div className="w-full" id="invoice-template-wrapper">
             <InvoiceTemplate 
               data={{
                 invoiceNumber: `${invoice.id}`,
