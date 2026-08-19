@@ -11,6 +11,10 @@ import { getBookingById, updateBookingStatus, getBookingServices } from "@/app/a
 import { getCustomerById } from "@/app/actions/customers"
 import { getStaffById } from "@/app/actions/staff"
 import { CheckoutScreen } from "@/components/checkout-screen"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { InvoiceTemplate } from "@/components/invoice-template"
+import { getBusinessSettings } from "@/app/actions/settings"
+import { Printer as Print } from "lucide-react"
 import {
   ArrowLeft,
   Edit,
@@ -80,6 +84,8 @@ export default function BookingDetailsPage() {
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
   const [showCheckout, setShowCheckout] = useState(false)
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false)
+  const [bizSettings, setBizSettings] = useState<any>(null)
 
   useEffect(() => {
     const fetchBookingData = async () => {
