@@ -7,6 +7,9 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { CheckCircle, Download, Printer as Print, Share, Plus, User, CreditCard } from "lucide-react"
 import { downloadInvoicePDF } from "@/lib/invoice-actions"
+import { getBusinessSettings } from "@/app/actions/settings"
+import { InvoiceTemplate } from "@/components/invoice-template"
+import { useEffect } from "react"
 
 interface Customer {
   id: number
@@ -49,6 +52,13 @@ interface InvoiceScreenProps {
 export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
   const [downloading, setDownloading] = useState(false)
   const [printing, setPrinting] = useState(false)
+  const [bizSettings, setBizSettings] = useState<any>(null)
+
+  useEffect(() => {
+    getBusinessSettings().then(setBizSettings).catch(console.error)
+  }, [])
+
+  const bizProfile = bizSettings?.profile || {}
 
   const handleDownload = async () => {
     setDownloading(true)
@@ -176,100 +186,45 @@ Thank you for your business!
       {/* Invoice Details */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Invoice Content */}
-        <div className="lg:col-span-2">
-          <Card>
-            <CardHeader className="pb-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-2xl">Invoice #{invoice.id}</CardTitle>
-                  <p className="text-gray-600">
-                    Generated on{" "}
-                    {new Date(invoice.created_at).toLocaleDateString("en-IN", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
-                </div>
-                <Badge className="bg-green-600">Paid</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Customer Information */}
-              <div>
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <User className="w-4 h-4" />
-                  Customer Information
-                </h3>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="font-medium">{invoice.customer.name}</p>
-                  <p className="text-sm text-gray-600">{invoice.customer.phone}</p>
-                  {invoice.customer.email && <p className="text-sm text-gray-600">{invoice.customer.email}</p>}
-                  {invoice.customer.address && <p className="text-sm text-gray-600">{invoice.customer.address}</p>}
-                </div>
-              </div>
-
-              {/* Items */}
-              <div>
-                <h3 className="font-semibold mb-3">Items & Services</h3>
-                <div className="space-y-3">
-                  {invoice.items.map((item) => (
-                    <div key={item.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{item.name}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {item.type}
-                          </Badge>
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          {formatCurrency(item.price)} × {item.quantity}
-                          {item.staff_name && <span className="ml-2">• Staff: {item.staff_name}</span>}
-                          {item.duration && <span className="ml-2">• {item.duration} min</span>}
-                        </div>
-                      </div>
-                      <span className="font-semibold">{formatCurrency(item.price * item.quantity)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Payment Information */}
-              <div>
-                <h3 className="font-semibold mb-3 flex items-center gap-2">
-                  <CreditCard className="w-4 h-4" />
-                  Payment Information
-                </h3>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    {getPaymentMethodIcon(invoice.payment_method)}
-                    <span className="font-medium capitalize">{invoice.payment_method} Payment</span>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Paid on {new Date(invoice.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-
-              {/* Notes */}
-              {invoice.notes && (
-                <div>
-                  <h3 className="font-semibold mb-3">Notes</h3>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <p className="text-sm">{invoice.notes}</p>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <div className="lg:col-span-2 overflow-x-auto print:col-span-3">
+          <div className="min-w-[800px]">
+            <InvoiceTemplate 
+              data={{
+                invoiceNumber: `${invoice.id}`,
+                invoiceDate: invoice.created_at,
+                dueDate: invoice.created_at,
+                customerName: invoice.customer.name || "Walk-in Customer",
+                customerAddress: invoice.customer.address || "",
+                customerPhone: invoice.customer.phone || "",
+                customerEmail: invoice.customer.email || "",
+                items: invoice.items.map((item, index) => ({
+                  id: index + 1,
+                  description: item.name,
+                  quantity: item.quantity,
+                  rate: item.price,
+                  amount: item.price * item.quantity,
+                })),
+                subtotal: invoice.subtotal,
+                discount: invoice.discount,
+                gstRate: 18,
+                isInterState: false,
+                placeOfSupply: "Karnataka",
+                businessName: bizProfile.salonName || "Hanva Salon",
+                businessAddress: bizProfile.address || "Business Address",
+                businessPhone: bizProfile.phone || "",
+                businessEmail: bizProfile.email || "",
+                businessGSTIN: bizProfile.gstNumber || "",
+                businessPAN: "",
+                sacCode: "999599"
+              }} 
+            />
+          </div>
         </div>
 
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Bill Summary */}
-          <Card>
+          <Card className="print:hidden">
             <CardHeader>
               <CardTitle>Bill Summary</CardTitle>
             </CardHeader>
