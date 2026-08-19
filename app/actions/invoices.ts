@@ -1,5 +1,6 @@
 // app/actions/invoices.ts
 "use server"
+import { neon } from "@neondatabase/serverless"
 
 import { withTenantAuth } from '@/lib/withTenantAuth';
 
@@ -162,7 +163,7 @@ export async function getInvoiceById(id: string) {
 export async function getInvoiceByShareToken(token: string) {
   try {
     // PUBLIC endpoint: Do not use withTenantAuth. Look up by unguessable token.
-    const { neon } = require("@neondatabase/serverless");
+    
     const sql = neon(process.env.DATABASE_URL!);
     
     const result = await sql`
@@ -196,16 +197,13 @@ export async function getInvoiceByShareToken(token: string) {
         }
       };
       
-      const profileSettingsStr = settingsResult.find((s: any) => s.setting_key === 'profile.settings')?.setting_value;
-      if (profileSettingsStr) {
-         try {
-            const parsed = JSON.parse(profileSettingsStr);
-            businessSettings = { profile: parsed };
-         } catch(e) {
-            businessSettings = defaultSettings;
-         }
-      } else {
-         businessSettings = defaultSettings;
+      // Reconstruct profile settings from individual keys
+      businessSettings = { profile: { ...defaultSettings.profile } };
+      for (const s of settingsResult) {
+        if (s.setting_key.startsWith('profile.')) {
+          const key = s.setting_key.replace('profile.', '');
+          businessSettings.profile[key] = s.setting_value;
+        }
       }
     } catch (err) {
       console.error("Error fetching store settings for public invoice:", err);

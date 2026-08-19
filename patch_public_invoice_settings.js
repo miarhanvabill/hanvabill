@@ -3,13 +3,14 @@ let code = fs.readFileSync('app/actions/invoices.ts', 'utf8');
 
 const oldLogic = `      const profileSettingsStr = settingsResult.find((s: any) => s.setting_key === 'profile.settings')?.setting_value;
       if (profileSettingsStr) {
-        try {
-          businessSettings = { profile: JSON.parse(profileSettingsStr) };
-        } catch(e) {
-          businessSettings = defaultSettings;
-        }
+         try {
+            const parsed = JSON.parse(profileSettingsStr);
+            businessSettings = { profile: parsed };
+         } catch(e) {
+            businessSettings = defaultSettings;
+         }
       } else {
-        businessSettings = defaultSettings;
+         businessSettings = defaultSettings;
       }`;
 
 const newLogic = `      // Reconstruct profile settings from individual keys

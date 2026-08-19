@@ -34,8 +34,8 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
   let loyaltyPointsEarned = undefined;
   let loyaltyPointsAvailable = undefined;
   
-  if (inv.booking_notes) {
-    const noteParts = inv.booking_notes.split(' | ');
+  if (inv.notes) {
+    const noteParts = inv.notes.split(' | ');
     for (const part of noteParts) {
       if (part.startsWith('Coupon: ')) {
         const match = part.match(/Coupon: (.*) \(-\d+(\.\d+)?\)/);
@@ -61,8 +61,8 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
 
   const data = {
     invoiceNumber: inv.invoice_number,
-    invoiceDate: inv.invoice_date,
-    dueDate: inv.due_date || new Date(new Date(inv.invoice_date).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    invoiceDate: inv.invoice_date instanceof Date ? inv.invoice_date.toISOString() : (inv.invoice_date || new Date().toISOString()),
+    dueDate: inv.due_date || (inv.invoice_date ? new Date(new Date(inv.invoice_date).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() : new Date().toISOString()),
     customerName: inv.customer_name || "Walk-in Customer",
     customerAddress: "",
     customerPhone: inv.customer_phone || "",
