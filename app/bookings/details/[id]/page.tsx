@@ -586,17 +586,7 @@ Thank you for choosing Hanva Billing!
           <div className="flex justify-end mb-4 print:hidden gap-2">
             <Button variant="outline" onClick={() => setShowInvoiceModal(false)}>Cancel</Button>
             <Button onClick={async () => {
-              const element = document.getElementById('invoice-template-wrapper-booking');
-              if (!element) return;
-              const opt = {
-                margin: 0.5,
-                filename: `invoice-${booking.booking_number}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true },
-                jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
-              };
-              const html2pdf = (await import('html2pdf.js')).default;
-              await html2pdf().from(element).set(opt).save();
+              window.print();
             }} className="gap-2">
               <Download className="w-4 h-4" />
               Download PDF

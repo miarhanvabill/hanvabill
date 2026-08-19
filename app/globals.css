@@ -323,3 +323,36 @@
     height: auto !important;
   }
 }
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  
+  #invoice-template-wrapper, 
+  #invoice-template-wrapper *,
+  #invoice-template-wrapper-booking,
+  #invoice-template-wrapper-booking * {
+    visibility: visible;
+  }
+  
+  #invoice-template-wrapper,
+  #invoice-template-wrapper-booking {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  
+  /* Ensure page breaks happen reasonably */
+  table { page-break-inside:auto }
+  tr    { page-break-inside:avoid; page-break-after:auto }
+  
+  @page {
+    margin: 1cm;
+  }
+}

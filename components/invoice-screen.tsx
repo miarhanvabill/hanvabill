@@ -98,21 +98,8 @@ export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
 
 
       // Capture the invoice template DOM element
-      const element = document.getElementById('invoice-template-wrapper');
-      if (!element) {
-        throw new Error('Invoice template not found');
-      }
-      
-      const opt = {
-        margin: 0.5,
-        filename: `invoice-${invoice.id}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
-      };
-
-      const html2pdf = (await import('html2pdf.js')).default;
-      await html2pdf().from(element).set(opt).save();
+      // Use native print dialog which has a "Save as PDF" option and supports modern CSS
+      window.print();
 
     } catch (error) {
       console.error("Error downloading invoice:", error)
