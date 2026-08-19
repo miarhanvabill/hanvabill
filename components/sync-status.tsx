@@ -9,8 +9,11 @@ type SyncStatus = "synced" | "syncing" | "error"
 export function SyncStatus() {
   const [status, setStatus] = useState<SyncStatus>("synced")
   const [lastSync, setLastSync] = useState<Date>(new Date())
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
+    
     // Simulate sync status changes
     const interval = setInterval(() => {
       const random = Math.random()
@@ -62,7 +65,7 @@ export function SyncStatus() {
         <Icon className="h-3 w-3" />
         <span className="text-xs">{config.text}</span>
       </Badge>
-      {status === "synced" && (
+      {mounted && status === "synced" && (
         <span className="text-xs text-gray-500">
           {lastSync.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </span>
