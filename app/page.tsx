@@ -6,6 +6,7 @@ import { Users, Calendar, IndianRupee, TrendingUp, Clock, Star, ShoppingBag, Use
 import Link from "next/link"
 import { getAuthenticatedSql } from "@/lib/db"
 import { getDashboardStats } from "@/app/actions/dashboard"
+import { getBusinessSettings } from "@/app/actions/settings"
 import { auth } from "@clerk/nextjs/server"
 
 async function DashboardStats() {
@@ -227,13 +228,16 @@ async function DashboardStats() {
   )
 }
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const settings = await getBusinessSettings();
+  const salonName = settings?.profile?.salonName || "Hanva Billing";
+  
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">Welcome to Hanva Billing</p>
+          <p className="text-muted-foreground">Welcome to {salonName}</p>
         </div>
         <div className="text-right">
           <p className="text-sm text-muted-foreground">Today</p>
