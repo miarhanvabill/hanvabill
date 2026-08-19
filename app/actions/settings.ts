@@ -17,7 +17,7 @@ async function ensureStoreSettingsTable(sql: any) {
     `
 
     // Safe access to the result
-    const exists = tableExists?.rows?.[0]?.exists
+    const exists = tableExists?.[0]?.exists || tableExists?.rows?.[0]?.exists
     
     if (!exists) {
       // Use IF NOT EXISTS to prevent duplicate table errors
@@ -51,7 +51,7 @@ async function ensureStoreSettingsTable(sql: any) {
       SELECT EXISTS (SELECT 1 FROM store_settings LIMIT 1)
     `
     
-    if (hasData?.rows?.[0]?.exists) {
+    if (hasData?.[0]?.exists || hasData?.rows?.[0]?.exists) {
       const duplicateCheck = await sql`
         SELECT tenant_id, setting_key, COUNT(*) as count 
         FROM store_settings 
@@ -60,7 +60,7 @@ async function ensureStoreSettingsTable(sql: any) {
       `
 
       // Safe access to rows array
-      if (duplicateCheck?.rows && duplicateCheck.rows.length > 0) {
+      if ((duplicateCheck?.length > 0) || (duplicateCheck?.rows?.length > 0)) {
         console.log("Found duplicates, cleaning up...")
 
         await sql`
@@ -100,13 +100,12 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
     try {
       await ensureStoreSettingsTable(sql)
 
-      const result = await sql`
+      const rows = await sql`
         SELECT setting_key, setting_value, setting_type
         FROM store_settings
         WHERE tenant_id = ${tenantId}
         ORDER BY setting_key
       `
-      const rows = result.rows
 
       const defaultSettings: BusinessSettings = {
         profile: {
@@ -536,9 +535,9 @@ export async function updateBusinessSettings(
                   stringValue = String(value)
                 }
 
-                if (stringValue.length > 10000) {
+                if (stringValue.length > 5000000) {
                   console.warn(`Value too long for key ${fullKey}, truncating`)
-                  stringValue = stringValue.substring(0, 10000)
+                  stringValue = stringValue.substring(0, 5000000)
                 }
 
                 flattened.push({ key: fullKey, value: stringValue, type })
@@ -583,9 +582,10 @@ export async function updateBusinessSettings(
             UPDATE store_settings 
             SET setting_value = ${setting.value}, setting_type = ${setting.type}, updated_at = NOW()
             WHERE setting_key = ${setting.key} AND tenant_id = ${tenantId}
+            RETURNING id
           `
 
-          if (updateResult.rowCount === 0) {
+          if (updateResult.length === 0) {
             await sql`
               INSERT INTO store_settings (tenant_id, setting_key, setting_value, setting_type, created_at, updated_at)
               VALUES (${tenantId}, ${setting.key}, ${setting.value}, ${setting.type}, NOW(), NOW())
