@@ -95,6 +95,21 @@ async function ensureLoyaltySettingsSchema(sql: any, tenantId: string) {
 
   // Loyalty transactions table modifications
   try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS loyalty_transactions (
+        id BIGSERIAL PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        customer_id BIGINT NOT NULL,
+        points NUMERIC NOT NULL DEFAULT 0,
+        transaction_type TEXT NOT NULL,
+        amount NUMERIC NOT NULL DEFAULT 0,
+        description TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ,
+        type TEXT,
+        invoice_id TEXT
+      )
+    `
     await sql`ALTER TABLE loyalty_transactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
     // Note: tenant_id column for loyalty_transactions should ideally be populated via application logic or a separate migration for existing data.
   } catch (error: any) {
@@ -327,7 +342,7 @@ export async function getExpiringSoon(customerId: number, days = 7, tenantId?: s
         AND expires_at IS NOT NULL
         AND expires_at != ''
         AND expires_at::timestamp > NOW()
-        AND expires_at::timestamp <= NOW() + INTERVAL '${days} days' // Direct parameter usage
+        AND expires_at::timestamp <= NOW() + (${days}::text || ' days')::interval
     `
     return Number(result[0]?.expiring || 0)
   }, tenantId)

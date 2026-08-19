@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
 
       return response
     } catch (e: any) {
-      console.error("[v0] Loyalty API error:", e)
+      console.error("[v0] Loyalty API error:", e); console.error(e.stack);
       return NextResponse.json({ success: false, error: e.message || "Failed to fetch loyalty" }, { status: 500 })
     }
   })
