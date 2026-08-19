@@ -22,6 +22,40 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     amount: (item.price || item.rate || 0) * (item.quantity || 1),
   }))
 
+
+  // Parse notes to extract discount breakdown
+  let couponCode = undefined;
+  let couponDiscount = 0;
+  let loyaltyDiscount = 0;
+  let giftCardDiscount = 0;
+  let loyaltyPointsEarned = undefined;
+  let loyaltyPointsAvailable = undefined;
+  
+  if (inv.booking_notes) {
+    const noteParts = inv.booking_notes.split(' | ');
+    for (const part of noteParts) {
+      if (part.startsWith('Coupon: ')) {
+        const match = part.match(/Coupon: (.*) \(-\d+(\.\d+)?\)/);
+        if (match) {
+          couponCode = match[1];
+          couponDiscount = parseFloat(part.match(/\(-(\d+(\.\d+)?)\)/)[1] || '0');
+        } else {
+          couponCode = part.replace('Coupon: ', '');
+        }
+      } else if (part.startsWith('Loyalty Redeemed: ₹')) {
+        loyaltyDiscount = parseFloat(part.replace('Loyalty Redeemed: ₹', ''));
+      } else if (part.startsWith('Gift Card Redeemed: ₹')) {
+        giftCardDiscount = parseFloat(part.replace('Gift Card Redeemed: ₹', ''));
+      } else if (part.startsWith('Points Earned: ')) {
+        loyaltyPointsEarned = parseInt(part.replace('Points Earned: ', ''));
+      } else if (part.startsWith('Points Balance: ')) {
+        loyaltyPointsAvailable = parseInt(part.replace('Points Balance: ', ''));
+      }
+    }
+  }
+  
+  const genericDiscount = Math.max(0, (inv.discount_amount || 0) - couponDiscount - loyaltyDiscount - giftCardDiscount);
+
   const data = {
     invoiceNumber: inv.invoice_number,
     invoiceDate: inv.invoice_date,
@@ -33,7 +67,13 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     customerGSTIN: "",
     items,
     subtotal: inv.subtotal || (inv.amount - inv.gst_amount) || 0,
-    discount: inv.discount_amount || 0,
+    discount: genericDiscount,
+    couponCode,
+    couponDiscount,
+    loyaltyDiscount,
+    giftCardDiscount,
+    loyaltyPointsEarned,
+    loyaltyPointsAvailable,
     gstRate: 18,
     isInterState: false,
     placeOfSupply: "Karnataka",

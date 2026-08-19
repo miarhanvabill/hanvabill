@@ -22,6 +22,7 @@ export interface InvoiceData {
   items: InvoiceItem[]
   subtotal: number
   discount: number
+  couponCode?: string
   couponDiscount?: number
   loyaltyDiscount?: number
   giftCardDiscount?: number
@@ -143,7 +144,7 @@ export function InvoiceTemplate({ data, className = "" }: { data: InvoiceData; c
           )}
           {(data.couponDiscount || 0) > 0 && (
             <div className="flex justify-between text-sm text-slate-600 px-2">
-              <span>Coupon Applied</span>
+              <span>Coupon Applied {data.couponCode ? `(${data.couponCode})` : ''}</span>
               <span className="font-medium text-emerald-600">-₹{data.couponDiscount!.toFixed(2)}</span>
             </div>
           )}

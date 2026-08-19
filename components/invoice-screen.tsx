@@ -39,6 +39,7 @@ interface Invoice {
   discount: number
   gst: number
   total: number
+  couponCode?: string
   couponDiscount?: number
   loyaltyDiscount?: number
   giftCardDiscount?: number
@@ -86,6 +87,7 @@ export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
         })),
         subtotal: invoice.subtotal,
                 discount: invoice.discount,
+                couponCode: invoice.couponCode,
                 couponDiscount: invoice.couponDiscount,
                 loyaltyDiscount: invoice.loyaltyDiscount,
                 giftCardDiscount: invoice.giftCardDiscount,
@@ -219,6 +221,11 @@ Thank you for your business!
                 })),
                 subtotal: invoice.subtotal,
                 discount: invoice.discount,
+                couponDiscount: invoice.couponDiscount,
+                loyaltyDiscount: invoice.loyaltyDiscount,
+                giftCardDiscount: invoice.giftCardDiscount,
+                loyaltyPointsAvailable: invoice.loyaltyPointsAvailable,
+                loyaltyPointsEarned: invoice.loyaltyPointsEarned,
                 gstRate: 18,
                 isInterState: false,
                 placeOfSupply: "Karnataka",
@@ -251,8 +258,26 @@ Thank you for your business!
 
                 {invoice.discount > 0 && (
                   <div className="flex justify-between text-green-600">
-                    <span>Discount:</span>
+                    <span>Manual Discount:</span>
                     <span>-{formatCurrency(invoice.discount)}</span>
+                  </div>
+                )}
+                {(invoice.couponDiscount || 0) > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span>Coupon {invoice.couponCode ? `(${invoice.couponCode})` : ''}:</span>
+                    <span>-{formatCurrency(invoice.couponDiscount!)}</span>
+                  </div>
+                )}
+                {(invoice.loyaltyDiscount || 0) > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span>Loyalty Redeemed:</span>
+                    <span>-{formatCurrency(invoice.loyaltyDiscount!)}</span>
+                  </div>
+                )}
+                {(invoice.giftCardDiscount || 0) > 0 && (
+                  <div className="flex justify-between text-purple-600">
+                    <span>Gift Card:</span>
+                    <span>-{formatCurrency(invoice.giftCardDiscount!)}</span>
                   </div>
                 )}
 

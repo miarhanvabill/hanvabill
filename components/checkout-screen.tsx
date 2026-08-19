@@ -41,6 +41,7 @@ interface Invoice {
   discount: number
   gst: number
   total: number
+  couponCode?: string
   couponDiscount?: number
   loyaltyDiscount?: number
   giftCardDiscount?: number
@@ -316,6 +317,7 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack }: Checkou
         items: cartItems,
         subtotal: serverTotals.subtotal,
         discount: manualDiscount,
+        couponCode: appliedCoupon ? appliedCoupon.code : undefined,
         couponDiscount: appliedCoupon ? couponDiscount : 0,
         loyaltyDiscount: serverTotals.loyaltyDiscount,
         giftCardDiscount: serverTotals.giftCardDiscount,
