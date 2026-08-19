@@ -7,14 +7,6 @@ const dummy2 = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 const isProtectedRoute = createRouteMatcher([
   "/(.*)",
-  "/customers(.*)",
-  "/bookings(.*)",
-  "/staff(.*)",
-  "/services(.*)",
-  "/reports(.*)",
-  "/settings(.*)",
-  "/api/tenants(.*)",
-  "/api/(.*)",
 ]);
 
 const isPublicRoute = createRouteMatcher([
@@ -28,13 +20,19 @@ const isPublicRoute = createRouteMatcher([
 const clerkMw = clerkMiddleware(async (auth, req) => {
   const { pathname } = req.nextUrl;
 
+  // IMPORTANT: Prevent infinite redirect loops with Clerk's internal routes (like /__clerk/v1/client/handshake)
+  // If we don't skip them, auth.protect() will intercept them and redirect back to sign-in recursively!
+  if (pathname.startsWith("/__clerk")) {
+    return NextResponse.next();
+  }
+
   // 1) Allow public routes
   if (isPublicRoute(req)) {
     return NextResponse.next();
   }
 
-  // 2) Protect protected routes + all /api/*
-  if (isProtectedRoute(req) || pathname.startsWith("/api/")) {
+  // 2) Protect protected routes
+  if (isProtectedRoute(req) && !isPublicRoute(req)) {
     await auth.protect();
   }
 
@@ -95,7 +93,6 @@ export default async function middleware(req: NextRequest, event: any) {
   } catch (error: any) {
     console.error("Middleware crash caught:", error);
     
-    // Debug what env variables are ACTUALLY available to the edge runtime
     const edgeEnv = {
       hasSecret: !!process.env.CLERK_SECRET_KEY,
       secretLength: process.env.CLERK_SECRET_KEY?.length || 0,
