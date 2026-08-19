@@ -97,8 +97,13 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
 
         // Generate booking number
         const bookingNumber = `BK${Date.now()}${Math.floor(Math.random() * 1000)}`
-        const bookingDate = input.booking_date || new Date().toISOString().split("T")[0]
-        const bookingTime = input.booking_time || "10:00"
+        const dateIST = new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' });
+        // Convert MM/DD/YYYY to YYYY-MM-DD
+        const [month, day, year] = dateIST.split('/');
+        const formattedDateIST = `${year}-${month}-${day}`;
+        const bookingDate = input.booking_date || formattedDateIST
+        const nowIST = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+        const bookingTime = input.booking_time || nowIST
 
         // Create booking for service items only with tenant_id
         const [booking] = await sql`
