@@ -117,19 +117,14 @@ export function Header({ onMenuToggle }: HeaderProps) {
         {isLoaded && isSignedIn && (
           <div className="hidden md:flex items-center gap-2">
             <OrganizationSwitcher 
-              afterSelectOrganizationUrl="/dashboard" 
+              afterSelectOrganizationUrl="/" 
               appearance={{
                 elements: {
                   organizationSwitcherTrigger: "flex gap-2 items-center px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 transition"
                 }
               }}
             />
-            <Link 
-              href="/dashboard/tenants" 
-              className="text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors px-3 py-1.5 rounded-md hover:bg-gray-100 whitespace-nowrap"
-            >
-              Tenant Dashboard
-            </Link>
+            
           </div>
         )}
       </div>

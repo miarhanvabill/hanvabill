@@ -109,7 +109,7 @@ export async function markAttendance(data: {
       `
 
       revalidatePath("/attendance")
-      revalidatePath("/dashboard")
+      revalidatePath("/")
       return { success: true, message: "Attendance marked successfully!" }
     } catch (error) {
       console.error("Error marking attendance:", error)
@@ -233,7 +233,7 @@ export async function bulkMarkAttendance(records: {
       }
 
       revalidatePath("/attendance")
-      revalidatePath("/dashboard")
+      revalidatePath("/")
       return { success: true, message: "Bulk attendance marked successfully!" }
     } catch (error) {
       console.error("Error in bulk attendance marking:", error)
