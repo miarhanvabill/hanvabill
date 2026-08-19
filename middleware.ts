@@ -93,11 +93,21 @@ export default async function middleware(req: NextRequest, event: any) {
     return await clerkMw(req, event);
   } catch (error: any) {
     console.error("Middleware crash caught:", error);
+    
+    // Debug what env variables are ACTUALLY available to the edge runtime
+    const edgeEnv = {
+      hasSecret: !!process.env.CLERK_SECRET_KEY,
+      secretLength: process.env.CLERK_SECRET_KEY?.length || 0,
+      hasPublishable: !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+      allKeys: Object.keys(process.env).filter(k => k.includes("CLERK") || k.includes("NEXT"))
+    };
+
     return new NextResponse(
       JSON.stringify({ 
         error: "Middleware Error", 
         message: error?.message || String(error),
-        stack: error?.stack
+        edgeEnv,
+        hint: edgeEnv.hasSecret ? "Key exists but Clerk still says missing" : "Key is completely missing in Edge runtime"
       }), 
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
