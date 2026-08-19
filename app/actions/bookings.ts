@@ -412,11 +412,11 @@ export async function getBookingServices(bookingId: string) {
   })
 }
 
-export async function getBookingStats(): Promise<BookingStats> {
+export async function getBookingStats(startDate?: string, endDate?: string): Promise<BookingStats> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       return await cacheFetch(
-        "bookings:stats",
+        `bookings:stats:${startDate || "all"}:${endDate || "all"}`, 
         async () => {
           const today = new Date().toISOString().split("T")[0]
           const [

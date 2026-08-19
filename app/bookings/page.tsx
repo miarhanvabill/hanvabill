@@ -22,7 +22,8 @@ import { bookingTemplate } from "@/lib/csv-templates"
 
 interface BookingsPageProps {
   searchParams: {
-    date?: string
+    startDate?: string
+    endDate?: string
     status?: string
     search?: string
     tab?: string
@@ -544,13 +545,21 @@ function BookingsContent({ searchParams }: BookingsPageProps) {
   const [stats, setStats] = useState({ total: 0, today: 0, pending: 0, revenue: 0 })
   const [loading, setLoading] = useState(true)
 
+  // Default to current month
+  const now = new Date()
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString('en-CA') // YYYY-MM-DD
+  const currentMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toLocaleDateString('en-CA')
+  
+  const startDate = searchParams.startDate || currentMonthStart
+  const endDate = searchParams.endDate || currentMonthEnd
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true)
         const [bookingsData, statsData] = await Promise.all([
-          getBookings(searchParams.date, searchParams.status, searchParams.search),
-          getBookingStats()
+          getBookings(startDate, endDate, searchParams.status, searchParams.search),
+          getBookingStats(startDate, endDate)
         ])
         setBookings(bookingsData)
         setStats(statsData)
@@ -720,6 +729,9 @@ function BookingsContent({ searchParams }: BookingsPageProps) {
               <StatusFilterButtons currentStatus={searchParams.status || "all"} />
 
               <form className="flex flex-col sm:flex-row gap-4 mb-6">
+                {searchParams.status && searchParams.status !== 'all' && (
+                  <input type="hidden" name="status" value={searchParams.status} />
+                )}
                 <div className="flex-1">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -731,7 +743,11 @@ function BookingsContent({ searchParams }: BookingsPageProps) {
                     />
                   </div>
                 </div>
-                <Input type="date" name="date" defaultValue={searchParams.date || ""} className="w-full sm:w-auto" />
+                <div className="flex items-center gap-2">
+                  <Input type="date" name="startDate" defaultValue={startDate} className="w-full sm:w-[140px]" title="Start Date" />
+                  <span className="text-gray-400 text-sm">to</span>
+                  <Input type="date" name="endDate" defaultValue={endDate} className="w-full sm:w-[140px]" title="End Date" />
+                </div>
                 <Button type="submit">Apply Filters</Button>
               </form>
 
