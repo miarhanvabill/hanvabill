@@ -48,9 +48,9 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 py-12">
-      <div className="max-w-4xl mx-auto px-4">
-        <InvoiceTemplate data={data} className="bg-white shadow-xl mx-auto" />
+    <div className="min-h-screen bg-slate-50 py-12 print:py-0 print:bg-white">
+      <div className="max-w-4xl mx-auto px-4 print:px-0 print:max-w-none">
+        <InvoiceTemplate data={data} className="bg-white shadow-xl mx-auto print:shadow-none" />
       </div>
     </div>
   )
