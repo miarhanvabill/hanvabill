@@ -218,6 +218,7 @@ Thank you for your business!
                   quantity: item.quantity,
                   rate: item.price,
                   amount: item.price * item.quantity,
+                  staffName: item.staff_name,
                 })),
                 subtotal: invoice.subtotal,
                 discount: invoice.discount,

@@ -8,6 +8,7 @@ export interface InvoiceItem {
   quantity: number
   rate: number
   amount: number
+  staffName?: string
 }
 
 export interface InvoiceData {
