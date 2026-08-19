@@ -285,7 +285,8 @@ async function StaffDetailsContent({ staffId }: { staffId: string }) {
   )
 }
 
-export default function StaffDetailsPage({ params }: StaffDetailsPageProps) {
+export default async function StaffDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params;
   return (
     <Suspense
       fallback={
@@ -307,7 +308,7 @@ export default function StaffDetailsPage({ params }: StaffDetailsPageProps) {
         </div>
       }
     >
-      <StaffDetailsContent staffId={params.id} />
+      <StaffDetailsContent staffId={resolvedParams.id} />
     </Suspense>
   )
 }

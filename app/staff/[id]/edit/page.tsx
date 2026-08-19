@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { Suspense, useState, useTransition, useEffect } from "react"
-import { notFound } from "next/navigation"
+import { notFound, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -407,7 +407,8 @@ function EditStaffForm({ staff }: { staff: Staff }) {
   )
 }
 
-export default function EditStaffPage({ params }: EditStaffPageProps) {
+export default function EditStaffPage() {
+  const params = useParams()
   const [staff, setStaff] = useState<Staff | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)

@@ -26,7 +26,8 @@ async function CustomerDetailsContent({ id }: { id: string }) {
   }
 }
 
-export default async function CustomerDetailsPage({ params }: { params: { id: string } }) {
+export default async function CustomerDetailsPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params;
   return (
     <Suspense
       fallback={
@@ -38,7 +39,7 @@ export default async function CustomerDetailsPage({ params }: { params: { id: st
         </div>
       }
     >
-      <CustomerDetailsContent id={params.id} />
+      <CustomerDetailsContent id={resolvedParams.id} />
     </Suspense>
   )
 }
