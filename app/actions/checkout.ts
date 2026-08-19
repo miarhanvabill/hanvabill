@@ -66,13 +66,14 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
       const gstAmount = (subtotal * 18) / 100
       const giftCardDiscount = input.gift_cards?.reduce((sum, gc) => sum + gc.amount, 0) || 0
       const loyaltyDiscount = input.redeem_points || 0
-      const total = Math.max(
+      const totalRaw = Math.max(
         0,
         Math.max(
           0,
           Math.min(Number.MAX_SAFE_INTEGER, subtotal + gstAmount - couponDiscount - giftCardDiscount - loyaltyDiscount),
         ),
       )
+      const total = Math.round(totalRaw * 100) / 100
 
       let bookingId: number | null = null
 
@@ -170,12 +171,12 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
         INSERT INTO invoices (
           invoice_number, customer_id, booking_id, amount, subtotal, discount_amount, gst_amount,
           payment_method, service_details, product_details, invoice_date, due_date,
-          notes, tenant_id, created_at, updated_at
+          notes, tenant_id, share_token, created_at, updated_at
         ) VALUES (
           ${invoiceNumber},
           ${customerId},
           ${bookingId},
-          ${total},
+          ${Math.round(total * 100) / 100},
           ${subtotal},
           ${couponDiscount},
           ${gstAmount},
@@ -186,6 +187,7 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
           ${dueDate},
           ${input.notes || null},
           ${tenantId},
+          ${crypto.randomBytes(16).toString("hex")},
           NOW(),
           NOW()
         ) RETURNING *

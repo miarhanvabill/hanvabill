@@ -127,7 +127,7 @@ export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
       try {
         await navigator.share({
           title: `Invoice #${invoice.id}`,
-          text: `Invoice for ${invoice.customer.name} - Total: ₹${invoice.total}`,
+          text: `Invoice for ${invoice.customer.name} - Total: ₹${Number(invoice.total).toFixed(2)}`,
           url: invoice.share_token ? `${window.location.origin}/inv/${invoice.share_token}` : window.location.href,
         })
       } catch (error) {
