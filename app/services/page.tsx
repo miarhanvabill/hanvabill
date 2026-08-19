@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
-import { PageProgress } from "@/components/page-progress"
 import { formatCurrency } from "@/lib/currency"
 import { toast } from "@/hooks/use-toast"
 import {
@@ -75,13 +74,6 @@ export default function ServicesPage() {
     code: "",
     isActive: true,
   })
-
-  const sections = [
-    { id: "overview", title: "Service Overview" },
-    { id: "categories", title: "Categories" },
-    { id: "services-list", title: "Services List" },
-    { id: "analytics", title: "Service Analytics" },
-  ]
 
   const fetchData = async () => {
     try {
@@ -301,8 +293,6 @@ export default function ServicesPage() {
   return (
     <div className="content-wrapper">
       <PageHeader title="Services" subtitle="Manage your salon services and pricing" />
-      <PageProgress sections={sections} />
-
       {/* Bulk Upload Modal */}
       <BulkUploadModal
         isOpen={showBulkUpload}
