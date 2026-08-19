@@ -1,16 +1,14 @@
-// app/customers/create/page.tsx
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
-import { ArrowLeft, User, QrCode, Calendar, FileText } from 'lucide-react'
+import { ArrowLeft, User, Phone, Mail, QrCode, Calendar, FileText, Instagram, Globe } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { createCustomer } from "@/app/actions/customers"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -40,72 +38,37 @@ export default function CreateCustomer() {
     if (!formData.phoneNumber || !formData.fullName) {
       toast({
         title: "Validation Error",
-        description: "Please fill in required fields (Phone Number and Full Name)",
+        description: "Phone number and Full name are required",
         variant: "destructive",
       })
       return
     }
 
-    if (!selectedGender) {
-      toast({
-        title: "Validation Error",
-        description: "Please select a gender",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setLoading(true)
     try {
-      const formDataObj = new FormData()
-      formDataObj.append("phoneNumber", formData.phoneNumber)
-      formDataObj.append("fullName", formData.fullName)
-      formDataObj.append("email", formData.email)
-      formDataObj.append("gender", selectedGender)
-      formDataObj.append("smsNumber", formData.smsNumber)
-      formDataObj.append("code", formData.code)
-      formDataObj.append("instagramHandle", formData.instagramHandle)
-      formDataObj.append("leadSource", formData.leadSource)
-      formDataObj.append("dateOfBirth", formData.dateOfBirth)
-      formDataObj.append("dateOfAnniversary", formData.dateOfAnniversary)
-      formDataObj.append("notes", formData.notes)
-
-      console.log("Submitting customer data:", {
-        phoneNumber: formData.phoneNumber,
-        fullName: formData.fullName,
-        email: formData.email,
-        gender: selectedGender,
-        smsNumber: formData.smsNumber,
-        code: formData.code,
-        instagramHandle: formData.instagramHandle,
-        leadSource: formData.leadSource,
-        dateOfBirth: formData.dateOfBirth,
-        dateOfAnniversary: formData.dateOfAnniversary,
-        notes: formData.notes,
+      setLoading(true)
+      const submitData = new FormData()
+      Object.entries(formData).forEach(([key, value]) => {
+        // Convert camelCase to snake_case for the server action
+        const snakeKey = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+        submitData.append(snakeKey, value)
       })
+      submitData.append("gender", selectedGender)
 
-      const result = await createCustomer(formDataObj)
-
-      console.log("Create customer result:", result)
+      const result = await createCustomer(submitData)
 
       if (result.success) {
         toast({
           title: "Success",
-          description: "Customer created successfully!",
+          description: "Customer created successfully",
         })
         router.push("/customers")
       } else {
-        toast({
-          title: "Error",
-          description: result.message || "Failed to create customer",
-          variant: "destructive",
-        })
+        throw new Error(result.error || "Failed to create customer")
       }
-    } catch (error) {
-      console.error("Error creating customer:", error)
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "An unexpected error occurred while creating the customer",
+        description: error.message || "Something went wrong",
         variant: "destructive",
       })
     } finally {
@@ -113,244 +76,253 @@ export default function CreateCustomer() {
     }
   }
 
-  const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: value,
-    }))
+  const handleInputChange = (field: keyof typeof formData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-2xl mx-auto p-6">
-        {/* Header */}
-        <PageHeader
-          title="Create Customer"
-          subtitle="Add a new customer to your database"
-          action={
+    <div className="flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 min-h-screen">
+      <div className="px-6 py-4 border-b bg-white dark:bg-gray-800 flex items-center justify-between sticky top-0 z-10">
+        <Link
+          href="/customers"
+          className="flex items-center gap-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-black dark:hover:text-white transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Customers
+        </Link>
+        <h1 className="text-xl font-bold">Add New Customer</h1>
+        <div className="w-20"></div> {/* Spacer for centering */}
+      </div>
+
+      <div className="flex-1 p-6 overflow-y-auto">
+        <form onSubmit={handleSubmit} className="max-w-4xl mx-auto space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Left Column: Basic & Contact (Takes up 2/3 width) */}
+            <div className="lg:col-span-2 space-y-6">
+              
+              {/* Basic Information */}
+              <Card className="shadow-sm border-gray-200">
+                <CardHeader className="bg-white border-b border-gray-100 pb-4">
+                  <CardTitle className="text-lg text-slate-800">Basic Information</CardTitle>
+                  <CardDescription>Essential details to identify this customer.</CardDescription>
+                </CardHeader>
+                <CardContent className="p-6 space-y-4 bg-white">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-slate-700">
+                        Full Name <span className="text-red-500">*</span>
+                      </Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        <Input
+                          value={formData.fullName}
+                          onChange={(e) => handleInputChange("fullName", e.target.value)}
+                          className="pl-10 border-gray-300 focus:ring-slate-500"
+                          placeholder="John Doe"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-slate-700">
+                        Phone Number <span className="text-red-500">*</span>
+                      </Label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        <Input
+                          value={formData.phoneNumber}
+                          onChange={(e) => handleInputChange("phoneNumber", e.target.value)}
+                          className="pl-10 border-gray-300 focus:ring-slate-500"
+                          placeholder="9876543210"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <Label className="text-sm font-medium text-slate-700">Gender</Label>
+                    <div className="grid grid-cols-3 gap-3">
+                      {[
+                        { value: "male", label: "Male", icon: "♂" },
+                        { value: "female", label: "Female", icon: "♀" },
+                        { value: "others", label: "Others", icon: "⚧" },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setSelectedGender(option.value)}
+                          className={`flex flex-col items-center justify-center py-3 rounded-lg border transition-all ${
+                            selectedGender === option.value
+                              ? "border-slate-800 bg-slate-50 text-slate-900 shadow-sm"
+                              : "border-gray-200 text-gray-500 hover:border-gray-300 hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="text-xl mb-1">{option.icon}</div>
+                          <div className="text-xs font-medium">{option.label}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Contact Details */}
+              <Card className="shadow-sm border-gray-200">
+                <CardHeader className="bg-white border-b border-gray-100 pb-4">
+                  <CardTitle className="text-lg text-slate-800">Contact Details</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-4 bg-white">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-slate-700">Email Address</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        <Input
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => handleInputChange("email", e.target.value)}
+                          className="pl-10 border-gray-300 focus:ring-slate-500"
+                          placeholder="johndoe@example.com"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-slate-700">SMS Number</Label>
+                      <div className="flex">
+                        <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 border-r-0 rounded-l-md bg-gray-50 text-gray-500">
+                          <span className="text-xs font-medium">+91</span>
+                        </div>
+                        <Input
+                          value={formData.smsNumber}
+                          onChange={(e) => handleInputChange("smsNumber", e.target.value)}
+                          className="rounded-l-none border-gray-300 focus:ring-slate-500"
+                          placeholder="Optional alternate"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-slate-700">Instagram Handle</Label>
+                      <div className="relative">
+                        <Instagram className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        <Input
+                          value={formData.instagramHandle}
+                          onChange={(e) => handleInputChange("instagramHandle", e.target.value)}
+                          className="pl-10 border-gray-300 focus:ring-slate-500"
+                          placeholder="@username"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium text-slate-700">Lead Source</Label>
+                      <Select value={formData.leadSource} onValueChange={(value) => handleInputChange("leadSource", value)}>
+                        <SelectTrigger className="border-gray-300 focus:ring-slate-500">
+                          <SelectValue placeholder="Select source" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="google">Google</SelectItem>
+                          <SelectItem value="facebook">Facebook</SelectItem>
+                          <SelectItem value="instagram">Instagram</SelectItem>
+                          <SelectItem value="referral">Referral</SelectItem>
+                          <SelectItem value="walk-in">Walk-in</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+            </div>
+
+            {/* Right Column: Additional Details (Takes up 1/3 width) */}
+            <div className="space-y-6">
+              
+              <Card className="shadow-sm border-gray-200">
+                <CardHeader className="bg-white border-b border-gray-100 pb-4">
+                  <CardTitle className="text-lg text-slate-800">Additional</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 space-y-4 bg-white">
+                  
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-slate-700">Date of Birth</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        type="date"
+                        value={formData.dateOfBirth}
+                        onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
+                        className="pl-10 border-gray-300 focus:ring-slate-500 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-slate-700">Date of Anniversary</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        type="date"
+                        value={formData.dateOfAnniversary}
+                        onChange={(e) => handleInputChange("dateOfAnniversary", e.target.value)}
+                        className="pl-10 border-gray-300 focus:ring-slate-500 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <Label className="text-sm font-medium text-slate-700">Customer Code</Label>
+                    <div className="relative">
+                      <QrCode className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        value={formData.code}
+                        onChange={(e) => handleInputChange("code", e.target.value)}
+                        className="pl-10 border-gray-300 focus:ring-slate-500"
+                        placeholder="Optional internal code"
+                      />
+                    </div>
+                  </div>
+
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-sm border-gray-200">
+                <CardHeader className="bg-white border-b border-gray-100 pb-4">
+                  <CardTitle className="text-lg text-slate-800">Notes</CardTitle>
+                </CardHeader>
+                <CardContent className="p-6 bg-white">
+                  <div className="relative">
+                    <FileText className="absolute left-3 top-3 text-gray-400 w-4 h-4" />
+                    <Textarea
+                      value={formData.notes}
+                      onChange={(e) => handleInputChange("notes", e.target.value)}
+                      className="pl-10 min-h-[120px] border-gray-300 focus:ring-slate-500 resize-none"
+                      placeholder="Add any special requirements, allergies, or preferences here..."
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            
+          </div>
+
+          <div className="flex justify-end gap-4 pt-4 pb-10">
             <Link href="/customers">
-              <Button variant="outline">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Customers
+              <Button type="button" variant="outline" className="px-6 py-2 border-gray-300 text-gray-700 h-11">
+                Cancel
               </Button>
             </Link>
-          }
-        />
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Phone Number */}
-          <Card>
-            <CardContent className="p-6">
-              <Label className="text-sm font-medium text-red-600">* Phone Number</Label>
-              <div className="mt-2 flex">
-                <div className="flex items-center gap-2 px-3 py-2 border border-r-0 rounded-l-md bg-gray-50">
-                  <div className="w-6 h-4 bg-orange-500 rounded-sm"></div>
-                  <div className="w-6 h-4 bg-green-500 rounded-sm"></div>
-                  <span className="text-sm">+91</span>
-                </div>
-                <Input
-                  value={formData.phoneNumber}
-                  onChange={(e) => handleInputChange("phoneNumber", e.target.value)}
-                  className="rounded-l-none"
-                  placeholder="223 665 7896"
-                  required
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Full Name */}
-          <Card>
-            <CardContent className="p-6">
-              <Label className="text-sm font-medium text-red-600">* Full Name</Label>
-              <div className="mt-2 relative">
-                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  value={formData.fullName}
-                  onChange={(e) => handleInputChange("fullName", e.target.value)}
-                  className="pl-10"
-                  placeholder="John Doe"
-                  required
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Gender Selection */}
-          <Card>
-            <CardContent className="p-6">
-              <Label className="text-sm font-medium text-red-600">* Select Gender</Label>
-              <div className="mt-4 grid grid-cols-3 gap-4">
-                {[
-                  { value: "male", label: "Male", icon: "♂" },
-                  { value: "female", label: "Female", icon: "♀" },
-                  { value: "others", label: "Others", icon: "⚧" },
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setSelectedGender(option.value)}
-                    className={`p-4 rounded-lg border-2 transition-colors ${
-                      selectedGender === option.value
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
-                  >
-                    <div className="text-2xl mb-2">{option.icon}</div>
-                    <div className="text-sm font-medium">{option.label}</div>
-                  </button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Email Address */}
-          <Card>
-            <CardContent className="p-6">
-              <Label className="text-sm font-medium">Email Address</Label>
-              <div className="mt-2 relative">
-                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">@</span>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange("email", e.target.value)}
-                  className="pl-8"
-                  placeholder="johndoe@example.com"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* SMS Number */}
-          <Card>
-            <CardContent className="p-6">
-              <Label className="text-sm font-medium">SMS Number</Label>
-              <div className="mt-2 flex">
-                <div className="flex items-center gap-2 px-3 py-2 border border-r-0 rounded-l-md bg-gray-50">
-                  <div className="w-6 h-4 bg-orange-500 rounded-sm"></div>
-                  <div className="w-6 h-4 bg-green-500 rounded-sm"></div>
-                  <span className="text-sm">+91</span>
-                </div>
-                <Input
-                  value={formData.smsNumber}
-                  onChange={(e) => handleInputChange("smsNumber", e.target.value)}
-                  className="rounded-l-none"
-                  placeholder=""
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Code */}
-          <Card>
-            <CardContent className="p-6">
-              <Label className="text-sm font-medium">Code</Label>
-              <div className="mt-2 relative">
-                <QrCode className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  value={formData.code}
-                  onChange={(e) => handleInputChange("code", e.target.value)}
-                  className="pl-10"
-                  placeholder="Enter code"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Instagram Handle */}
-          <Card>
-            <CardContent className="p-6">
-              <Label className="text-sm font-medium">Instagram Handle</Label>
-              <Input
-                value={formData.instagramHandle}
-                onChange={(e) => handleInputChange("instagramHandle", e.target.value)}
-                className="mt-2"
-                placeholder="Enter your Instagram handle"
-              />
-            </CardContent>
-          </Card>
-
-          {/* Lead Source */}
-          <Card>
-            <CardContent className="p-6">
-              <Label className="text-sm font-medium">Lead Source</Label>
-              <Select value={formData.leadSource} onValueChange={(value) => handleInputChange("leadSource", value)}>
-                <SelectTrigger className="mt-2">
-                  <SelectValue placeholder="Select a lead source" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="google">Google</SelectItem>
-                  <SelectItem value="facebook">Facebook</SelectItem>
-                  <SelectItem value="instagram">Instagram</SelectItem>
-                  <SelectItem value="referral">Referral</SelectItem>
-                  <SelectItem value="walk-in">Walk-in</SelectItem>
-                </SelectContent>
-              </Select>
-            </CardContent>
-          </Card>
-
-          {/* Date of Birth */}
-          <Card>
-            <CardContent className="p-6">
-              <Label className="text-sm font-medium">Date of Birth</Label>
-              <div className="mt-2 relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  type="date"
-                  value={formData.dateOfBirth}
-                  onChange={(e) => handleInputChange("dateOfBirth", e.target.value)}
-                  className="pl-10"
-                />
-                {!formData.dateOfBirth && (
-                  <span className="absolute left-10 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none">
-                    No date chosen
-                  </span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Date of Anniversary */}
-          <Card>
-            <CardContent className="p-6">
-              <Label className="text-sm font-medium">Date of Anniversary</Label>
-              <div className="mt-2 relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  type="date"
-                  value={formData.dateOfAnniversary}
-                  onChange={(e) => handleInputChange("dateOfAnniversary", e.target.value)}
-                  className="pl-10"
-                />
-                {!formData.dateOfAnniversary && (
-                  <span className="absolute left-10 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none">
-                    No date chosen
-                  </span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Notes */}
-          <Card>
-            <CardContent className="p-6">
-              <Label className="text-sm font-medium">Notes</Label>
-              <div className="mt-2 relative">
-                <FileText className="absolute left-3 top-3 text-gray-400 w-4 h-4" />
-                <Textarea
-                  value={formData.notes}
-                  onChange={(e) => handleInputChange("notes", e.target.value)}
-                  className="pl-10 min-h-[100px]"
-                  placeholder="Notes..."
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Submit Button */}
-          <Button type="submit" className="w-full bg-black hover:bg-gray-800 text-white py-3" disabled={loading}>
-            {loading ? "Creating Customer..." : "Add Customer"}
-          </Button>
+            <Button 
+              type="submit" 
+              className="px-8 py-2 bg-slate-800 hover:bg-slate-900 text-white shadow-md h-11" 
+              disabled={loading}
+            >
+              {loading ? "Creating Customer..." : "Save Customer"}
+            </Button>
+          </div>
         </form>
       </div>
     </div>
