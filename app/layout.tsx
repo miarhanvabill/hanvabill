@@ -33,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ClientLayoutWrapper>
 
             <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+              <div className="print:hidden h-full">
               <ErrorBoundary
                 fallback={
                   <div className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex items-center justify-center">
@@ -42,8 +43,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               >
                 <Sidebar />
               </ErrorBoundary>
+              </div>
 
               <div className="flex-1 flex flex-col">
+                <div className="print:hidden w-full">
                 <ErrorBoundary
                   fallback={
                     <div className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-center">
@@ -53,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 >
                   <Header />
                 </ErrorBoundary>
+                </div>
 
                 <main className="flex-1 overflow-auto p-6 bg-gray-50 dark:bg-gray-900 print:bg-white print:p-0 print:overflow-visible">
                   <ErrorBoundary>{children}</ErrorBoundary>
