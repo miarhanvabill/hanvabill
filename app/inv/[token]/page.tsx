@@ -37,6 +37,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     gstRate: 18,
     isInterState: false,
     placeOfSupply: "Karnataka",
+    businessLogo: bizProfile.logo || "",
     businessName: bizProfile.salonName || process.env.BUSINESS_NAME || "Hanva Salon",
     businessAddress: bizProfile.address || process.env.BUSINESS_ADDRESS || "Business Address",
     businessPhone: bizProfile.phone || process.env.BUSINESS_PHONE || "",

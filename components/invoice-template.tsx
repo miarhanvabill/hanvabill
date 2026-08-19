@@ -28,6 +28,7 @@ export interface InvoiceData {
   gstRate: number
   isInterState: boolean
   placeOfSupply: string
+  businessLogo?: string
   businessName: string
   businessAddress: string
   businessPhone: string
@@ -46,6 +47,9 @@ export function InvoiceTemplate({ data, className = "" }: { data: InvoiceData; c
       {/* Header section */}
       <div className="flex flex-col md:flex-row justify-between items-start mb-12">
         <div className="space-y-2">
+          {data.businessLogo && (
+            <img src={data.businessLogo} alt="Business Logo" className="h-16 w-auto object-contain mb-4" />
+          )}
           <h2 className="text-3xl font-bold text-slate-800 tracking-tight">{data.businessName}</h2>
           <div className="text-slate-500 text-sm leading-relaxed max-w-xs">
             {data.businessAddress && <p className="whitespace-pre-wrap">{data.businessAddress}</p>}

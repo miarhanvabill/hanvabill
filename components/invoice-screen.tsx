@@ -218,6 +218,7 @@ Thank you for your business!
                 gstRate: 18,
                 isInterState: false,
                 placeOfSupply: "Karnataka",
+                businessLogo: bizProfile.logo || "",
                 businessName: bizProfile.salonName || "Hanva Salon",
                 businessAddress: bizProfile.address || "Business Address",
                 businessPhone: bizProfile.phone || "",
