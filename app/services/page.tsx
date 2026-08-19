@@ -329,7 +329,7 @@ export default function ServicesPage() {
               </Button>
               <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+                  <Button className="bg-slate-800 hover:bg-slate-900 text-white shadow-sm">
                     <Plus className="h-4 w-4 mr-2" />
                     Add Service
                   </Button>
@@ -427,7 +427,7 @@ export default function ServicesPage() {
                       </Button>
                       <Button
                         onClick={editingService ? handleUpdateService : handleAddService}
-                        className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600"
+                        className="flex-1 bg-slate-800 hover:bg-slate-900 text-white shadow-sm"
                       >
                         {editingService ? "Update" : "Add"} Service
                       </Button>

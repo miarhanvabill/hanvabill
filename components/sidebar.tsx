@@ -149,7 +149,7 @@ export default function Sidebar() {
                   className={cn(
                     "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group",
                     active
-                      ? "bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-md"
+                      ? "bg-slate-800 text-white shadow-sm"
                       : "text-gray-700 hover:bg-gray-100 hover:text-gray-900",
                   )}
                 >
@@ -184,7 +184,7 @@ export default function Sidebar() {
                 Help & Support
               </Link>
             </div>
-            <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg p-3 text-white">
+            <div className="bg-slate-800 rounded-lg p-3 text-white border border-slate-700 shadow-sm">
               <div className="flex items-center gap-2 mb-2">
                 <Crown className="w-4 h-4 text-yellow-300" />
                 <span className="font-medium text-sm">Premium Plan</span>

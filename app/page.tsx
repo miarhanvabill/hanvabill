@@ -140,25 +140,25 @@ async function DashboardStats() {
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Link href="/new-sale">
-              <Button className="w-full h-20 flex flex-col gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+              <Button className="w-full h-20 flex flex-col gap-2 bg-slate-800 hover:bg-slate-900 text-white shadow-sm">
                 <ShoppingBag className="h-6 w-6" />
                 <span>New Sale</span>
               </Button>
             </Link>
             <Link href="/bookings">
-              <Button className="w-full h-20 flex flex-col gap-2 bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700">
+              <Button className="w-full h-20 flex flex-col gap-2 bg-slate-800 hover:bg-slate-900 text-white shadow-sm">
                 <Calendar className="h-6 w-6" />
                 <span>Book Appointment</span>
               </Button>
             </Link>
             <Link href="/customers">
-              <Button className="w-full h-20 flex flex-col gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700">
+              <Button className="w-full h-20 flex flex-col gap-2 bg-slate-800 hover:bg-slate-900 text-white shadow-sm">
                 <Users className="h-6 w-6" />
                 <span>Customers</span>
               </Button>
             </Link>
             <Link href="/services">
-              <Button className="w-full h-20 flex flex-col gap-2 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700">
+              <Button className="w-full h-20 flex flex-col gap-2 bg-slate-800 hover:bg-slate-900 text-white shadow-sm">
                 <Star className="h-6 w-6" />
                 <span>Services</span>
               </Button>

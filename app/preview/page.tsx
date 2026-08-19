@@ -323,7 +323,7 @@ export default function PreviewPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <Button className="w-full h-20 flex flex-col gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+                    <Button className="w-full h-20 flex flex-col gap-2 bg-slate-800 hover:bg-slate-900 text-white shadow-sm">
                       <ShoppingBag className="h-6 w-6" />
                       <span>New Sale</span>
                     </Button>

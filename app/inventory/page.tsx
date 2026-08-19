@@ -505,7 +505,7 @@ export default function InventoryPage() {
             </div>
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+                <Button className="bg-slate-800 hover:bg-slate-900 text-white shadow-sm">
                   <PackagePlus className="h-4 w-4 mr-2" />
                   Add Item
                 </Button>
@@ -637,7 +637,7 @@ export default function InventoryPage() {
                     </Button>
                     <Button
                       type="submit"
-                      className="bg-gradient-to-r from-blue-600 to-purple-600"
+                      className="bg-slate-800 hover:bg-slate-900 text-white shadow-sm"
                       disabled={addLoading}
                     >
                       {addLoading ? "Adding..." : "Add Item"}
@@ -979,7 +979,7 @@ export default function InventoryPage() {
                 >
                   Cancel
                 </Button>
-                <Button type="submit" className="bg-gradient-to-r from-blue-600 to-purple-600" disabled={addLoading}>
+                <Button type="submit" className="bg-slate-800 hover:bg-slate-900 text-white shadow-sm" disabled={addLoading}>
                   {addLoading ? "Updating..." : "Update Item"}
                 </Button>
               </DialogFooter>
