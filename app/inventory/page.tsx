@@ -650,43 +650,43 @@ export default function InventoryPage() {
 
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-all duration-200">
+            <Card className="shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-blue-700">Total Items</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Items</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-blue-900">{totalItems.toLocaleString()}</div>
-                <p className="text-xs text-blue-600">{inventory.length} products</p>
+                <div className="text-2xl font-bold">{totalItems.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">{inventory.length} products</p>
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-all duration-200">
+            <Card className="shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-green-700">Inventory Value</CardTitle>
+                <CardTitle className="text-sm font-medium">Inventory Value</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-900">₹{totalValue.toLocaleString()}</div>
-                <p className="text-xs text-green-600">Total cost value</p>
+                <div className="text-2xl font-bold">₹{totalValue.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground">Total cost value</p>
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100 border-yellow-200 hover:shadow-lg transition-all duration-200">
+            <Card className="shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-yellow-700">Low Stock Alerts</CardTitle>
+                <CardTitle className="text-sm font-medium">Low Stock Alerts</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-yellow-900">{lowStockItems}</div>
-                <p className="text-xs text-yellow-600">Items need restocking</p>
+                <div className="text-2xl font-bold">{lowStockItems}</div>
+                <p className="text-xs text-muted-foreground">Items need restocking</p>
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200 hover:shadow-lg transition-all duration-200">
+            <Card className="shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-red-700">Out of Stock</CardTitle>
+                <CardTitle className="text-sm font-medium">Out of Stock</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-red-900">{outOfStockItems}</div>
-                <p className="text-xs text-red-600">Items out of stock</p>
+                <div className="text-2xl font-bold">{outOfStockItems}</div>
+                <p className="text-xs text-muted-foreground">Items out of stock</p>
               </CardContent>
             </Card>
           </div>

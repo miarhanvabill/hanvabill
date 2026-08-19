@@ -440,43 +440,43 @@ export default function ServicesPage() {
 
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:shadow-lg transition-all duration-200">
+            <Card className="shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-blue-700">Total Services</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Services</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-blue-900">{stats.total}</div>
-                <p className="text-xs text-blue-600">{stats.active} active</p>
+                <div className="text-2xl font-bold">{stats.total}</div>
+                <p className="text-xs text-muted-foreground">{stats.active} active</p>
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:shadow-lg transition-all duration-200">
+            <Card className="shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-green-700">Categories</CardTitle>
+                <CardTitle className="text-sm font-medium">Categories</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-900">{stats.categories}</div>
-                <p className="text-xs text-green-600">Service types</p>
+                <div className="text-2xl font-bold">{stats.categories}</div>
+                <p className="text-xs text-muted-foreground">Service types</p>
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 hover:shadow-lg transition-all duration-200">
+            <Card className="shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-purple-700">Average Price</CardTitle>
+                <CardTitle className="text-sm font-medium">Average Price</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-purple-900">{formatCurrency(stats.avgPrice)}</div>
-                <p className="text-xs text-purple-600">Per service</p>
+                <div className="text-2xl font-bold">{formatCurrency(stats.avgPrice)}</div>
+                <p className="text-xs text-muted-foreground">Per service</p>
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200 hover:shadow-lg transition-all duration-200">
+            <Card className="shadow-sm">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-orange-700">Status</CardTitle>
+                <CardTitle className="text-sm font-medium">Status</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-orange-900">{refreshing ? "Updating..." : "Live"}</div>
-                <p className="text-xs text-orange-600">Real-time data</p>
+                <div className="text-2xl font-bold">{refreshing ? "Updating..." : "Live"}</div>
+                <p className="text-xs text-muted-foreground">Real-time data</p>
               </CardContent>
             </Card>
           </div>
@@ -675,7 +675,7 @@ export default function ServicesPage() {
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2">
                           <div
-                            className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
+                            className="bg-slate-800 h-2 rounded-full transition-all duration-300"
                             style={{ width: `${percentage}%` }}
                           ></div>
                         </div>
@@ -709,7 +709,7 @@ export default function ServicesPage() {
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-2">
                           <div
-                            className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all duration-300"
+                            className="bg-slate-800 h-2 rounded-full transition-all duration-300"
                             style={{ width: `${percentage}%` }}
                           ></div>
                         </div>

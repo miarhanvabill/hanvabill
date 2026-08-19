@@ -148,7 +148,7 @@ export function CustomerProfileDisplay({ customer, bookings, invoices }: Custome
             </Card>
 
             <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+              <Card className="shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-green-700 flex items-center">
                     <IndianRupee className="h-4 w-4 mr-2" />
@@ -156,11 +156,11 @@ export function CustomerProfileDisplay({ customer, bookings, invoices }: Custome
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-green-900">{formatCurrency(totalSpent)}</div>
-                  <p className="text-xs text-green-600">Lifetime value</p>
+                  <div className="text-2xl font-bold">{formatCurrency(totalSpent)}</div>
+                  <p className="text-xs text-muted-foreground">Lifetime value</p>
                 </CardContent>
               </Card>
-              <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+              <Card className="shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-blue-700 flex items-center">
                     <Calendar className="h-4 w-4 mr-2" />
@@ -168,11 +168,11 @@ export function CustomerProfileDisplay({ customer, bookings, invoices }: Custome
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-blue-900">{totalVisits}</div>
-                  <p className="text-xs text-blue-600">Service appointments</p>
+                  <div className="text-2xl font-bold">{totalVisits}</div>
+                  <p className="text-xs text-muted-foreground">Service appointments</p>
                 </CardContent>
               </Card>
-              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+              <Card className="shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-purple-700 flex items-center">
                     <Star className="h-4 w-4 mr-2" />
@@ -180,7 +180,7 @@ export function CustomerProfileDisplay({ customer, bookings, invoices }: Custome
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-purple-900">{averageRating.toFixed(1)}</div>
+                  <div className="text-2xl font-bold">{averageRating.toFixed(1)}</div>
                   <div className="flex items-center">
                     {[...Array(5)].map((_, i) => (
                       <Star
@@ -193,7 +193,7 @@ export function CustomerProfileDisplay({ customer, bookings, invoices }: Custome
                   </div>
                 </CardContent>
               </Card>
-              <Card className="bg-gradient-to-br from-orange-50 to-orange-100 border-orange-200">
+              <Card className="shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-orange-700 flex items-center">
                     <Gift className="h-4 w-4 mr-2" />
@@ -201,8 +201,8 @@ export function CustomerProfileDisplay({ customer, bookings, invoices }: Custome
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-orange-900">{Math.floor(totalSpent / 100)}</div>
-                  <p className="text-xs text-orange-600">Reward points</p>
+                  <div className="text-2xl font-bold">{Math.floor(totalSpent / 100)}</div>
+                  <p className="text-xs text-muted-foreground">Reward points</p>
                 </CardContent>
               </Card>
             </div>
