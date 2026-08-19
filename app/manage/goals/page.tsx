@@ -27,7 +27,7 @@ import {
   Target,
   TrendingUp,
   Calendar,
-  DollarSign,
+  IndianRupee,
   Award,
   Search,
   Filter,
@@ -546,7 +546,7 @@ export default function StaffRevenueGoalsPage() {
               <CardContent className="p-6">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-purple-50 rounded-lg flex items-center justify-center">
-                    <DollarSign className="w-6 h-6 text-purple-600" />
+                    <IndianRupee className="w-6 h-6 text-purple-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Progress</p>

@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Plus, Edit, Trash2, Package, Clock, Calendar, DollarSign, Users } from "lucide-react"
+import { Plus, Edit, Trash2, Package, Clock, Calendar, IndianRupee, Users } from "lucide-react"
 import {
   getActivePackages,
   createPackage,
@@ -380,7 +380,7 @@ export default function PackagesPage() {
                     : formatCurrency(0)}
                 </p>
               </div>
-              <DollarSign className="w-8 h-8 text-purple-600" />
+              <IndianRupee className="w-8 h-8 text-purple-600" />
             </div>
           </CardContent>
         </Card>

@@ -18,7 +18,7 @@ import {
   BarChart3,
   Search,
   Users,
-  DollarSign,
+  IndianRupee,
   Shield,
   TrendingUp,
   Calendar,
@@ -124,7 +124,7 @@ const staffSections = [
   {
     title: "Commission Profiles",
     description: "Define and manage commission structures for your team based on sales and performance.",
-    icon: DollarSign,
+    icon: IndianRupee,
     href: "/manage/commissions",
     color: "bg-green-50 text-green-600",
   },

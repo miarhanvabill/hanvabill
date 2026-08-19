@@ -29,7 +29,7 @@ import {
   Star,
   Gift,
   Calendar,
-  DollarSign,
+  IndianRupee,
   Users,
   RefreshCw,
 } from "lucide-react"
@@ -394,7 +394,7 @@ export default function LoyaltyTransactionsPage() {
               <CardContent className="p-6">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-yellow-50 rounded-lg flex items-center justify-center">
-                    <DollarSign className="w-6 h-6 text-yellow-600" />
+                    <IndianRupee className="w-6 h-6 text-yellow-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Value Redeemed</p>

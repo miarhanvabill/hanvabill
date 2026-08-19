@@ -2,7 +2,7 @@
 import { Suspense } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Users, Calendar, DollarSign, TrendingUp, Clock, Star, ShoppingBag, UserPlus } from "lucide-react"
+import { Users, Calendar, IndianRupee, TrendingUp, Clock, Star, ShoppingBag, UserPlus } from "lucide-react"
 import Link from "next/link"
 import { getAuthenticatedSql } from "@/lib/db"
 import { getDashboardStats } from "@/app/actions/dashboard"
@@ -51,7 +51,7 @@ async function DashboardStats() {
         <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-blue-700">Today's Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-blue-600" />
+            <IndianRupee className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-900">{formatCurrency(safeStats.today.revenue)}</div>
@@ -101,7 +101,7 @@ async function DashboardStats() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <IndianRupee className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(safeStats.thisMonth.revenue)}</div>

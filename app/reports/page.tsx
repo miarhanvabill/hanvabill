@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import {
   Calendar,
   Package,
-  DollarSign,
+  IndianRupee,
   TrendingUp,
   Users,
   MessageCircle,
@@ -80,7 +80,7 @@ const reports = [
   {
     title: "Daily Revenue",
     description: "Daily revenue totals, including tips, outstanding balances, and collected payments.",
-    icon: DollarSign,
+    icon: IndianRupee,
     href: "/reports/daily-revenue",
     color: "bg-cyan-50 text-cyan-600",
     category: "Financial Overview",

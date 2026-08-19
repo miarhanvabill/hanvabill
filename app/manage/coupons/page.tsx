@@ -16,7 +16,7 @@ import {
   Edit,
   Trash2,
   Percent,
-  DollarSign,
+  IndianRupee,
   Calendar,
   Search,
   Ticket,
@@ -599,7 +599,7 @@ export default function CouponsManagePage() {
                     <p className="text-2xl font-bold">{coupons.reduce((sum, c) => sum + c.used_count, 0)}</p>
                   </div>
                   <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                    <DollarSign className="w-4 h-4 text-purple-600" />
+                    <IndianRupee className="w-4 h-4 text-purple-600" />
                   </div>
                 </div>
               </CardContent>
@@ -676,7 +676,7 @@ export default function CouponsManagePage() {
                         {coupon.discount_type === "percentage" ? (
                           <Percent className="w-3 h-3 text-green-600" />
                         ) : (
-                          <DollarSign className="w-3 h-3 text-green-600" />
+                          <IndianRupee className="w-3 h-3 text-green-600" />
                         )}
                         <span className="font-semibold text-green-600">
                           {coupon.discount_type === "percentage"

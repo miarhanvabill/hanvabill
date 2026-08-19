@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   Users,
   Calendar,
-  DollarSign,
+  IndianRupee,
   TrendingUp,
   Clock,
   Star,
@@ -274,7 +274,7 @@ export default function PreviewPage() {
                 <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium text-blue-700">Today's Revenue</CardTitle>
-                    <DollarSign className="h-4 w-4 text-blue-600" />
+                    <IndianRupee className="h-4 w-4 text-blue-600" />
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-blue-900">{formatCurrency(mockStats.todayRevenue)}</div>

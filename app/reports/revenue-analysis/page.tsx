@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Download, ArrowLeft, TrendingUp, TrendingDown, DollarSign, CreditCard } from "lucide-react"
+import { Download, ArrowLeft, TrendingUp, TrendingDown, IndianRupee, CreditCard } from "lucide-react"
 import Link from "next/link"
 
 interface RevenueData {
@@ -171,7 +171,7 @@ export default function RevenueAnalysisPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                <DollarSign className="h-4 w-4 text-green-600" />
+                <IndianRupee className="h-4 w-4 text-green-600" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-green-600">₹{stats.total_revenue.toLocaleString()}</div>

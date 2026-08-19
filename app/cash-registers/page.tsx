@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
   CreditCard,
-  DollarSign,
+  IndianRupee,
   TrendingUp,
   TrendingDown,
   Plus,
@@ -126,7 +126,7 @@ export default function CashRegistersPage() {
                         .toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                   </div>
-                  <DollarSign className="w-8 h-8 text-green-600" />
+                  <IndianRupee className="w-8 h-8 text-green-600" />
                 </div>
               </CardContent>
             </Card>

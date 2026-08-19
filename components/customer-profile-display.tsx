@@ -9,7 +9,7 @@ import {
   Mail,
   MapPin,
   Calendar,
-  DollarSign,
+  IndianRupee,
   Star,
   Clock,
   User,
@@ -151,7 +151,7 @@ export function CustomerProfileDisplay({ customer, bookings, invoices }: Custome
               <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-green-700 flex items-center">
-                    <DollarSign className="h-4 w-4 mr-2" />
+                    <IndianRupee className="h-4 w-4 mr-2" />
                     Total Spent
                   </CardTitle>
                 </CardHeader>
@@ -276,7 +276,7 @@ export function CustomerProfileDisplay({ customer, bookings, invoices }: Custome
                                       Customer {booking.customer_id}
                                     </div>
                                     <div className="flex items-center">
-                                      <DollarSign className="h-3 w-3 mr-1" />
+                                      <IndianRupee className="h-3 w-3 mr-1" />
                                       {formatCurrency(booking.total_amount)}
                                     </div>
                                   </div>

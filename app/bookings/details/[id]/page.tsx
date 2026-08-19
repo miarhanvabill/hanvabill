@@ -19,7 +19,7 @@ import {
   Calendar,
   Clock,
   User,
-  DollarSign,
+  IndianRupee,
   CreditCard,
   FileText,
   MessageSquare,
@@ -391,7 +391,7 @@ Thank you for choosing Hanva Billing!
                     <span>{booking.booking_time}</span>
                   </div>
                   <div className="flex items-center space-x-2">
-                    <DollarSign className="h-4 w-4 text-gray-400" />
+                    <IndianRupee className="h-4 w-4 text-gray-400" />
                     <span>{formatCurrency(servicePrice)}</span>
                   </div>
                 </div>

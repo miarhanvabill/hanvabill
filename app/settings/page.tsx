@@ -31,7 +31,7 @@ import {
   Smartphone,
   Users,
   MessageSquare,
-  DollarSign,
+  IndianRupee,
   Lock,
   Database,
   FileText,
@@ -800,9 +800,6 @@ export default function SettingsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="INR">INR (₹)</SelectItem>
-                      <SelectItem value="USD">USD ($)</SelectItem>
-                      <SelectItem value="EUR">EUR (€)</SelectItem>
-                      <SelectItem value="GBP">GBP (£)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1171,7 +1168,7 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center gap-3">
-                      <DollarSign className="w-5 h-5 text-green-500" />
+                      <IndianRupee className="w-5 h-5 text-green-500" />
                       <Label>Cash</Label>
                     </div>
                     <Switch

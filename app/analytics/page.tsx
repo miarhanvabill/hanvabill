@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   TrendingUp,
   TrendingDown,
-  DollarSign,
+  IndianRupee,
   Users,
   Calendar,
   Clock,
@@ -326,7 +326,7 @@ export default function AnalyticsPage() {
                       </span>
                     </div>
                   </div>
-                  <DollarSign className="w-8 h-8 text-green-600" />
+                  <IndianRupee className="w-8 h-8 text-green-600" />
                 </div>
               </CardContent>
             </Card>

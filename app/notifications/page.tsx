@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import {
   Bell,
   Calendar,
-  DollarSign,
+  IndianRupee,
   Users,
   AlertTriangle,
   CheckCircle,
@@ -195,7 +195,7 @@ export default function NotificationsPage() {
       case "appointment":
         return Calendar
       case "payment":
-        return DollarSign
+        return IndianRupee
       case "customer":
         return Users
       case "system":

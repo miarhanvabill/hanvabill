@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "@/hooks/use-toast"
-import { Plus, Edit, Trash2, Clock, DollarSign, Users, Search } from "lucide-react"
+import { Plus, Edit, Trash2, Clock, IndianRupee, Users, Search } from "lucide-react"
 import { formatCurrency } from "@/lib/currency"
 
 interface Service {
@@ -380,7 +380,7 @@ export default function ServicesManagePage() {
                     </p>
                   </div>
                   <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                    <DollarSign className="w-4 h-4 text-purple-600" />
+                    <IndianRupee className="w-4 h-4 text-purple-600" />
                   </div>
                 </div>
               </CardContent>

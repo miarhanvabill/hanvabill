@@ -14,7 +14,7 @@ import { getBookingById, updateBookingStatus } from "@/app/actions/bookings"
 import { getCustomers } from "@/app/actions/customers"
 import { getStaff } from "@/app/actions/staff"
 import { getServices } from "@/app/actions/services"
-import { ArrowLeft, Save, Calendar, User, DollarSign } from "lucide-react"
+import { ArrowLeft, Save, Calendar, User, IndianRupee } from "lucide-react"
 import { toast } from "sonner"
 
 interface BookingDetails {
@@ -276,7 +276,7 @@ export default function EditBookingPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <DollarSign className="h-5 w-5 mr-2" />
+                  <IndianRupee className="h-5 w-5 mr-2" />
                   Service & Payment Details
                 </CardTitle>
               </CardHeader>

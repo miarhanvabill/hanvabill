@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { DollarSign, Plus, Filter, Download, Calendar, Receipt, TrendingUp, Edit, Trash2, Search } from "lucide-react"
+import { IndianRupee, Plus, Filter, Download, Calendar, Receipt, TrendingUp, Edit, Trash2, Search } from "lucide-react"
 
 interface Expense {
   id: number
@@ -206,7 +206,7 @@ export default function ExpensesPage() {
                     <p className="text-sm font-medium text-gray-600">Total Expenses</p>
                     <p className="text-2xl font-bold">₹{totalExpenses.toLocaleString()}</p>
                   </div>
-                  <DollarSign className="w-8 h-8 text-red-600" />
+                  <IndianRupee className="w-8 h-8 text-red-600" />
                 </div>
               </CardContent>
             </Card>

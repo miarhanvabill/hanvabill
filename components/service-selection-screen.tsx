@@ -26,7 +26,7 @@ import {
   Scissors,
   Sparkles,
   User,
-  DollarSign,
+  IndianRupee,
   Clock,
   Trash2,
   PackageIcon,
@@ -704,7 +704,7 @@ export function ServiceSelectionScreen({
 
                     <div className="flex items-center gap-4 text-sm">
                       <span className="flex items-center gap-1">
-                        <DollarSign className="w-3 h-3" />
+                        <IndianRupee className="w-3 h-3" />
                         {formatCurrency(sv.price)}
                       </span>
                       {sv.duration_minutes && (
@@ -740,7 +740,7 @@ export function ServiceSelectionScreen({
 
                     <div className="flex items-center gap-4 text-sm">
                       <span className="flex items-center gap-1">
-                        <DollarSign className="w-3 h-3" />
+                        <IndianRupee className="w-3 h-3" />
                         {formatCurrency(p.price)}
                       </span>
                       {typeof p.stock_quantity === "number" && (

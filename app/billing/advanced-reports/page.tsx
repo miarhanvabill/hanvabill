@@ -27,7 +27,7 @@ import {
 import {
   BarChart3,
   TrendingUp,
-  DollarSign,
+  IndianRupee,
   FileText,
   Download,
   Filter,
@@ -216,7 +216,7 @@ export default function AdvancedReportsPage() {
                     <p className="text-2xl font-bold">{formatCurrency(totalRevenue)}</p>
                   </div>
                   <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <DollarSign className="w-4 h-4 text-green-600" />
+                    <IndianRupee className="w-4 h-4 text-green-600" />
                   </div>
                 </div>
                 <div className="mt-2">

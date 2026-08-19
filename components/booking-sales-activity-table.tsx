@@ -9,7 +9,7 @@ import {
   Calendar,
   Clock,
   User,
-  DollarSign,
+  IndianRupee,
   Search,
   Filter,
   CheckCircle,
@@ -249,7 +249,7 @@ export function BookingSalesActivityTable() {
                   <p className="text-sm text-gray-600">Revenue Today</p>
                   <p className="text-2xl font-bold text-purple-600">{formatCurrency(stats.total_revenue_today)}</p>
                 </div>
-                <DollarSign className="w-8 h-8 text-purple-600" />
+                <IndianRupee className="w-8 h-8 text-purple-600" />
               </div>
             </CardContent>
           </Card>

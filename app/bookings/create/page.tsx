@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CustomerSelectionModal } from "@/components/customer-selection-modal"
 import { ServiceSelectionModal, type SelectedService } from "@/components/service-selection-modal"
-import { ArrowLeft, User, Calendar, DollarSign } from "lucide-react"
+import { ArrowLeft, User, Calendar, IndianRupee } from "lucide-react"
 import { createBooking } from "@/app/actions/bookings"
 import { getStaff } from "@/app/actions/staff"
 import { toast } from "@/hooks/use-toast"
@@ -363,7 +363,7 @@ export default function CreateBookingPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="w-5 h-5" />
+                  <IndianRupee className="w-5 h-5" />
                   Booking Summary
                 </CardTitle>
               </CardHeader>

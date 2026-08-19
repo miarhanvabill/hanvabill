@@ -20,7 +20,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Edit, Trash2, DollarSign, Percent, Users, TrendingUp, Search, Filter } from "lucide-react"
+import { Plus, Edit, Trash2, IndianRupee, Percent, Users, TrendingUp, Search, Filter } from "lucide-react"
 import {
   getCommissionProfiles,
   createCommissionProfile,
@@ -236,7 +236,7 @@ export default function CommissionProfilesPage() {
               <CardContent className="p-6">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center">
-                    <DollarSign className="w-6 h-6 text-blue-600" />
+                    <IndianRupee className="w-6 h-6 text-blue-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Total Profiles</p>
