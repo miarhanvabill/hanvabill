@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 "use server"
 
 import { withTenantAuth } from "@/lib/withTenantAuth"
