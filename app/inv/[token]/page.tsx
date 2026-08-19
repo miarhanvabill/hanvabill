@@ -1,4 +1,3 @@
-// app/inv/[token]/page.tsx
 import { notFound } from "next/navigation"
 import { getInvoiceByShareToken } from "@/app/actions/invoices"
 import { InvoiceTemplate } from "@/components/invoice-template"
@@ -9,6 +8,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
   if (!res.success || !res.invoice) return notFound()
 
   const inv = res.invoice
+  const bizProfile = res.businessSettings?.profile || {}
   
   // Flatten all item types into a single array
   const items = [
@@ -22,35 +22,34 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     amount: (item.price || item.rate || 0) * (item.quantity || 1),
   }))
 
-  // Business data should come from tenant settings in production
   const data = {
     invoiceNumber: inv.invoice_number,
     invoiceDate: inv.invoice_date,
-    dueDate: inv.due_date,
-    customerName: inv.customer_name || "Customer",
-    customerAddress: "", // Would come from customer record
+    dueDate: inv.due_date || new Date(new Date(inv.invoice_date).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    customerName: inv.customer_name || "Walk-in Customer",
+    customerAddress: "",
     customerPhone: inv.customer_phone || "",
     customerEmail: inv.customer_email || "",
-    customerGSTIN: "", // Would come from customer record
+    customerGSTIN: "",
     items,
     subtotal: inv.subtotal || (inv.amount - inv.gst_amount) || 0,
     discount: inv.discount_amount || 0,
-    gstRate: 18, // Should be configurable
+    gstRate: 18,
     isInterState: false,
-    placeOfSupply: "Karnataka", // Should be configurable
-    businessName: process.env.BUSINESS_NAME || "Your Business",
-    businessAddress: process.env.BUSINESS_ADDRESS || "Business Address",
-    businessPhone: process.env.BUSINESS_PHONE || "+91 00000 00000",
-    businessEmail: process.env.BUSINESS_EMAIL || "info@business.com",
-    businessGSTIN: process.env.BUSINESS_GSTIN || "29ABCDE1234F1Z5",
-    businessPAN: process.env.BUSINESS_PAN || "ABCDE1234F",
+    placeOfSupply: "Karnataka",
+    businessName: bizProfile.salonName || process.env.BUSINESS_NAME || "Hanva Salon",
+    businessAddress: bizProfile.address || process.env.BUSINESS_ADDRESS || "Business Address",
+    businessPhone: bizProfile.phone || process.env.BUSINESS_PHONE || "",
+    businessEmail: bizProfile.email || process.env.BUSINESS_EMAIL || "",
+    businessGSTIN: bizProfile.gstNumber || process.env.BUSINESS_GSTIN || "",
+    businessPAN: process.env.BUSINESS_PAN || "",
     sacCode: "999599",
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 py-8">
+    <div className="min-h-screen bg-slate-50 py-12">
       <div className="max-w-4xl mx-auto px-4">
-        <InvoiceTemplate data={data} className="bg-white shadow-sm" />
+        <InvoiceTemplate data={data} className="bg-white shadow-xl mx-auto" />
       </div>
     </div>
   )
