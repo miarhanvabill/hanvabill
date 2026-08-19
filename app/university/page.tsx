@@ -1,6 +1,6 @@
 "use client"
 
-import { Header } from "@/components/header"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -111,7 +111,7 @@ export default function UniversityPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header
+      <PageHeader
         title="Hanva University"
         subtitle="Enhance your skills and grow your salon business with our comprehensive learning platform."
       />

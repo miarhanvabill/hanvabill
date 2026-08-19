@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-// import { Header } from "@/components/header" // Removed as per previous request
+// import { PageHeader } from "@/components/page-header" // Removed as per previous request
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

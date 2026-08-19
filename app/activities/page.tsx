@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useUser } from "@clerk/nextjs"
-import { Header } from "@/components/header"
+import { PageHeader } from "@/components/page-header"
 import { BookingSalesActivityTable } from "@/components/booking-sales-activity-table"
 import { useRouter } from "next/navigation"
 
@@ -37,7 +37,7 @@ export default function ActivitiesPage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      <Header
+      <PageHeader
         title="Booking & Sales Activity"
         subtitle="Real-time view of all bookings and sales with staff assignments and completion tracking"
       />

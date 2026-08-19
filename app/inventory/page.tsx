@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, useCallback } from "react"
-import { Header } from "@/components/header"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -451,7 +451,7 @@ export default function InventoryPage() {
   if (loading) {
     return (
       <div className="content-wrapper">
-        <Header title="Inventory Management" subtitle="Track and manage your salon inventory" />
+        <PageHeader title="Inventory Management" subtitle="Track and manage your salon inventory" />
         <div className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             {[...Array(4)].map((_, i) => (
@@ -473,7 +473,7 @@ export default function InventoryPage() {
 
   return (
     <div className="content-wrapper">
-      <Header title="Inventory Management" subtitle="Track and manage your salon inventory" />
+      <PageHeader title="Inventory Management" subtitle="Track and manage your salon inventory" />
 
       <div className="p-6 space-y-8">
         {/* Refresh Button */}

@@ -15,7 +15,7 @@ import { createCustomer } from "@/app/actions/customers"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "@/hooks/use-toast"
-import { Header } from "@/components/header"
+import { PageHeader } from "@/components/page-header"
 
 export default function CreateCustomer() {
   const router = useRouter()
@@ -124,7 +124,7 @@ export default function CreateCustomer() {
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-2xl mx-auto p-6">
         {/* Header */}
-        <Header
+        <PageHeader
           title="Create Customer"
           subtitle="Add a new customer to your database"
           action={
