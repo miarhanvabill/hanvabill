@@ -43,7 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Sidebar />
               </ErrorBoundary>
 
-              <div className="flex-1 flex flex-col ml-64">
+              <div className="flex-1 flex flex-col">
                 <ErrorBoundary
                   fallback={
                     <div className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-center">
