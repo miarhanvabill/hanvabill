@@ -48,7 +48,7 @@ export async function GET() {
               return `"${cellStr.replace(/"/g, '""')}"`
             }
             return cellStr
-      
+          })
           .join(","),
       ),
     ].join("\n")
@@ -59,6 +59,7 @@ export async function GET() {
         "Content-Disposition": `attachment; filename="bookings_export_${new Date().toISOString().split("T")[0]}.csv"`,
         "X-Record-Count": bookings.length.toString(),
       },
+    })
 
   } catch (error) {
     console.error("Export error:", error)
