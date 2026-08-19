@@ -1,6 +1,11 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse, NextRequest } from "next/server";
 
+// Force Next.js Webpack to inline these environment variables into the Edge bundle
+// Otherwise, Clerk Next.js inside node_modules might not be able to read them!
+const dummy1 = process.env.CLERK_SECRET_KEY;
+const dummy2 = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
 const isProtectedRoute = createRouteMatcher([
   "/(.*)",
   "/customers(.*)",
@@ -83,9 +88,6 @@ const clerkMw = clerkMiddleware(async (auth, req) => {
   }
 
   return NextResponse.next({ request: { headers: requestHeaders } });
-}, {
-  secretKey: process.env.CLERK_SECRET_KEY,
-  publishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
 });
 
 export default async function middleware(req: NextRequest, event: any) {
