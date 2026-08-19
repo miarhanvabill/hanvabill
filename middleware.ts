@@ -83,6 +83,9 @@ const clerkMw = clerkMiddleware(async (auth, req) => {
   }
 
   return NextResponse.next({ request: { headers: requestHeaders } });
+}, {
+  secretKey: process.env.CLERK_SECRET_KEY,
+  publishableKey: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
 });
 
 export default async function middleware(req: NextRequest, event: any) {
