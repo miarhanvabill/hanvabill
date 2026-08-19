@@ -45,6 +45,8 @@ interface Invoice {
   loyaltyDiscount?: number
   giftCardDiscount?: number
   share_token?: string
+  loyaltyPointsAvailable?: number
+  loyaltyPointsEarned?: number
   payment_method: string
   notes?: string
   created_at: string
@@ -320,6 +322,8 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack }: Checkou
         gst: serverTotals.gstAmount,
         total: serverTotals.total,
         share_token: data.invoice.share_token,
+        loyaltyPointsAvailable: (customerLoyalty?.points || 0) - (redeemEnabled ? loyaltyRedeemPoints : 0),
+        loyaltyPointsEarned: pointsEarned,
         payment_method: paymentMethod,
         notes,
         created_at: new Date().toISOString(),

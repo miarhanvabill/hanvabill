@@ -43,6 +43,8 @@ interface Invoice {
   loyaltyDiscount?: number
   giftCardDiscount?: number
   share_token?: string
+  loyaltyPointsAvailable?: number
+  loyaltyPointsEarned?: number
   payment_method: string
   notes?: string
   created_at: string
@@ -87,6 +89,8 @@ export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
                 couponDiscount: invoice.couponDiscount,
                 loyaltyDiscount: invoice.loyaltyDiscount,
                 giftCardDiscount: invoice.giftCardDiscount,
+                loyaltyPointsAvailable: invoice.loyaltyPointsAvailable,
+                loyaltyPointsEarned: invoice.loyaltyPointsEarned,
         placeOfSupply: "Karnataka",
       }
 
