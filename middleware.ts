@@ -15,6 +15,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/public(.*)",
   "/api/health",
   "/debug",
+  "/inv/(.*)",
 ]);
 
 const clerkMw = clerkMiddleware(async (auth, req) => {
