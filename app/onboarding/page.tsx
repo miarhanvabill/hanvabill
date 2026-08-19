@@ -58,19 +58,20 @@ export default function OnboardingPage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Welcome to Glamour Salon!</CardTitle>
-          <p className="text-gray-600 dark:text-gray-400">Let's set up your salon management system</p>
+          <div className="flex justify-center mb-4"><img src="/logo-full.png" alt="Hanva Technologies Pvt. Ltd." className="h-12 object-contain" /></div>
+          <CardTitle className="text-2xl">Welcome to Hanva Billing!</CardTitle>
+          <p className="text-gray-600 dark:text-gray-400">Let's set up your Hanva Billing workspace</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <Label htmlFor="salonName">Salon Name *</Label>
+              <Label htmlFor="salonName">Business Name *</Label>
               <Input
                 id="salonName"
                 name="salonName"
                 value={formData.salonName}
                 onChange={handleChange}
-                placeholder="Enter your salon name"
+                placeholder="Enter your business name"
                 required
               />
             </div>
@@ -106,7 +107,7 @@ export default function OnboardingPage() {
                 name="address"
                 value={formData.address}
                 onChange={handleChange}
-                placeholder="Enter salon address"
+                placeholder="Enter business address"
                 rows={3}
               />
             </div>

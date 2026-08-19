@@ -191,7 +191,7 @@ export default function BookingDetailsPage() {
     toast.success("Invoice generated successfully!")
 
     const invoiceContent = `
-GLAMOUR SALON INVOICE
+HANVA BILLING INVOICE
 =====================
 
 Booking Number: ${invoiceData.bookingNumber}
@@ -204,7 +204,7 @@ Service Price: ${formatCurrency(invoiceData.servicePrice)}
 Tax (18%): ${formatCurrency(invoiceData.tax)}
 Total Amount: ${formatCurrency(invoiceData.amount)}
 
-Thank you for choosing Glamour Salon!
+Thank you for choosing Hanva Billing!
     `
 
     const blob = new Blob([invoiceContent], { type: "text/plain" })

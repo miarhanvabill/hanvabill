@@ -5,8 +5,8 @@ export default function SignInPage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Glamour Salon Management</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">Sign in to your salon dashboard</p>
+          <div className="flex justify-center mb-4"><img src="/logo-full.png" alt="Hanva Technologies Pvt. Ltd." className="h-16 object-contain" /></div>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">Sign in to your Hanva Billing dashboard</p>
         </div>
         <SignIn
           appearance={{

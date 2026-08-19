@@ -163,11 +163,9 @@ export default function PreviewPage() {
         <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
           {!sidebarCollapsed && (
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
-                <Scissors className="w-4 h-4 text-white" />
-              </div>
+              <img src="/logo-icon.png" alt="Hanva Logo" className="w-8 h-8 object-contain" />
               <div>
-                <h1 className="text-lg font-bold text-black">Glamour</h1>
+                <h1 className="text-lg font-bold text-black">Hanva Billing</h1>
                 <p className="text-xs text-gray-600">Salon Management</p>
               </div>
             </div>
@@ -263,7 +261,7 @@ export default function PreviewPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-3xl font-bold">Dashboard</h1>
-                  <p className="text-muted-foreground">Welcome to Glamour Salon Management</p>
+                  <p className="text-muted-foreground">Welcome to Hanva Billing</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-muted-foreground">Today</p>

@@ -75,8 +75,8 @@ export function useProfileSettings() {
   const { settings } = useSettings()
   return (
     settings?.profile || {
-      businessName: "Glamour Salon",
-      email: "contact@glamour.com",
+      businessName: "Hanva Billing",
+      email: "contact@hanva.in",
       phone: "+91 9876543210",
       whatsapp: "+91 9876543210",
     }

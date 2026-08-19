@@ -231,10 +231,10 @@ export function CheckoutModal({ open, onClose, customer, items, onCheckoutComple
         totalAmount,
         paymentMode,
         notes,
-        businessName: "Glamour Beauty Salon",
+        businessName: "Hanva Billing",
         businessAddress: "456, Brigade Road\nBangalore, Karnataka - 560025",
         businessPhone: "+91 80 1234 5678",
-        businessEmail: "info@glamoursalon.com",
+        businessEmail: "contact@hanva.in",
         businessGSTIN: "29XYZTE5678G1H9",
       }
 
@@ -273,7 +273,7 @@ ${discountAmount > 0 ? `Discount: -${formatCurrency(discountAmount)}\n` : ""}${l
 💳 Payment Mode: ${paymentMode === "cash" ? "💵 Cash" : "💳 Online"}
 ${loyaltyPointsEarned > 0 ? `\n⭐ Points Earned: +${loyaltyPointsEarned}` : ""}
 
-Thank you for choosing Glamour Beauty Salon! ✨
+Thank you for choosing Hanva Billing! ✨
     `.trim()
 
     const encodedMessage = encodeURIComponent(message)

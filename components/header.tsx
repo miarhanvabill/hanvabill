@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Bell, Search, User, Menu } from "lucide-react"
+import { Bell, Search, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import { SyncStatus } from "./sync-status"
 import { RealTimeIndicator } from "./real-time-indicator"
 import Link from "next/link"
+import { useAuth, SignInButton, SignUpButton, UserButton, OrganizationSwitcher } from "@clerk/nextjs"
 
 interface HeaderProps {
   onMenuToggle?: () => void
@@ -35,16 +36,16 @@ export function Header({ onMenuToggle }: HeaderProps) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  
+  const { isLoaded, isSignedIn } = useAuth();
 
   const fetchNotifications = async () => {
     try {
-      console.log("[v0] Fetching notifications for header...")
       const response = await fetch("/api/notifications?limit=5")
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
       const data = await response.json()
-      console.log("[v0] Notifications fetched:", data)
       setNotifications(data.notifications || [])
       setError(null)
     } catch (error) {
@@ -76,9 +77,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
 
   useEffect(() => {
     fetchNotifications()
-
     const interval = setInterval(fetchNotifications, 30000)
-
     return () => clearInterval(interval)
   }, [])
 
@@ -102,9 +101,9 @@ export function Header({ onMenuToggle }: HeaderProps) {
         <Menu className="h-5 w-5" />
       </Button>
 
-      {/* Search */}
-      <div className="flex-1 max-w-md">
-        <div className="relative">
+      {/* Left side items */}
+      <div className="flex-1 flex items-center gap-4 max-w-2xl">
+        <div className="relative w-full max-w-md hidden sm:block">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
           <Input
             type="search"
@@ -114,12 +113,31 @@ export function Header({ onMenuToggle }: HeaderProps) {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
+        
+        {isLoaded && isSignedIn && (
+          <div className="hidden md:flex items-center gap-2">
+            <OrganizationSwitcher 
+              afterSelectOrganizationUrl="/dashboard" 
+              appearance={{
+                elements: {
+                  organizationSwitcherTrigger: "flex gap-2 items-center px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 transition"
+                }
+              }}
+            />
+            <Link 
+              href="/dashboard/tenants" 
+              className="text-sm font-medium text-gray-700 hover:text-blue-600 transition-colors px-3 py-1.5 rounded-md hover:bg-gray-100 whitespace-nowrap"
+            >
+              Tenant Dashboard
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Right side items */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 ml-auto">
         {/* Real-time sync status */}
-        <div className="hidden md:flex items-center gap-2">
+        <div className="hidden lg:flex items-center gap-2">
           <SyncStatus />
           <RealTimeIndicator />
         </div>
@@ -171,23 +189,20 @@ export function Header({ onMenuToggle }: HeaderProps) {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* User menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon">
-              <User className="h-5 w-5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuLabel>My Account</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>Profile</DropdownMenuItem>
-            <DropdownMenuItem>Settings</DropdownMenuItem>
-            <DropdownMenuItem>Help</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>Sign out</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {/* User menu / Clerk Auth */}
+        {isLoaded && !isSignedIn && (
+          <div className="flex items-center gap-2">
+            <SignInButton />
+            <SignUpButton>
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white" size="sm">
+                Sign Up
+              </Button>
+            </SignUpButton>
+          </div>
+        )}
+        {isLoaded && isSignedIn && (
+          <UserButton afterSignOutUrl="/" />
+        )}
       </div>
     </header>
   )

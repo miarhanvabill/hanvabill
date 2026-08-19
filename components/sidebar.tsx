@@ -120,12 +120,10 @@ export default function Sidebar() {
       <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
         {!isCollapsed && (
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-purple-600 to-blue-600 rounded-lg flex items-center justify-center">
-              <Scissors className="w-4 h-4 text-white" />
-            </div>
+            <img src="/logo-icon.png" alt="Hanva Logo" className="w-8 h-8 object-contain" />
             <div>
-              <h1 className="text-lg font-bold text-black">Glamour</h1>
-              <p className="text-xs text-gray-600">Salon Management</p>
+              <h1 className="text-lg font-bold text-black">Hanva Billing</h1>
+              <p className="text-xs text-gray-600 truncate max-w-[150px]">Hanva Technologies Pvt. Ltd.</p>
             </div>
           </div>
         )}

@@ -8,14 +8,13 @@ import { ClerkProvider } from "@clerk/nextjs"
 import { Geist, Geist_Mono } from "next/font/google"
 import ClientLayoutWrapper from "@/components/ClientLayoutWrapper"
 import { ErrorBoundary } from "@/components/error-boundary"
-import { AuthHeader } from "@/components/auth-header"
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] })
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Glamour Salon Management System",
+  title: "Hanva Billing",
   description: "Complete salon management solution",
     generator: 'v0.app'
 }
@@ -32,7 +31,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <html lang="en">
         <body className={`${inter.className} ${geistSans.variable} ${geistMono.variable}`}>
           <ClientLayoutWrapper>
-            <AuthHeader />
 
             <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
               <ErrorBoundary
