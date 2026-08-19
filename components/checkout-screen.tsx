@@ -41,6 +41,10 @@ interface Invoice {
   discount: number
   gst: number
   total: number
+  couponDiscount?: number
+  loyaltyDiscount?: number
+  giftCardDiscount?: number
+  share_token?: string
   payment_method: string
   notes?: string
   created_at: string
@@ -309,9 +313,13 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack }: Checkou
         customer,
         items: cartItems,
         subtotal: serverTotals.subtotal,
-        discount: serverTotals.couponDiscount,
+        discount: manualDiscount,
+        couponDiscount: appliedCoupon ? couponDiscount : 0,
+        loyaltyDiscount: serverTotals.loyaltyDiscount,
+        giftCardDiscount: serverTotals.giftCardDiscount,
         gst: serverTotals.gstAmount,
         total: serverTotals.total,
+        share_token: data.invoice.share_token,
         payment_method: paymentMethod,
         notes,
         created_at: new Date().toISOString(),

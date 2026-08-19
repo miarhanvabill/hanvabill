@@ -1,4 +1,6 @@
-// components/invoice-template.tsx
+const fs = require('fs');
+
+const content = `// components/invoice-template.tsx
 "use client"
 import { Card } from "@/components/ui/card"
 
@@ -22,9 +24,6 @@ export interface InvoiceData {
   items: InvoiceItem[]
   subtotal: number
   discount: number
-  couponDiscount?: number
-  loyaltyDiscount?: number
-  giftCardDiscount?: number
   gstRate: number
   isInterState: boolean
   placeOfSupply: string
@@ -39,10 +38,10 @@ export interface InvoiceData {
 
 export function InvoiceTemplate({ data, className = "" }: { data: InvoiceData; className?: string }) {
   const gstAmount = (data.subtotal - data.discount) * (data.gstRate / 100)
-  const totalAmount = data.subtotal - data.discount - (data.couponDiscount || 0) - (data.loyaltyDiscount || 0) - (data.giftCardDiscount || 0) + gstAmount
+  const totalAmount = data.subtotal - data.discount + gstAmount
 
   return (
-    <Card className={`p-8 md:p-12 overflow-hidden border border-slate-100 shadow-xl bg-white ${className}`}>
+    <Card className={\`p-8 md:p-12 overflow-hidden border border-slate-100 shadow-xl bg-white \${className}\`}>
       {/* Header section */}
       <div className="flex flex-col md:flex-row justify-between items-start mb-12">
         <div className="space-y-2">
@@ -135,24 +134,6 @@ export function InvoiceTemplate({ data, className = "" }: { data: InvoiceData; c
               <span className="font-medium text-emerald-600">-₹{data.discount.toFixed(2)}</span>
             </div>
           )}
-          {(data.couponDiscount || 0) > 0 && (
-            <div className="flex justify-between text-sm text-slate-600 px-2">
-              <span>Coupon Applied</span>
-              <span className="font-medium text-emerald-600">-₹{data.couponDiscount!.toFixed(2)}</span>
-            </div>
-          )}
-          {(data.loyaltyDiscount || 0) > 0 && (
-            <div className="flex justify-between text-sm text-slate-600 px-2">
-              <span>Loyalty Redeemed</span>
-              <span className="font-medium text-emerald-600">-₹{data.loyaltyDiscount!.toFixed(2)}</span>
-            </div>
-          )}
-          {(data.giftCardDiscount || 0) > 0 && (
-            <div className="flex justify-between text-sm text-slate-600 px-2">
-              <span>Gift Card</span>
-              <span className="font-medium text-purple-600">-₹{data.giftCardDiscount!.toFixed(2)}</span>
-            </div>
-          )}
           {data.gstRate > 0 && (
             <div className="flex justify-between text-sm text-slate-600 px-2">
               <span>GST ({data.gstRate}%)</span>
@@ -195,7 +176,7 @@ export function InvoicePreview() {
     isInterState: false,
     placeOfSupply: "Karnataka",
     businessName: "Hanva Premium Salon",
-    businessAddress: "123 Elegance Boulevard\nKoramangala, Bengaluru, Karnataka 560034",
+    businessAddress: "123 Elegance Boulevard\\nKoramangala, Bengaluru, Karnataka 560034",
     businessPhone: "+91 99999 88888",
     businessEmail: "hello@hanvasalon.com",
     businessGSTIN: "29ABCDE1234F1Z5",
@@ -205,3 +186,6 @@ export function InvoicePreview() {
 
   return <InvoiceTemplate data={sampleData} />
 }
+`;
+
+fs.writeFileSync('components/invoice-template.tsx', content);

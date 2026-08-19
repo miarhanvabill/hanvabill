@@ -39,6 +39,10 @@ interface Invoice {
   discount: number
   gst: number
   total: number
+  couponDiscount?: number
+  loyaltyDiscount?: number
+  giftCardDiscount?: number
+  share_token?: string
   payment_method: string
   notes?: string
   created_at: string
@@ -79,11 +83,15 @@ export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
           amount: item.price * item.quantity,
         })),
         subtotal: invoice.subtotal,
-        discount: invoice.discount,
+                discount: invoice.discount,
+                couponDiscount: invoice.couponDiscount,
+                loyaltyDiscount: invoice.loyaltyDiscount,
+                giftCardDiscount: invoice.giftCardDiscount,
         placeOfSupply: "Karnataka",
       }
 
-      await downloadInvoicePDF(invoiceData)
+      // Force window.print() for download as well to get the perfect Tailwind layout
+      window.print()
     } catch (error) {
       console.error("Error downloading invoice:", error)
       alert("Failed to download invoice. Please try again.")
@@ -111,14 +119,15 @@ export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
         await navigator.share({
           title: `Invoice #${invoice.id}`,
           text: `Invoice for ${invoice.customer.name} - Total: ₹${invoice.total}`,
-          url: window.location.href,
+          url: invoice.share_token ? `${window.location.origin}/inv/${invoice.share_token}` : window.location.href,
         })
       } catch (error) {
         console.error("Error sharing:", error)
       }
     } else {
       // Fallback for browsers that don't support Web Share API
-      navigator.clipboard.writeText(window.location.href)
+      const urlToShare = invoice.share_token ? `${window.location.origin}/inv/${invoice.share_token}` : window.location.href;
+      navigator.clipboard.writeText(urlToShare)
       alert("Invoice link copied to clipboard!")
     }
   }
@@ -175,7 +184,7 @@ Thank you for your business!
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Success Header */}
-      <Card className="border-green-200 bg-green-50">
+      <Card className="border-green-200 bg-green-50 print:hidden">
         <CardContent className="p-6 text-center">
           <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-green-800 mb-2">Payment Successful!</h1>
@@ -187,7 +196,7 @@ Thank you for your business!
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Invoice Content */}
         <div className="lg:col-span-2 overflow-x-auto print:col-span-3">
-          <div className="min-w-[800px]">
+          <div className="w-full">
             <InvoiceTemplate 
               data={{
                 invoiceNumber: `${invoice.id}`,
@@ -258,14 +267,14 @@ Thank you for your business!
           </Card>
 
           {/* Actions */}
-          <Card>
+          <Card className="print:hidden">
             <CardHeader>
               <CardTitle>Actions</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <Button onClick={handleDownload} disabled={downloading} className="w-full gap-2">
                 <Download className="w-4 h-4" />
-                {downloading ? "Generating PDF..." : "Download PDF"}
+                {downloading ? "Preparing..." : "Print / Save PDF"}
               </Button>
 
               <Button
