@@ -177,7 +177,7 @@ export default function Sidebar() {
           <>
             <div className="mb-3">
               <Link
-                href="/help"
+                href="/support"
                 className="flex items-center gap-2 text-gray-700 hover:text-black text-sm transition-colors"
               >
                 <HelpCircle className="w-4 h-4" />
