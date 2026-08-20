@@ -441,7 +441,7 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Logo and Cover Image */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-4">
                   <Label>Business Logo</Label>
                   <div className="flex items-center space-x-4">
@@ -2112,28 +2112,28 @@ export default function SettingsPage() {
                 <div className="space-y-6 pt-4 animate-in fade-in slide-in-from-top-4 duration-300">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <Label>WhatsApp Reseller Token</Label>
+                      <Label>WhatsApp Fonada User ID</Label>
                       <Input 
                         placeholder="Paste your API token"
-                        value={settings.whatsapp?.resellerToken || ""}
+                        value={settings.whatsapp?.userid || ""}
                         onChange={(e) =>
                           setSettings({
                             ...settings,
-                            whatsapp: { ...(settings.whatsapp || {}), resellerToken: e.target.value },
+                            whatsapp: { ...(settings.whatsapp || {}), userid: e.target.value },
                           })
                         }
                       />
                       <p className="text-xs text-gray-500">Obtained from your WhatsApp provider dashboard.</p>
                     </div>
                     <div className="space-y-2">
-                      <Label>Phone Number ID</Label>
+                      <Label>Fonada WABA Number</Label>
                       <Input 
                         placeholder="e.g. 1029384756"
-                        value={settings.whatsapp?.phoneNumberId || ""}
+                        value={settings.whatsapp?.wabaNumber || ""}
                         onChange={(e) =>
                           setSettings({
                             ...settings,
-                            whatsapp: { ...(settings.whatsapp || {}), phoneNumberId: e.target.value },
+                            whatsapp: { ...(settings.whatsapp || {}), wabaNumber: e.target.value },
                           })
                         }
                       />

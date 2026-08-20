@@ -25,8 +25,15 @@ export interface BusinessSettings {
       open: string
       close: string
       isOpen: boolean
-      whatsapp?: any
-}
+    }
+  }
+  whatsapp?: {
+    enabled?: boolean
+    userid?: string
+    password?: string
+    wabaNumber?: string
+    autoInvoice?: boolean
+    autoReminders?: boolean
   }
 }
 

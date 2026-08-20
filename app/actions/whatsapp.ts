@@ -1,5 +1,6 @@
 "use server"
 
+import { sendWhatsAppText } from "@/lib/whatsapp"
 import { withTenantAuth } from "@/lib/withTenantAuth"
 import { revalidatePath } from "next/cache"
 
@@ -83,25 +84,11 @@ export async function sendWhatsAppMessage(data: {
 }) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      // Find customer by phone number with tenant check
-      const customer = await sql`
-        SELECT id FROM customers 
-        WHERE phone_number = ${data.phoneNumber} 
-        AND tenant_id = ${tenantId}
-      `
-
-      await sql`
-        INSERT INTO whatsapp_messages (
-          tenant_id, customer_id, phone_number, message_type, 
-          message_content, direction, status
-        ) VALUES (
-          ${tenantId}, ${customer[0]?.id || null}, ${data.phoneNumber}, 
-          ${data.messageType}, ${data.message}, 'outbound', 'sent'
-        )
-      `
-
+      // Actually send via Fonada
+      const result = await sendWhatsAppText(tenantId, data.phoneNumber, data.message);
+      
       revalidatePath("/whatsapp")
-      return { success: true, message: "Message sent successfully!" }
+      return { success: result.success, message: result.error || "Message sent successfully!" }
     } catch (error) {
       console.error("Error sending WhatsApp message:", error)
       return { success: false, message: "Failed to send message" }
