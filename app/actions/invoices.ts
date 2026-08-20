@@ -205,7 +205,7 @@ export async function getInvoiceByShareToken(token: string) {
       for (const row of settingsResult) {
         const { setting_key, setting_value, setting_type } = row;
         
-        
+        if (!setting_key) continue;
 
         // Handle flattened keys (e.g. profile.salonName)
         if (setting_key.startsWith('profile.')) {
@@ -232,6 +232,7 @@ export async function getInvoiceByShareToken(token: string) {
         }
       }
     } catch (err) {
+    console.error("DEBUG ERROR:", err);
       console.error("Error fetching store settings for public invoice:", err);
     }
     
