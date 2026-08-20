@@ -2140,7 +2140,7 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <Separator />
+                  <hr className="my-4 border-gray-200" />
 
                   <h3 className="font-medium text-base">Automated Messages (Transactional)</h3>
                   
