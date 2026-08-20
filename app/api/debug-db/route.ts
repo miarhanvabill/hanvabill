@@ -1,20 +1,12 @@
 import { NextResponse } from 'next/server';
-import { neon } from '@neondatabase/serverless';
+import { getInvoiceByShareToken } from '@/app/actions/invoices';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const sql = neon(process.env.DATABASE_URL!);
-    const invoices = await sql`SELECT id, invoice_number, tenant_id FROM invoices ORDER BY created_at DESC LIMIT 1`;
-    
-    if (invoices.length > 0) {
-      const tenantId = invoices[0].tenant_id;
-      const settings = await sql`SELECT setting_key, setting_value, setting_type FROM store_settings WHERE tenant_id = ${tenantId}`;
-      return NextResponse.json({ invoice: invoices[0], settings });
-    }
-    
-    return NextResponse.json({ message: "No invoices" });
+    const res = await getInvoiceByShareToken('5f2b5cf53cc001d300e677e44e75ba32');
+    return NextResponse.json(res);
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
