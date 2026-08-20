@@ -65,7 +65,7 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
       // Calculate totals
       const subtotal = input.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
       const couponDiscount = Number(input.coupon_discount) || Number(input.manual_discount) || 0
-      const gstAmount = (subtotal * 18) / 100
+      const gstAmount = ((subtotal - couponDiscount) * 18) / 100
       const giftCardDiscount = input.gift_cards?.reduce((sum, gc) => sum + gc.amount, 0) || 0
       const loyaltyDiscount = input.redeem_points || 0
       const totalRaw = Math.max(
@@ -194,7 +194,14 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
           ${JSON.stringify(productItems)},
           ${invoiceDate},
           ${dueDate},
-          ${input.notes || null},
+                    ${[
+            input.notes,
+            input.coupon_code ? `Coupon: ${input.coupon_code} (-${couponDiscount})` : null,
+            input.manual_discount && input.manual_discount > 0 ? `Manual Discount: -${input.manual_discount}` : null,
+            loyaltyDiscount > 0 ? `Loyalty Redeemed: ₹${loyaltyDiscount}` : null,
+            giftCardDiscount > 0 ? `Gift Card Redeemed: ₹${giftCardDiscount}` : null,
+            input.points_earned_client && input.points_earned_client > 0 ? `Points Earned: ${input.points_earned_client}` : null,
+          ].filter(Boolean).join(' | ')},
           ${tenantId},
           ${crypto.randomBytes(16).toString("hex")},
           NOW(),
