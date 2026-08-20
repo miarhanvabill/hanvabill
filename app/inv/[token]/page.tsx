@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { notFound } from "next/navigation"
 import { getInvoiceByShareToken } from "@/app/actions/invoices"
 import { InvoiceTemplate } from "@/components/invoice-template"
