@@ -127,7 +127,7 @@ export async function getInvoices() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const result = await sql`
-        /* cache bust ${Math.random()} */ SELECT i.*, c.full_name as customer_name, c.phone_number as customer_phone
+         SELECT i.*, c.full_name as customer_name, c.phone_number as customer_phone
         FROM invoices i
       LEFT JOIN customers c ON i.customer_id = c.id
       LEFT JOIN bookings b ON i.booking_id = b.id AND c.tenant_id = ${tenantId}
@@ -182,9 +182,9 @@ export async function getInvoiceByShareToken(token: string) {
     let businessSettings = null;
     try {
       const settingsResult = await sql`
-        /* cache bust ${Math.random()} */ SELECT setting_key, setting_value, setting_type
+         SELECT setting_key, setting_value, setting_type
         FROM store_settings
-        WHERE tenant_id = ${tenantId}
+        WHERE tenant_id = ${tenantId.toString()}
       `;
       
       const defaultSettings = {
