@@ -43,7 +43,7 @@ export interface InvoiceData {
 }
 
 export function InvoiceTemplate({ data, className = "" }: { data: InvoiceData; className?: string }) {
-  const gstAmount = (data.subtotal - data.discount) * (data.gstRate / 100)
+  const gstAmount = (data.subtotal - data.discount - (data.couponDiscount || 0)) * (data.gstRate / 100)
   const totalAmount = data.subtotal - data.discount - (data.couponDiscount || 0) - (data.loyaltyDiscount || 0) - (data.giftCardDiscount || 0) + gstAmount
 
   return (
