@@ -66,6 +66,7 @@ export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
   }, [])
 
   const bizProfile = bizSettings?.profile || {}
+  const bizOps = bizSettings?.business || {}
 
   const handleDownload = async () => {
     setDownloading(true)
@@ -230,7 +231,7 @@ Thank you for your business!
                 giftCardDiscount: Number(invoice.giftCardDiscount),
                 loyaltyPointsAvailable: invoice.loyaltyPointsAvailable,
                 loyaltyPointsEarned: invoice.loyaltyPointsEarned,
-                gstRate: 18,
+                gstRate: bizOps?.taxRate !== undefined ? Number(bizOps.taxRate) : 18,
                 isInterState: false,
                 placeOfSupply: "Karnataka",
                 businessLogo: bizProfile.logo || "",
@@ -286,7 +287,7 @@ Thank you for your business!
                 )}
 
                 <div className="flex justify-between">
-                  <span>GST (18%):</span>
+                  <span>GST ({bizOps?.taxRate !== undefined ? Number(bizOps.taxRate) : 18}%):</span>
                   <span>{formatCurrency(invoice.gst)}</span>
                 </div>
 

@@ -181,6 +181,10 @@ export default function BookingDetailsPage() {
     toast.info("Redirecting to edit booking...")
   }
 
+  const taxRate = bizSettings?.business?.taxRate !== undefined ? Number(bizSettings.business.taxRate) : 18;
+  const tax = Math.round((booking?.total_amount || 0) * (taxRate / 100));
+  const servicePrice = (booking?.total_amount || 0) - tax;
+
   const handleGenerateInvoice = () => {
     const invoiceData = {
       bookingNumber: booking.booking_number,
@@ -207,7 +211,7 @@ Date: ${invoiceData.date}
 Time: ${invoiceData.time}
 
 Service Price: ${formatCurrency(invoiceData.servicePrice)}
-Tax (18%): ${formatCurrency(invoiceData.tax)}
+Tax (${taxRate}%): ${formatCurrency(invoiceData.tax)}
 Total Amount: ${formatCurrency(invoiceData.amount)}
 
 Thank you for choosing Hanva Billing!
@@ -424,7 +428,7 @@ Thank you for choosing Hanva Billing!
                     <span>{formatCurrency(servicePrice)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Tax (18%):</span>
+                    <span>Tax ({taxRate}%):</span>
                     <span>{formatCurrency(tax)}</span>
                   </div>
                   <div className="border-t pt-2 flex justify-between font-semibold">
@@ -659,7 +663,7 @@ Thank you for choosing Hanva Billing!
                   giftCardDiscount,
                   loyaltyPointsEarned,
                   loyaltyPointsAvailable,
-                  gstRate: 18,
+                  gstRate: taxRate,
                   isInterState: false,
                   placeOfSupply: "Karnataka",
                   businessLogo: bizSettings.profile?.logo || "",

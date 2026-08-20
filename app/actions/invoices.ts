@@ -196,21 +196,25 @@ export async function getInvoiceByShareToken(token: string) {
           address: "123 Main Street, City, State 12345",
           website: "www.hanva.com",
           gstNumber: "GSTIN123456789",
+        },
+        business: {
+          taxRate: 18,
         }
       };
       
-            // Reconstruct profile settings from individual keys
-      businessSettings = { profile: { ...defaultSettings.profile } };
+            // Reconstruct settings from individual keys
+      businessSettings = { profile: { ...defaultSettings.profile }, business: { ...defaultSettings.business } };
       
       for (const row of settingsResult) {
         const { setting_key, setting_value, setting_type } = row;
         
         if (!setting_key) continue;
 
-        // Handle flattened keys (e.g. profile.salonName)
-        if (setting_key.startsWith('profile.')) {
-          const key = setting_key.replace('profile.', '');
-          
+        const parts = setting_key.split('.');
+        const section = parts[0] as keyof typeof businessSettings;
+        const key = parts.slice(1).join('.');
+        
+        if (section === 'profile' || section === 'business') {
           let value = setting_value;
           try {
             if (setting_type === "boolean") {
@@ -221,14 +225,15 @@ export async function getInvoiceByShareToken(token: string) {
             } else if (setting_type === "json") {
               value = typeof setting_value === 'string' ? JSON.parse(setting_value) : setting_value;
             } else if (typeof setting_value === "string") {
-              // Sometimes strings are accidentally JSON encoded like "\"Cheap and Best\""
               if (setting_value.startsWith('"') && setting_value.endsWith('"')) {
-                try { value = JSON.parse(setting_value); } catch(e) {}
+                 value = JSON.parse(setting_value);
               }
             }
           } catch(e) {}
           
-          businessSettings.profile[key] = value;
+          if (key) {
+             (businessSettings[section] as any)[key] = value;
+          }
         }
       }
     } catch (err) {

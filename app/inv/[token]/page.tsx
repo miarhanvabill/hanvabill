@@ -14,6 +14,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
 
   const inv = res.invoice
   const bizProfile = res.businessSettings?.profile || {}
+  const bizOps = res.businessSettings?.business || {}
   
   // Flatten all item types into a single array
   const items = [
@@ -83,7 +84,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     giftCardDiscount,
     loyaltyPointsEarned,
     loyaltyPointsAvailable,
-    gstRate: 18,
+    gstRate: bizOps.taxRate !== undefined ? Number(bizOps.taxRate) : 18,
     isInterState: false,
     placeOfSupply: "Karnataka",
     businessLogo: bizProfile.logo || "",

@@ -62,10 +62,28 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
         return { success: false, message: "Customer not found or unauthorized" }
       }
 
+
+      let taxRate = 18;
+      try {
+        const taxRow = await sql`
+          SELECT setting_value 
+          FROM store_settings 
+          WHERE tenant_id = ${tenantId.toString()} AND setting_key = 'business.taxRate'
+          LIMIT 1
+        `;
+        if (taxRow.length > 0) {
+          const val = Number.parseFloat(taxRow[0].setting_value);
+          if (!isNaN(val)) taxRate = val;
+        }
+      } catch(e) {
+         console.error("Error fetching taxRate:", e);
+      }
+
       // Calculate totals
       const subtotal = input.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
       const couponDiscount = Number(input.coupon_discount) || Number(input.manual_discount) || 0
-      const gstAmount = ((subtotal - couponDiscount) * 18) / 100
+      const gstAmount = ((subtotal - couponDiscount) * taxRate) / 100
+
       const giftCardDiscount = input.gift_cards?.reduce((sum, gc) => sum + gc.amount, 0) || 0
       const loyaltyDiscount = input.redeem_points || 0
       const totalRaw = Math.max(

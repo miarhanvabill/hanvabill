@@ -624,7 +624,7 @@ export default function PreviewPage() {
                             <span className="text-sm">{formatCurrency(2050)}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-sm">Tax (18%)</span>
+                            <span className="text-sm">Tax</span>
                             <span className="text-sm">{formatCurrency(369)}</span>
                           </div>
                           <div className="flex justify-between font-bold">

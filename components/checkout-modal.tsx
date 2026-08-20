@@ -25,6 +25,7 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react"
+import { getBusinessSettings } from "@/app/actions/settings"
 import { formatCurrency } from "@/lib/currency"
 import { LoyaltyCheckout } from "./loyalty-checkout"
 import { getCustomerLoyalty, updateLoyaltyPoints } from "@/app/actions/loyalty"
@@ -66,11 +67,20 @@ export function CheckoutModal({ open, onClose, customer, items, onCheckoutComple
   const [loyaltyDiscount, setLoyaltyDiscount] = useState(0)
   const [loyalty, setLoyalty] = useState<any>(null)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [taxRate, setTaxRate] = useState<number>(18)
+
+  useEffect(() => {
+    getBusinessSettings().then(settings => {
+      if (settings?.business?.taxRate !== undefined) {
+        setTaxRate(Number(settings.business.taxRate))
+      }
+    }).catch(console.error)
+  }, [])
 
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
   const discountAmount = (subtotal * discount) / 100 + loyaltyDiscount
   const taxableAmount = subtotal - discountAmount
-  const gstAmount = Math.round(taxableAmount * 0.18)
+  const gstAmount = Math.round(taxableAmount * (taxRate / 100))
   const totalAmount = taxableAmount + gstAmount
 
   // Load customer loyalty data when modal opens
@@ -267,7 +277,7 @@ ${invoiceData.items
 
 💰 *Payment Summary:*
 Subtotal: ${formatCurrency(subtotal)}
-${discountAmount > 0 ? `Discount: -${formatCurrency(discountAmount)}\n` : ""}${loyaltyDiscount > 0 ? `Loyalty Discount: -${formatCurrency(loyaltyDiscount)} (${loyaltyPointsToRedeem} points)\n` : ""}GST (18%): ${formatCurrency(gstAmount)}
+${discountAmount > 0 ? `Discount: -${formatCurrency(discountAmount)}\n` : ""}${loyaltyDiscount > 0 ? `Loyalty Discount: -${formatCurrency(loyaltyDiscount)} (${loyaltyPointsToRedeem} points)\n` : ""}GST (${taxRate}%): ${formatCurrency(gstAmount)}
 *Total: ${formatCurrency(totalAmount)}*
 
 💳 Payment Mode: ${paymentMode === "cash" ? "💵 Cash" : "💳 Online"}
@@ -419,7 +429,7 @@ Thank you for choosing Hanva Billing! ✨
             </div>
           )}
           <div className="flex justify-between">
-            <span>GST (18%):</span>
+            <span>GST ({taxRate}%):</span>
             <span>{formatCurrency(gstAmount)}</span>
           </div>
           <Separator />

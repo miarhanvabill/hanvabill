@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       businessEmail: businessSettings.profile.email,
       businessGSTIN: businessSettings.business?.gstin || "29ABCDE1234F1Z5",
       businessPAN: businessSettings.business?.pan || "ABCDE1234F",
-      gstRate: businessSettings.business?.taxRate || 18,
+      gstRate: businessSettings.business?.taxRate !== undefined ? Number(businessSettings.business.taxRate) : 18,
       currency: businessSettings.business?.currency || "INR",
     }
 
@@ -95,7 +95,7 @@ function generateInvoiceHTML(data: any): string {
   // Calculate amounts safely
   const subtotal = data.subtotal || 0
   const discount = data.discount || 0
-  const gstRate = data.gstRate || 18
+  const gstRate = data.gstRate !== undefined ? Number(data.gstRate) : 18
 
   const taxableAmount = subtotal - discount
   const gstAmount = taxableAmount * (gstRate / 100)

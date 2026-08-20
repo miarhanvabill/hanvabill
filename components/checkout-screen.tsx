@@ -16,6 +16,7 @@ import GiftCardRedeemer from "@/components/gift-card-redeemer"
 
 import { calculateTier, type CustomerLoyalty as UiCustomerLoyalty } from "@/lib/loyalty"
 import { formatCurrency } from "@/lib/currency"
+import { getBusinessSettings } from "@/app/actions/settings"
 
 interface Customer {
   id: number
@@ -99,6 +100,16 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack }: Checkou
 
   const [giftCards, setGiftCards] = useState<{ code: string; amount: number }[]>([])
   const giftCardDiscount = useMemo(() => giftCards.reduce((s, g) => s + (g.amount || 0), 0), [giftCards])
+
+  const [taxRate, setTaxRate] = useState<number>(18)
+
+  useEffect(() => {
+    getBusinessSettings().then(settings => {
+      if (settings?.business?.taxRate !== undefined) {
+        setTaxRate(Number(settings.business.taxRate))
+      }
+    }).catch(console.error)
+  }, [])
 
   // idempotency key persisted for a single submission
   const idempotencyKeyRef = useRef<string | null>(null)
@@ -212,7 +223,7 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack }: Checkou
   }, [appliedCoupon, subtotal])
 
   const discountedSubtotal = Math.max(0, subtotal - (appliedCoupon ? couponDiscount : manualDiscount))
-  const gstAmount = (discountedSubtotal * 18) / 100
+  const gstAmount = (discountedSubtotal * taxRate) / 100
   const amountBeforeLoyalty = discountedSubtotal + gstAmount
   const amountBeforeLoyaltyAfterGC = Math.max(0, amountBeforeLoyalty - giftCardDiscount)
 
@@ -444,7 +455,7 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack }: Checkou
             )}
 
             <div className="flex justify-between">
-              <span>GST (18%):</span>
+              <span>GST ({taxRate}%):</span>
               <span>{formatCurrency(gstAmount)}</span>
             </div>
 
