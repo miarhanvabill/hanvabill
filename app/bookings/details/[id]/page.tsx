@@ -325,8 +325,6 @@ Thank you for choosing Hanva Billing!
     }
   }
 
-  const tax = Math.round(booking.total_amount * 0.18)
-  const servicePrice = booking.total_amount - tax
 
   return (
     <div className="flex-1 flex flex-col min-h-screen">

@@ -210,18 +210,7 @@ export default function PreviewPage() {
 
         {/* Footer */}
         <div className="p-4 border-t border-gray-200 bg-white">
-          {!sidebarCollapsed && (
-            <div className="bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg p-3 text-white">
-              <div className="flex items-center gap-2 mb-2">
-                <Crown className="w-4 h-4 text-yellow-300" />
-                <span className="font-medium text-sm">Premium Plan</span>
-              </div>
-              <p className="text-xs text-gray-200 mb-2">Unlock advanced features</p>
-              <button className="w-full bg-white/20 hover:bg-white/30 text-white text-xs py-1.5 px-3 rounded transition-colors">
-                Upgrade Now
-              </button>
-            </div>
-          )}
+
         </div>
       </div>
 

@@ -184,16 +184,6 @@ export default function Sidebar() {
                 Help & Support
               </Link>
             </div>
-            <div className="bg-slate-800 rounded-lg p-3 text-white border border-slate-700 shadow-sm">
-              <div className="flex items-center gap-2 mb-2">
-                <Crown className="w-4 h-4 text-yellow-300" />
-                <span className="font-medium text-sm">Premium Plan</span>
-              </div>
-              <p className="text-xs text-gray-200 mb-2">Unlock advanced features</p>
-              <button className="w-full bg-white/20 hover:bg-white/30 text-white text-xs py-1.5 px-3 rounded transition-colors">
-                Upgrade Now
-              </button>
-            </div>
           </>
         )}
         {isCollapsed && (
