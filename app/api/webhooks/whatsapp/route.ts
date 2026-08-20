@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTenantSql, sql as baseSql } from "@/lib/db"; 
+import { getAuthenticatedSql } from "@/lib/db"; 
 
 export async function POST(req: Request) {
   try {
@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     console.log("[WhatsApp Webhook] Received payload:", type, payload);
     
     // We assume the URL provides the true internal tenantId.
-    const sql = getTenantSql(tenantId);
+    const { sql, tenantId: internalTenantId } = await getAuthenticatedSql(tenantId);
 
     if (type === "mo") {
       // Mobile Originated (Incoming Message)
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
         const customer = await sql`
           SELECT id FROM customers 
           WHERE phone_number = ${phone} OR phone_number = ${"+" + phone}
-          AND tenant_id = ${tenantId}
+          AND tenant_id = ${internalTenantId}
           LIMIT 1
         `;
         
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
             tenant_id, customer_id, phone_number, message_type, 
             message_content, direction, status
           ) VALUES (
-            ${tenantId}, ${customerId}, ${phone}, 
+            ${internalTenantId}, ${customerId}, ${phone}, 
             ${payload.msgType?.toLowerCase() || 'text'}, 
             ${content}, 'inbound', 'received'
           )
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
         await sql`
           UPDATE whatsapp_messages 
           SET status = ${payload.status?.toLowerCase()} 
-          WHERE msg_id = ${payload.msgId} AND tenant_id = ${tenantId}
+          WHERE msg_id = ${payload.msgId} AND tenant_id = ${internalTenantId}
         `;
         */
         console.log("[WhatsApp Webhook] DLR received for msgId:", payload.msgId, "status:", payload.status);
