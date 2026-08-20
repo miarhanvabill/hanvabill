@@ -2179,6 +2179,17 @@ export default function SettingsPage() {
                   </div>
                 </div>
               )}
+
+              <div className="flex justify-end pt-6">
+                <Button onClick={() => handleSave("whatsapp")} className="gap-2" disabled={saving}>
+                  {saving ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Save Changes
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

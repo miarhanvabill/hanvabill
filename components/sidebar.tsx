@@ -21,6 +21,7 @@ import {
   HelpCircle,
   ShoppingCart,
   FileText,
+  MessageSquare,
 } from "lucide-react"
 
 const menuItems = [
