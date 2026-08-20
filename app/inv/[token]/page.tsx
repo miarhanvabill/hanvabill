@@ -45,6 +45,8 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
         } else {
           couponCode = part.replace('Coupon: ', '');
         }
+      } else if (part.startsWith('Manual Discount: -')) {
+        couponDiscount += parseFloat(part.replace('Manual Discount: -', ''));
       } else if (part.startsWith('Loyalty Redeemed: ₹')) {
         loyaltyDiscount = parseFloat(part.replace('Loyalty Redeemed: ₹', ''));
       } else if (part.startsWith('Gift Card Redeemed: ₹')) {

@@ -287,6 +287,8 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack }: Checkou
         payment_method: paymentMethod,
         notes: notes || null,
         coupon_code: appliedCoupon?.code,
+        coupon_discount: appliedCoupon ? couponDiscount : 0,
+        manual_discount: !appliedCoupon ? manualDiscount : 0,
         invoice_date: today,
         due_date: today,
         redeem_points: redeemEnabled ? loyaltyRedeemPoints : 0,

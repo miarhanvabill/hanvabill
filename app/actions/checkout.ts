@@ -17,6 +17,8 @@ export interface FinalizeCheckoutInput {
   payment_method: string
   notes?: string | null
   coupon_code?: string | null
+  coupon_discount?: number
+  manual_discount?: number
   invoice_date?: string
   due_date?: string
   booking_date?: string
@@ -62,7 +64,7 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
 
       // Calculate totals
       const subtotal = input.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
-      const couponDiscount = 0
+      const couponDiscount = Number(input.coupon_discount) || Number(input.manual_discount) || 0
       const gstAmount = (subtotal * 18) / 100
       const giftCardDiscount = input.gift_cards?.reduce((sum, gc) => sum + gc.amount, 0) || 0
       const loyaltyDiscount = input.redeem_points || 0
@@ -120,7 +122,14 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
             ${bookingTime},
             ${total},
             'completed',
-            ${input.notes || null},
+            ${[
+            input.notes,
+            input.coupon_code ? `Coupon: ${input.coupon_code} (-${couponDiscount})` : null,
+            input.manual_discount > 0 ? `Manual Discount: -${input.manual_discount}` : null,
+            loyaltyDiscount > 0 ? `Loyalty Redeemed: ₹${loyaltyDiscount}` : null,
+            giftCardDiscount > 0 ? `Gift Card Redeemed: ₹${giftCardDiscount}` : null,
+            input.points_earned_client > 0 ? `Points Earned: ${input.points_earned_client}` : null,
+          ].filter(Boolean).join(' | ')},
             ${tenantId},
             NOW(),
             NOW()
