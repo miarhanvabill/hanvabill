@@ -92,6 +92,18 @@ const menuItems = [
     description: "Reports & Insights",
   },
   {
+    title: "Marketing",
+    href: "/marketing",
+    icon: BarChart3,
+    description: "Marketing Campaigns",
+  },
+  {
+    title: "WhatsApp Chat",
+    href: "/whatsapp",
+    icon: MessageSquare,
+    description: "Customer Communications",
+  },
+  {
     title: "Settings",
     href: "/settings",
     icon: Settings,
