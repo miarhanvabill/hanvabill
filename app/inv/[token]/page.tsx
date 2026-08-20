@@ -18,9 +18,9 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
   ].map((item: any, idx: number) => ({
     id: idx + 1,
     description: item.name || item.description || "Item",
-    quantity: item.quantity || 1,
-    rate: item.price || item.rate || 0,
-    amount: (item.price || item.rate || 0) * (item.quantity || 1),
+    quantity: Number(item.quantity || 1),
+    rate: Number(item.price || item.rate || 0),
+    amount: Number(item.price || item.rate || 0) * Number(item.quantity || 1),
     staffName: item.staff_name || item.staffName,
     staffName: item.staff_name,
   }))
@@ -57,7 +57,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     }
   }
   
-  const genericDiscount = Math.max(0, (inv.discount_amount || 0) - couponDiscount - loyaltyDiscount - giftCardDiscount);
+  const genericDiscount = Math.max(0, (Number(inv.discount_amount) || 0) - couponDiscount - loyaltyDiscount - giftCardDiscount);
 
   const data = {
     invoiceNumber: inv.invoice_number,
@@ -69,7 +69,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     customerEmail: inv.customer_email || "",
     customerGSTIN: "",
     items,
-    subtotal: inv.subtotal || (inv.amount - inv.gst_amount) || 0,
+    subtotal: Number(inv.subtotal) || (Number(inv.amount) - Number(inv.gst_amount)) || 0,
     discount: genericDiscount,
     couponCode,
     couponDiscount,

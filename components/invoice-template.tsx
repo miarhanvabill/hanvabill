@@ -120,8 +120,8 @@ export function InvoiceTemplate({ data, className = "" }: { data: InvoiceData; c
                   {item.staffName && <span className="block text-xs text-slate-500 font-normal mt-0.5">Staff: {item.staffName}</span>}
                 </td>
                 <td className="py-4 px-4 text-center text-slate-600">{item.quantity}</td>
-                <td className="py-4 px-4 text-right text-slate-600">₹{item.rate.toFixed(2)}</td>
-                <td className="py-4 px-4 text-right font-medium text-slate-800">₹{item.amount.toFixed(2)}</td>
+                <td className="py-4 px-4 text-right text-slate-600">₹{Number(item.rate).toFixed(2)}</td>
+                <td className="py-4 px-4 text-right font-medium text-slate-800">₹{Number(item.amount).toFixed(2)}</td>
               </tr>
             ))}
           </tbody>
@@ -138,42 +138,42 @@ export function InvoiceTemplate({ data, className = "" }: { data: InvoiceData; c
         <div className="w-full md:w-72 space-y-3">
           <div className="flex justify-between text-sm text-slate-600 px-2">
             <span>Subtotal</span>
-            <span className="font-medium">₹{data.subtotal.toFixed(2)}</span>
+            <span className="font-medium">₹{Number(data.subtotal).toFixed(2)}</span>
           </div>
           {data.discount > 0 && (
             <div className="flex justify-between text-sm text-slate-600 px-2">
               <span>Discount</span>
-              <span className="font-medium text-emerald-600">-₹{data.discount.toFixed(2)}</span>
+              <span className="font-medium text-emerald-600">-₹{Number(data.discount).toFixed(2)}</span>
             </div>
           )}
           {(data.couponDiscount || 0) > 0 && (
             <div className="flex justify-between text-sm text-slate-600 px-2">
               <span>Coupon Applied {data.couponCode ? `(${data.couponCode})` : ''}</span>
-              <span className="font-medium text-emerald-600">-₹{data.couponDiscount!.toFixed(2)}</span>
+              <span className="font-medium text-emerald-600">-₹{Number(data.couponDiscount || 0).toFixed(2)}</span>
             </div>
           )}
           {(data.loyaltyDiscount || 0) > 0 && (
             <div className="flex justify-between text-sm text-slate-600 px-2">
               <span>Loyalty Redeemed</span>
-              <span className="font-medium text-emerald-600">-₹{data.loyaltyDiscount!.toFixed(2)}</span>
+              <span className="font-medium text-emerald-600">-₹{Number(data.loyaltyDiscount || 0).toFixed(2)}</span>
             </div>
           )}
           {(data.giftCardDiscount || 0) > 0 && (
             <div className="flex justify-between text-sm text-slate-600 px-2">
               <span>Gift Card</span>
-              <span className="font-medium text-purple-600">-₹{data.giftCardDiscount!.toFixed(2)}</span>
+              <span className="font-medium text-purple-600">-₹{Number(data.giftCardDiscount || 0).toFixed(2)}</span>
             </div>
           )}
           {data.gstRate > 0 && (
             <div className="flex justify-between text-sm text-slate-600 px-2">
               <span>GST ({data.gstRate}%)</span>
-              <span className="font-medium">₹{gstAmount.toFixed(2)}</span>
+              <span className="font-medium">₹{Number(gstAmount).toFixed(2)}</span>
             </div>
           )}
           
           <div className="flex justify-between items-center bg-slate-800 text-white p-4 rounded-lg shadow-sm mt-4">
             <span className="font-bold">Total</span>
-            <span className="text-xl font-black tracking-tight">₹{totalAmount.toFixed(2)}</span>
+            <span className="text-xl font-black tracking-tight">₹{Number(totalAmount).toFixed(2)}</span>
           </div>
         </div>
       </div>

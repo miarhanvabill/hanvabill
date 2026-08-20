@@ -81,9 +81,9 @@ export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
         items: invoice.items.map((item, index) => ({
           id: index + 1,
           description: item.name,
-          quantity: item.quantity,
-          rate: item.price,
-          amount: item.price * item.quantity,
+          quantity: Number(item.quantity),
+                  rate: Number(item.price),
+                  amount: Number(item.price) * Number(item.quantity),
         })),
         subtotal: invoice.subtotal,
                 discount: invoice.discount,
@@ -153,14 +153,14 @@ ${invoice.customer.email}
 
 ITEMS:
 ${invoice.items
-  .map((item) => `${item.name} x${item.quantity} - ₹${(item.price * item.quantity).toFixed(2)}`)
+  .map((item) => `${item.name} x${item.quantity} - ₹${(Number(item.price) * Number(item.quantity)).toFixed(2)}`)
   .join("\n")}
 
 SUMMARY:
-Subtotal: ₹${invoice.subtotal.toFixed(2)}
-Discount: ₹${invoice.discount.toFixed(2)}
-GST: ₹${invoice.gst.toFixed(2)}
-Total: ₹${invoice.total.toFixed(2)}
+Subtotal: ₹${Number(invoice.subtotal).toFixed(2)}
+Discount: ₹${Number(invoice.discount).toFixed(2)}
+GST: ₹${Number(invoice.gst).toFixed(2)}
+Total: ₹${Number(invoice.total).toFixed(2)}
 
 Payment Method: ${invoice.payment_method.toUpperCase()}
 ${invoice.notes ? `Notes: ${invoice.notes}` : ""}
@@ -223,11 +223,11 @@ Thank you for your business!
                   amount: item.price * item.quantity,
                   staffName: item.staff_name,
                 })),
-                subtotal: invoice.subtotal,
-                discount: invoice.discount,
-                couponDiscount: invoice.couponDiscount,
-                loyaltyDiscount: invoice.loyaltyDiscount,
-                giftCardDiscount: invoice.giftCardDiscount,
+                subtotal: Number(invoice.subtotal),
+                discount: Number(invoice.discount),
+                couponDiscount: Number(invoice.couponDiscount),
+                loyaltyDiscount: Number(invoice.loyaltyDiscount),
+                giftCardDiscount: Number(invoice.giftCardDiscount),
                 loyaltyPointsAvailable: invoice.loyaltyPointsAvailable,
                 loyaltyPointsEarned: invoice.loyaltyPointsEarned,
                 gstRate: 18,

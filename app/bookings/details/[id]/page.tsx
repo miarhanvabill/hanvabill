@@ -644,12 +644,12 @@ Thank you for choosing Hanva Billing!
                   items: bookingServices.map((bs, i) => ({
                     id: i + 1,
                     description: bs.service_name,
-                    quantity: bs.quantity,
-                    rate: bs.price,
-                    amount: bs.price * bs.quantity,
+                    quantity: Number(bs.quantity),
+                    rate: Number(bs.price),
+                    amount: Number(bs.price) * Number(bs.quantity),
                     staffName: staff?.name
                   })),
-                  subtotal: bookingServices.reduce((acc, curr) => acc + (curr.price * curr.quantity), 0),
+                  subtotal: bookingServices.reduce((acc, curr) => acc + (Number(curr.price) * Number(curr.quantity)), 0),
                   discount: genericDiscount,
                   couponCode,
                   couponDiscount,
