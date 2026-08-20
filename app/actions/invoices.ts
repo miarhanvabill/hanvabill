@@ -205,14 +205,7 @@ export async function getInvoiceByShareToken(token: string) {
       for (const row of settingsResult) {
         const { setting_key, setting_value, setting_type } = row;
         
-        // Handle legacy flat JSON
-        if (setting_key === 'profile.settings') {
-           try {
-              const parsed = typeof setting_value === 'string' ? JSON.parse(setting_value) : setting_value;
-              businessSettings.profile = { ...businessSettings.profile, ...parsed };
-           } catch(e) {}
-           continue;
-        }
+        
 
         // Handle flattened keys (e.g. profile.salonName)
         if (setting_key.startsWith('profile.')) {
