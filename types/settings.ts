@@ -25,7 +25,8 @@ export interface BusinessSettings {
       open: string
       close: string
       isOpen: boolean
-    }
+      whatsapp?: any
+}
   }
 }
 

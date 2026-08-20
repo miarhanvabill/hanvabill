@@ -419,6 +419,10 @@ export default function SettingsPage() {
             <Plug className="w-4 h-4" />
             Integrations
           </TabsTrigger>
+          <TabsTrigger value="whatsapp" className="gap-2">
+            <MessageSquare className="w-4 h-4" />
+            WhatsApp
+          </TabsTrigger>
           <TabsTrigger value="system" className="gap-2">
             <SettingsIcon className="w-4 h-4" />
             System
@@ -2075,6 +2079,109 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
+
+        {/* WhatsApp Settings */}
+        <TabsContent value="whatsapp" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageSquare className="w-5 h-5 text-green-500" />
+                WhatsApp Integration
+              </CardTitle>
+              <CardDescription>Automate invoices, reminders, and run marketing campaigns.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              
+              <div className="flex items-center justify-between border-b pb-6">
+                <div>
+                  <h3 className="font-medium text-base">Enable WhatsApp Integration</h3>
+                  <p className="text-sm text-gray-500">Connect your account to send automated WhatsApp messages.</p>
+                </div>
+                <Switch 
+                  checked={settings.whatsapp?.enabled || false}
+                  onCheckedChange={(checked) =>
+                    setSettings({
+                      ...settings,
+                      whatsapp: { ...(settings.whatsapp || {}), enabled: checked },
+                    })
+                  }
+                />
+              </div>
+
+              {settings.whatsapp?.enabled && (
+                <div className="space-y-6 pt-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <Label>WhatsApp Reseller Token</Label>
+                      <Input 
+                        placeholder="Paste your API token"
+                        value={settings.whatsapp?.resellerToken || ""}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            whatsapp: { ...(settings.whatsapp || {}), resellerToken: e.target.value },
+                          })
+                        }
+                      />
+                      <p className="text-xs text-gray-500">Obtained from your WhatsApp provider dashboard.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Phone Number ID</Label>
+                      <Input 
+                        placeholder="e.g. 1029384756"
+                        value={settings.whatsapp?.phoneNumberId || ""}
+                        onChange={(e) =>
+                          setSettings({
+                            ...settings,
+                            whatsapp: { ...(settings.whatsapp || {}), phoneNumberId: e.target.value },
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <h3 className="font-medium text-base">Automated Messages (Transactional)</h3>
+                  
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 border rounded-lg bg-gray-50/50">
+                      <div>
+                        <Label className="text-base">Auto-Send Invoices</Label>
+                        <p className="text-sm text-gray-500">Automatically send WhatsApp invoices to customers upon checkout.</p>
+                      </div>
+                      <Switch 
+                        checked={settings.whatsapp?.autoInvoice || false}
+                        onCheckedChange={(checked) =>
+                          setSettings({
+                            ...settings,
+                            whatsapp: { ...(settings.whatsapp || {}), autoInvoice: checked },
+                          })
+                        }
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 border rounded-lg bg-gray-50/50">
+                      <div>
+                        <Label className="text-base">Appointment Reminders</Label>
+                        <p className="text-sm text-gray-500">Send an automated reminder 2 hours before the appointment.</p>
+                      </div>
+                      <Switch 
+                        checked={settings.whatsapp?.autoReminder || false}
+                        onCheckedChange={(checked) =>
+                          setSettings({
+                            ...settings,
+                            whatsapp: { ...(settings.whatsapp || {}), autoReminder: checked },
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
         <TabsContent value="system" className="space-y-6">
           <Card>
             <CardHeader>

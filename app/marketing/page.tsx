@@ -32,7 +32,15 @@ import {
   type CustomerSegment,
 } from "@/app/actions/marketing"
 
+
+const WHATSAPP_TEMPLATES = [
+  { id: 'festive_offer', name: 'Festive Offer', text: 'Hi {{name}}, celebrate with us! Get a special discount on your next visit. Book your appointment today!' },
+  { id: 'we_miss_you', name: 'We Miss You', text: 'Hi {{name}}, it\'s been a while! We miss you. Book your next appointment today and enjoy our premium services.' },
+  { id: 'weekend_special', name: 'Weekend Special', text: 'Hi {{name}}, weekend is here! Treat yourself to a relaxing session with our special weekend offers. Walk-in or book online.' }
+];
+
 export default function MarketingPage() {
+
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [segments, setSegments] = useState<CustomerSegment[]>([])
   const [showCampaignModal, setShowCampaignModal] = useState(false)
@@ -285,15 +293,49 @@ export default function MarketingPage() {
                             />
                           </div>
 
-                          <div>
-                            <Label>Message</Label>
-                            <Textarea
-                              placeholder="Write your campaign message here..."
-                              value={campaignForm.message}
-                              onChange={(e) => setCampaignForm({ ...campaignForm, message: e.target.value })}
-                              className="min-h-[120px]"
-                            />
-                          </div>
+
+                          {campaignForm.type === 'whatsapp' ? (
+                            <div>
+                              <Label>WhatsApp Template (Pre-approved by Meta)</Label>
+                              <Select
+                                onValueChange={(value) => {
+                                  const tpl = WHATSAPP_TEMPLATES.find(t => t.id === value);
+                                  if (tpl) {
+                                    setCampaignForm({ ...campaignForm, message: tpl.text });
+                                  }
+                                }}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select a pre-approved template" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {WHATSAPP_TEMPLATES.map(tpl => (
+                                    <SelectItem key={tpl.id} value={tpl.id}>{tpl.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <div className="mt-4">
+                                <Label>Message Preview</Label>
+                                <Textarea
+                                  readOnly
+                                  value={campaignForm.message}
+                                  className="min-h-[100px] bg-gray-50 text-gray-500"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">WhatsApp requires all marketing messages to use pre-approved templates to prevent spam.</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <Label>Message</Label>
+                              <Textarea
+                                placeholder="Write your campaign message here..."
+                                value={campaignForm.message}
+                                onChange={(e) => setCampaignForm({ ...campaignForm, message: e.target.value })}
+                                className="min-h-[120px]"
+                              />
+                            </div>
+                          )}
+
 
                           <div className="grid grid-cols-2 gap-4">
                             <div>

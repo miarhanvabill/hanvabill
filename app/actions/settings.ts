@@ -169,6 +169,13 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
           receiptTemplate: "default",
           paymentGateway: "razorpay",
         },
+        whatsapp: {
+          enabled: false,
+          resellerToken: "",
+          phoneNumberId: "",
+          autoInvoice: false,
+          autoReminder: false,
+        },
         security: {
           twoFactorAuth: false,
           sessionTimeout: 60,

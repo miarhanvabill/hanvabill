@@ -269,6 +269,33 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
         `
       }
 
+
+      let autoInvoiceEnabled = false;
+      try {
+        const waRow = await sql`
+          SELECT setting_value 
+          FROM store_settings 
+          WHERE tenant_id = ${tenantId.toString()} AND setting_key = 'whatsapp.autoInvoice'
+          LIMIT 1
+        `;
+        if (waRow.length > 0 && waRow.length !== undefined) {
+          autoInvoiceEnabled = waRow[0].setting_value === 'true';
+        } else if (waRow.rows && waRow.rows.length > 0) {
+          autoInvoiceEnabled = waRow.rows[0].setting_value === 'true';
+        }
+      } catch(e) {}
+
+      if (autoInvoiceEnabled && customer.phone_number) {
+        // We do this asynchronously so it doesn't block the checkout response
+        const { sendWhatsAppInvoice } = await import('@/lib/whatsapp');
+        sendWhatsAppInvoice(tenantId.toString(), customer.phone_number, {
+           bookingNumber: invoiceNumber,
+           customerName: customer.name,
+           amount: total,
+           shareToken: share_token
+        }).catch(err => console.error("Failed to send WhatsApp invoice:", err));
+      }
+
       return {
         success: true,
         invoice,
