@@ -4,9 +4,11 @@ import { sql } from "@/lib/db";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { tenantId, service_id, date, time, customer } = body;
+    const { tenantId, service_ids, date, time, customer } = body;
+    // Support legacy single service_id for safety
+    const servicesToBook = service_ids || (body.service_id ? [body.service_id] : []);
 
-    if (!tenantId || !service_id || !date || !time || !customer || !customer.name || !customer.phone) {
+    if (!tenantId || servicesToBook.length === 0 || !date || !time || !customer || !customer.name || !customer.phone) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -36,8 +38,9 @@ export async function POST(req: Request) {
     }
 
     // Get service amount
-    const serviceRows = await sql`SELECT price FROM services WHERE id = ${service_id} AND tenant_id = ${tenantId} LIMIT 1`;
-    const amount = serviceRows.length > 0 ? serviceRows[0].price : 0;
+    // Get service amounts
+    const serviceRows = await sql`SELECT id, price FROM services WHERE id = ANY(${servicesToBook}) AND tenant_id = ${tenantId}`;
+    const amount = serviceRows.reduce((sum, s) => sum + Number(s.price), 0);
 
     // Create booking
     // Generate booking number
@@ -56,13 +59,15 @@ export async function POST(req: Request) {
     const bookingId = newBooking[0].id;
 
     // Create booking service mapping
-    await sql`
-      INSERT INTO booking_services (
-        tenant_id, booking_id, service_id, price
-      ) VALUES (
-        ${tenantId}, ${bookingId}, ${service_id}, ${amount}
-      )
-    `;
+    for (const s of serviceRows) {
+      await sql`
+        INSERT INTO booking_services (
+          tenant_id, booking_id, service_id, price
+        ) VALUES (
+          ${tenantId}, ${bookingId}, ${s.id}, ${s.price}
+        )
+      `;
+    }
 
     return NextResponse.json({
       success: true,
