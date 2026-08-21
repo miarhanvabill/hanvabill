@@ -50,7 +50,14 @@ export default function SalesReportPage() {
       })
       if (response.ok) {
         const data = await response.json()
-        setSalesData(data.recentSales || [])
+        setSalesData(
+          (data.recentSales || []).map((sale: any) => ({
+            ...sale,
+            total_revenue: sale.total || sale.total_revenue || 0,
+            product_name: sale.services ? sale.services.join(', ') : (sale.product_name || "Unknown"),
+            customer_name: sale.customerName || sale.customer_name || "Unknown"
+          }))
+        )
         setStats({
           total_sales: data.totalSales || 0,
           total_revenue: data.totalRevenue || 0,
@@ -288,7 +295,7 @@ export default function SalesReportPage() {
                         <td className="p-3">{sale.category}</td>
                         <td className="p-3 text-center">{sale.quantity_sold}</td>
                         <td className="p-3 text-center">₹{sale.unit_price}</td>
-                        <td className="p-3 text-center font-medium">₹{sale.total_revenue.toLocaleString()}</td>
+                        <td className="p-3 text-center font-medium">₹{(sale.total_revenue || 0).toLocaleString()}</td>
                         <td className="p-3 text-center">
                           <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
                             {sale.profit_margin}%
