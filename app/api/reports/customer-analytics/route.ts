@@ -66,8 +66,8 @@ export async function GET(request: Request) {
       // Get demographics
       const demographics = await sql`
         SELECT 
-          COUNT(*) FILTER (WHERE gender = 'male') * 100.0 / COUNT(*) as male,
-          COUNT(*) FILTER (WHERE gender = 'female') * 100.0 / COUNT(*) as female
+          COUNT(*) FILTER (WHERE gender = 'male') * 100.0 / NULLIF(COUNT(*), 0) as male,
+          COUNT(*) FILTER (WHERE gender = 'female') * 100.0 / NULLIF(COUNT(*), 0) as female
         FROM customers
         WHERE created_at >= ${startIso}
         AND tenant_id = ${tenantId}
