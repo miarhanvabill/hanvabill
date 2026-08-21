@@ -39,7 +39,7 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
 
     // Get active services
     const services = await sql`
-      SELECT id, name, description, duration, price, category 
+      SELECT id, name, description, duration_minutes as duration, price, category 
       FROM services 
       WHERE tenant_id = ${tenantId} AND is_active = true
       ORDER BY category, name
