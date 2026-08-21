@@ -42,7 +42,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const res = await fetch(`/api/public/tenant/${slug}`)
+        const res = await fetch(`/api/public/tenant/${slug}`, { cache: "no-store" })
         if (!res.ok) throw new Error("Could not load booking page")
         const data = await res.json()
         if (!data.success) throw new Error(data.error)

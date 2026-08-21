@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedSql } from "@/lib/db";
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request, { params }: { params: { slug: string } }) {
   try {
     const { slug } = await params;
@@ -53,6 +55,9 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
     });
   } catch (error) {
     console.error("Error fetching public tenant info:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    if (error instanceof Error && error.message.includes("No active tenant found")) {
+      return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
+    }
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Internal server error" }, { status: 500 });
   }
 }
