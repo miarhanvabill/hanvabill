@@ -62,7 +62,7 @@ export async function sendWhatsAppInvoice(tenantId: string, phone: string, data:
     try {
       const customer = await sql`
         SELECT id FROM customers 
-        WHERE phone_number = ${phone} OR phone_number = ${"+" + phone}
+        WHERE (phone_number = ${phone} OR phone_number = ${"+" + phone})
         AND tenant_id = ${tenantId}
         LIMIT 1
       `;
@@ -103,7 +103,7 @@ export async function sendWhatsAppText(tenantId: string, customerPhone: string, 
     try {
       const customer = await sql`
         SELECT id FROM customers 
-        WHERE phone_number = ${customerPhone} OR phone_number = ${"+" + customerPhone}
+        WHERE (phone_number = ${customerPhone} OR phone_number = ${"+" + customerPhone})
         AND tenant_id = ${tenantId}
         LIMIT 1
       `;

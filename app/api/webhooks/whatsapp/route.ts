@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       try {
         const customer = await sql`
           SELECT id FROM customers 
-          WHERE phone_number = ${phone} OR phone_number = ${"+" + phone}
+          WHERE (phone_number = ${phone} OR phone_number = ${"+" + phone})
           AND tenant_id = ${internalTenantId}
           LIMIT 1
         `;
