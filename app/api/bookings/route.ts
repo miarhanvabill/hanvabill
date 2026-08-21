@@ -32,13 +32,15 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
       }
 
+      const bookingNumber = "BKG-" + Math.floor(100000 + Math.random() * 900000);
+      
       const rows = await sql`
         INSERT INTO bookings (
-          tenant_id, customer_id, service_id, staff_id, 
-          booking_date, booking_time, status, notes, amount
+          tenant_id, booking_number, customer_id, staff_id, 
+          booking_date, booking_time, status, notes, total_amount
         )
         SELECT 
-          ${tenantId}, ${customer_id}, ${service_id}, ${staff_id}, 
+          ${tenantId}, ${bookingNumber}, ${customer_id}, ${staff_id}, 
           ${booking_date}, ${booking_time}, ${status}, ${notes}, ${amount}
         WHERE EXISTS (
           SELECT 1 FROM customers WHERE id = ${customer_id} AND tenant_id = ${tenantId}
@@ -52,9 +54,16 @@ export async function POST(req: Request) {
           )
         )
         RETURNING 
-          id, tenant_id, customer_id, service_id, staff_id, 
-          booking_date, booking_time, status, notes, amount, created_at
+          id, tenant_id, customer_id, staff_id, 
+          booking_date, booking_time, status, notes, total_amount, created_at
       `
+
+      if (rows.length > 0) {
+        await sql`
+          INSERT INTO booking_services (tenant_id, booking_id, service_id, price)
+          VALUES (${tenantId}, ${rows[0].id}, ${service_id}, ${amount})
+        `
+      }
 
       if (!rows.length) {
         return NextResponse.json({ 
@@ -95,14 +104,15 @@ export async function GET(req: Request) {
       const rows = await sql`
         SELECT 
           b.*, 
-          c.name as customer_name, 
+          c.full_name as customer_name, 
           s.name as service_name, 
           st.name as staff_name
         FROM bookings b
         LEFT JOIN customers c 
           ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+        LEFT JOIN booking_services bs ON b.id = bs.booking_id
         LEFT JOIN services s 
-          ON b.service_id = s.id AND s.tenant_id = ${tenantId}
+          ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
         LEFT JOIN staff st 
           ON b.staff_id = st.id AND st.tenant_id = ${tenantId}
         WHERE b.tenant_id = ${tenantId}

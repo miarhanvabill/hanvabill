@@ -39,7 +39,7 @@ export async function GET() {
       const recentSales = await sql`
         SELECT 
           b.id,
-          c.name as customer_name,
+          c.full_name as customer_name,
           b.total_amount as total,
           b.created_at::date as date,
           b.status,
@@ -52,7 +52,7 @@ export async function GET() {
           AND b.tenant_id = ${tenantId}
           AND c.tenant_id = ${tenantId}
           AND s.tenant_id = ${tenantId}
-        GROUP BY b.id, c.name, b.total_amount, b.created_at, b.status
+        GROUP BY b.id, c.full_name, b.total_amount, b.created_at, b.status
         ORDER BY b.created_at DESC
         LIMIT 10
       `

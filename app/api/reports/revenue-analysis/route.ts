@@ -103,7 +103,7 @@ export async function GET() {
       // Get top revenue customers
       const topCustomers = await sql`
         SELECT 
-          c.name,
+          c.full_name,
           COALESCE(SUM(b.total_amount), 0) as total_spent,
           COUNT(b.id) as visits
         FROM customers c
@@ -112,7 +112,7 @@ export async function GET() {
           AND c.tenant_id = ${tenantId}
           AND b.tenant_id = ${tenantId}
           AND b.created_at >= CURRENT_DATE - INTERVAL '90 days'
-        GROUP BY c.id, c.name
+        GROUP BY c.id, c.full_name
         ORDER BY total_spent DESC
         LIMIT 10
       `

@@ -40,13 +40,28 @@ export async function POST(req: Request) {
     const amount = serviceRows.length > 0 ? serviceRows[0].price : 0;
 
     // Create booking
+    // Generate booking number
+    const bookingNumber = "BKG-" + Math.floor(100000 + Math.random() * 900000);
+
+    // Create booking
     const newBooking = await sql`
       INSERT INTO bookings (
-        tenant_id, customer_id, service_id, booking_date, booking_time, status, amount, notes
+        tenant_id, booking_number, customer_id, booking_date, booking_time, status, total_amount, notes
       ) VALUES (
-        ${tenantId}, ${customerId}, ${service_id}, ${date}, ${time}, 'pending', ${amount}, 'Online Booking'
+        ${tenantId}, ${bookingNumber}, ${customerId}, ${date}, ${time}, 'pending', ${amount}, 'Online Booking'
       )
       RETURNING id, booking_date, booking_time
+    `;
+
+    const bookingId = newBooking[0].id;
+
+    // Create booking service mapping
+    await sql`
+      INSERT INTO booking_services (
+        tenant_id, booking_id, service_id, price
+      ) VALUES (
+        ${tenantId}, ${bookingId}, ${service_id}, ${amount}
+      )
     `;
 
     return NextResponse.json({
