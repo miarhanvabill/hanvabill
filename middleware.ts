@@ -10,6 +10,10 @@ const isProtectedRoute = createRouteMatcher([
 ]);
 
 const isPublicRoute = createRouteMatcher([
+  "/book(.*)",
+  "/terms-of-service",
+  "/privacy-policy",
+  "/unauthorized-sign-in",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/public(.*)",
