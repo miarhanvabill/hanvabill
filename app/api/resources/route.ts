@@ -8,15 +8,11 @@ export async function GET(request: NextRequest) {
     const stats = searchParams.get("stats")
 
     if (stats === "true") {
-      const resourceStats = await withTenantAuth(async ({ sql, tenantId }) => {
-        return await getResourceStats({ sql, tenantId })
-      })
+      const resourceStats = await getResourceStats()
       return NextResponse.json(resourceStats)
     }
 
-    const resources = await withTenantAuth(async ({ sql, tenantId }) => {
-      return await getAllResources({ sql, tenantId })
-    })
+    const resources = await getAllResources()
     return NextResponse.json(resources)
   } catch (error) {
     console.error("[v0] Error in resources GET:", error)
@@ -27,9 +23,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const data = await request.json()
-    const resource = await withTenantAuth(async ({ sql, tenantId }) => {
-      return await createResource(data, { sql, tenantId })
-    })
+    const resource = await createResource(data)
 
     if (!resource) {
       return NextResponse.json({ error: "Failed to create resource" }, { status: 500 })

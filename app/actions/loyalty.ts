@@ -400,14 +400,15 @@ export async function getLoyaltyTransactions(filters: TxnFilters, tenantId?: str
     const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200)
     const offset = Math.max(filters.offset ?? 0, 0)
     const list = await sql`
-      SELECT id, customer_id, points, transaction_type, amount, description, created_at, expires_at, type, invoice_id
-      FROM loyalty_transactions
-      WHERE tenant_id = ${resolvedTenantId}
-        AND (${customerId}::bigint IS NULL OR customer_id = ${customerId})
-        AND (${txnType}::text IS NULL OR transaction_type = ${txnType})
-        AND (COALESCE(created_at, NOW()) >= COALESCE(${from}::timestamptz, '-infinity'::timestamptz))
-        AND (COALESCE(created_at, NOW()) < COALESCE(${to}::timestamptz, 'infinity'::timestamptz))
-      ORDER BY created_at DESC
+      SELECT lt.id, lt.customer_id, c.full_name as customer_name, c.email as customer_email, lt.points, lt.transaction_type, lt.amount, lt.description, lt.created_at, lt.expires_at, lt.type, lt.invoice_id
+      FROM loyalty_transactions lt
+      LEFT JOIN customers c ON lt.customer_id = c.id AND c.tenant_id = ${resolvedTenantId}
+      WHERE lt.tenant_id = ${resolvedTenantId}
+        AND (${customerId}::bigint IS NULL OR lt.customer_id = ${customerId})
+        AND (${txnType}::text IS NULL OR lt.transaction_type = ${txnType})
+        AND (COALESCE(lt.created_at, NOW()) >= COALESCE(${from}::timestamptz, '-infinity'::timestamptz))
+        AND (COALESCE(lt.created_at, NOW()) < COALESCE(${to}::timestamptz, 'infinity'::timestamptz))
+      ORDER BY lt.created_at DESC
       LIMIT ${limit} OFFSET ${offset}
     `
     const totalResult = await sql`

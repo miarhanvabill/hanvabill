@@ -81,6 +81,7 @@ export default function LoyaltyTransactionsPage() {
   const [filterDateRange, setFilterDateRange] = useState<string>("all")
   const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false)
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
 
   // Form state for manual transactions
   const [transactionFormData, setTransactionFormData] = useState({
@@ -101,7 +102,7 @@ export default function LoyaltyTransactionsPage() {
       console.log("[v0] Loading loyalty transactions and stats...")
 
       // Fetch real transactions from API
-      const transactionsResponse = await fetch("/api/loyalty/customer?transactions=1")
+      const transactionsResponse = await fetch("/api/loyalty/customer?transactions=1&limit=1000")
       const transactionsData = await transactionsResponse.json()
 
       if (!transactionsData.success) {
@@ -398,7 +399,7 @@ export default function LoyaltyTransactionsPage() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Value Redeemed</p>
-                    <p className="text-2xl font-bold">${stats.total_value_redeemed.toLocaleString()}</p>
+                    <p className="text-2xl font-bold">₹{stats.total_value_redeemed.toLocaleString()}</p>
                   </div>
                 </div>
               </CardContent>
@@ -612,7 +613,7 @@ export default function LoyaltyTransactionsPage() {
                         </TableCell>
                         <TableCell>
                           {transaction.amount > 0 ? (
-                            <span className="font-medium">${transaction.amount}</span>
+                            <span className="font-medium">₹{transaction.amount}</span>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}

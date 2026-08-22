@@ -655,7 +655,7 @@ export default function ResourceAvailabilityPage() {
                               )}
                               <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Hourly Rate:</span>
-                                <span className="font-medium">${resource.hourly_rate}</span>
+                                <span className="font-medium">₹{resource.hourly_rate}</span>
                               </div>
                               <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Maintenance Schedule:</span>

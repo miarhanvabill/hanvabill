@@ -5,9 +5,7 @@ import { withTenantAuth } from "@/lib/withTenantAuth"
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const data = await request.json()
-    const resource = await withTenantAuth(async ({ sql, tenantId }) => {
-      return await updateResource(params.id, data, { sql, tenantId })
-    })
+    const resource = await updateResource(params.id, data)
 
     if (!resource) {
       return NextResponse.json({ error: "Resource not found" }, { status: 404 })
@@ -22,9 +20,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const success = await withTenantAuth(async ({ sql, tenantId }) => {
-      return await deleteResource(params.id, { sql, tenantId })
-    })
+    const success = await deleteResource(params.id)
 
     if (!success) {
       return NextResponse.json({ error: "Resource not found" }, { status: 404 })
