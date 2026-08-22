@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ArrowLeft, Edit, Phone, Mail, MapPin, Clock, Star, Award, TrendingUp } from "lucide-react"
 import Link from "next/link"
-import { getStaffMember, type Staff } from "@/app/actions/staff"
+import { getStaffMember, getStaffProfileStats, getStaffTodaysSchedule, type Staff } from "@/app/actions/staff"
 
 interface StaffDetailsPageProps {
   params: {
@@ -27,7 +27,11 @@ async function StaffDetailsContent({ staffId }: { staffId: string }) {
     notFound()
   }
 
-  const staff: Staff | null = await getStaffMember(parsedId)
+  const [staff, stats, schedule] = await Promise.all([
+    getStaffMember(parsedId),
+    getStaffProfileStats(parsedId),
+    getStaffTodaysSchedule(parsedId)
+  ])
 
   if (!staff) {
     notFound()
@@ -187,21 +191,23 @@ async function StaffDetailsContent({ staffId }: { staffId: string }) {
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-500">Total Bookings</span>
-                  <span className="font-semibold">156</span> {/* Placeholder data */}
+                  <span className="font-semibold">{stats.totalBookings}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-500">This Month</span>
-                  <span className="font-semibold">23</span> {/* Placeholder data */}
+                  <span className="font-semibold">{stats.monthBookings}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-500">Revenue Generated</span>
-                  <span className="font-semibold">₹45,230</span> {/* Placeholder data */}
+                  <span className="font-semibold">₹{stats.totalRevenue.toLocaleString()}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-500">Avg. Rating</span>
                   <div className="flex items-center">
                     <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                    <span className="font-semibold ml-1">4.8</span> {/* Placeholder data */}
+                    <span className="font-semibold ml-1">
+                      {stats.averageRating > 0 ? stats.averageRating.toFixed(1) : "N/A"}
+                    </span>
                   </div>
                 </div>
               </CardContent>
@@ -216,68 +222,56 @@ async function StaffDetailsContent({ staffId }: { staffId: string }) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center justify-between p-2 bg-blue-50 rounded">
-                  <div>
-                    <p className="font-medium text-sm">Hair Cut</p>
-                    <p className="text-xs text-gray-500">John Doe</p>
-                  </div>
-                  <span className="text-xs font-medium">10:00 AM</span>
-                </div>
-                <div className="flex items-center justify-between p-2 bg-green-50 rounded">
-                  <div>
-                    <p className="font-medium text-sm">Hair Color</p>
-                    <p className="text-xs text-gray-500">Jane Smith</p>
-                  </div>
-                  <span className="text-xs font-medium">2:00 PM</span>
-                </div>
-                <div className="flex items-center justify-between p-2 bg-purple-50 rounded">
-                  <div>
-                    <p className="font-medium text-sm">Facial</p>
-                    <p className="text-xs text-gray-500">Alice Johnson</p>
-                  </div>
-                  <span className="text-xs font-medium">4:30 PM</span>
-                </div>
+                {schedule.length > 0 ? (
+                  schedule.map((booking) => {
+                    // Extract time portion if it's a full ISO string, or use as-is if it's already a time string
+                    const displayTime = booking.start_time 
+                      ? (booking.start_time.includes('T') 
+                          ? new Date(booking.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          : booking.start_time.substring(0, 5)) // assumes 'HH:MM:SS' format from DB
+                      : "Time N/A"
+
+                    return (
+                      <div key={booking.id} className="flex items-center justify-between p-2 bg-blue-50 rounded">
+                        <div>
+                          <p className="font-medium text-sm">{booking.service_name}</p>
+                          <p className="text-xs text-gray-500">{booking.customer_name}</p>
+                        </div>
+                        <span className="text-xs font-medium">{displayTime}</span>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <p className="text-sm text-gray-500 text-center py-2">No bookings for today.</p>
+                )}
               </CardContent>
             </Card>
 
             {/* Performance */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Award className="h-5 w-5 mr-2" />
-                  Performance
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>Customer Satisfaction</span>
-                    <span>96%</span>
+            {stats.averageRating > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Award className="h-5 w-5 mr-2" />
+                    Performance
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span>Customer Satisfaction</span>
+                      <span>{Math.round((stats.averageRating / 5) * 100)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-green-500 h-2 rounded-full" 
+                        style={{ width: `${Math.round((stats.averageRating / 5) * 100)}%` }}
+                      ></div>
+                    </div>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-green-500 h-2 rounded-full" style={{ width: "96%" }}></div>
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>Monthly Target</span>
-                    <span>78%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-blue-500 h-2 rounded-full" style={{ width: "78%" }}></div>
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>Punctuality</span>
-                    <span>92%</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div className="bg-yellow-500 h-2 rounded-full" style={{ width: "92%" }}></div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>

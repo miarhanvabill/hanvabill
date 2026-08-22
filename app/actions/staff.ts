@@ -379,3 +379,76 @@ export async function getStaffPerformance(staffId: number, startDate: string, en
     }
   })
 }
+
+export async function getStaffProfileStats(staffId: number) {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const currentMonth = new Date().toISOString().slice(0, 7) // YYYY-MM
+      
+      const [statsResult, reviewsResult] = await Promise.all([
+        sql`
+          SELECT 
+            COUNT(*) as total_bookings,
+            SUM(CASE WHEN TO_CHAR(booking_date, 'YYYY-MM') = ${currentMonth} THEN 1 ELSE 0 END) as month_bookings,
+            SUM(total_amount) as total_revenue
+          FROM bookings
+          WHERE staff_id = ${staffId} AND tenant_id = ${tenantId} AND status IN ('completed', 'confirmed')
+        `,
+        sql`
+          SELECT AVG(rating) as average_rating
+          FROM reviews
+          WHERE staff_id = ${staffId} AND tenant_id = ${tenantId}
+        `
+      ])
+
+      const totalBookings = Number(statsResult[0]?.total_bookings) || 0;
+      const monthBookings = Number(statsResult[0]?.month_bookings) || 0;
+      const totalRevenue = Number(statsResult[0]?.total_revenue) || 0;
+      const averageRating = Number(reviewsResult[0]?.average_rating) || 0;
+
+      return {
+        totalBookings,
+        monthBookings,
+        totalRevenue,
+        averageRating
+      }
+    } catch (error) {
+      console.error("[v0] Error fetching staff profile stats:", error)
+      return {
+        totalBookings: 0,
+        monthBookings: 0,
+        totalRevenue: 0,
+        averageRating: 0
+      }
+    }
+  })
+}
+
+export async function getStaffTodaysSchedule(staffId: number) {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const result = await sql`
+        SELECT 
+          b.id,
+          b.booking_time as start_time,
+          b.service_name,
+          c.full_name as customer_name
+        FROM bookings b
+        LEFT JOIN customers c ON b.customer_id = c.id
+        WHERE b.staff_id = ${staffId} 
+          AND b.booking_date = CURRENT_DATE
+          AND b.tenant_id = ${tenantId}
+        ORDER BY b.booking_time ASC
+      `
+      return result.map(row => ({
+        id: row.id,
+        start_time: row.start_time,
+        service_name: row.service_name || "Service",
+        customer_name: row.customer_name || "Unknown Customer"
+      }))
+    } catch (error) {
+      console.error("[v0] Error fetching staff today schedule:", error)
+      return []
+    }
+  })
+}
