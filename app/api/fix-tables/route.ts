@@ -7,6 +7,11 @@ export async function GET(request: Request) {
   try {
     const results = [];
     
+    // Find the first available tenant ID to use as default for existing rows
+    const tenantResult = await sql`SELECT id FROM tenants LIMIT 1`;
+    const defaultTenantId = tenantResult.length > 0 ? tenantResult[0].id : 1;
+    results.push(`Using default_tenant_id: ${defaultTenantId}`);
+
     // Commission Profiles
     await sql`
       CREATE TABLE IF NOT EXISTS commission_profiles (
@@ -20,13 +25,13 @@ export async function GET(request: Request) {
           applies_to VARCHAR(20) NOT NULL CHECK (applies_to IN ('services', 'products', 'both')),
           is_active BOOLEAN DEFAULT true,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          tenant_id INTEGER REFERENCES tenants(id) DEFAULT 1
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `;
     results.push("commission_profiles ensured");
 
-    await sql`ALTER TABLE commission_profiles ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT 1`;
+    await sql`ALTER TABLE commission_profiles ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_commission_profiles_tenant_id ON commission_profiles(tenant_id)`;
 
     await sql`
       CREATE TABLE IF NOT EXISTS commission_tiers (
@@ -35,13 +40,12 @@ export async function GET(request: Request) {
           min_amount NUMERIC(10,2) NOT NULL,
           max_amount NUMERIC(10,2) NOT NULL,
           rate NUMERIC(5,2) NOT NULL,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          tenant_id INTEGER REFERENCES tenants(id) DEFAULT 1
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `;
     results.push("commission_tiers ensured");
     
-    await sql`ALTER TABLE commission_tiers ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT 1`;
+    await sql`ALTER TABLE commission_tiers ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`;
 
     // Try adding commission_profile_id to staff
     try {
@@ -65,13 +69,13 @@ export async function GET(request: Request) {
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           created_by INTEGER REFERENCES staff(id),
-          updated_by INTEGER REFERENCES staff(id),
-          tenant_id INTEGER REFERENCES tenants(id) DEFAULT 1
+          updated_by INTEGER REFERENCES staff(id)
       )
     `;
     results.push("auto_consumption_rules ensured");
     
-    await sql`ALTER TABLE auto_consumption_rules ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT 1`;
+    await sql`ALTER TABLE auto_consumption_rules ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_auto_consumption_rules_tenant_id ON auto_consumption_rules(tenant_id)`;
 
     // Auto Consumption Logs
     await sql`
@@ -87,13 +91,12 @@ export async function GET(request: Request) {
           triggered_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           processed_at TIMESTAMP,
           error_message TEXT,
-          created_by INTEGER REFERENCES staff(id) ON DELETE SET NULL,
-          tenant_id INTEGER REFERENCES tenants(id) DEFAULT 1
+          created_by INTEGER REFERENCES staff(id) ON DELETE SET NULL
       )
     `;
     results.push("auto_consumption_logs ensured");
     
-    await sql`ALTER TABLE auto_consumption_logs ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT 1`;
+    await sql`ALTER TABLE auto_consumption_logs ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`;
 
     // Auto Consumption Stats
     await sql`
@@ -107,13 +110,12 @@ export async function GET(request: Request) {
           avg_consumption_per_service DECIMAL(10,2) DEFAULT 0,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          tenant_id INTEGER REFERENCES tenants(id) DEFAULT 1,
           UNIQUE(rule_id, date)
       )
     `;
     results.push("auto_consumption_stats ensured");
 
-    await sql`ALTER TABLE auto_consumption_stats ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT 1`;
+    await sql`ALTER TABLE auto_consumption_stats ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`;
 
     // Staff Goals
     await sql`
@@ -132,13 +134,13 @@ export async function GET(request: Request) {
           achievement_date TIMESTAMP,
           notes TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          tenant_id INTEGER REFERENCES tenants(id) DEFAULT 1
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
     results.push("staff_goals ensured");
     
-    await sql`ALTER TABLE staff_goals ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT 1`;
+    await sql`ALTER TABLE staff_goals ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`;
+    await sql`CREATE INDEX IF NOT EXISTS idx_staff_goals_tenant_id ON staff_goals(tenant_id)`;
 
     // Business Resources
     await sql`
@@ -151,12 +153,12 @@ export async function GET(request: Request) {
           status VARCHAR(20) DEFAULT 'available',
           is_active BOOLEAN DEFAULT true,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          tenant_id INTEGER REFERENCES tenants(id) DEFAULT 1
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `;
     results.push("business_resources ensured");
-    await sql`ALTER TABLE business_resources ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT 1`;
+    
+    await sql`ALTER TABLE business_resources ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`;
 
     return NextResponse.json({ success: true, results });
   } catch (error: any) {
