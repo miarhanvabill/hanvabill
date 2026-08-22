@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useState, use, useMemo, useRef } from "react"
 import { format, addDays, startOfToday } from "date-fns"
-import { Calendar, Clock, CheckCircle, ChevronLeft, ChevronRight, MapPin, Search, Phone, Share2, X, ShoppingCart, Facebook, Instagram, Twitter, Globe, Send } from "lucide-react"
+import { Calendar, Clock, CheckCircle, ChevronLeft, ChevronRight, MapPin, Search, Phone, Share2, X, ShoppingCart, Facebook, Instagram, Twitter, MessageCircle, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -266,9 +266,17 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const totalDuration = selectedServices.reduce((sum, s) => sum + Number(s.duration), 0);
   
   const isOpen = () => {
-    if (!business?.timings) return true; // Default open
-    const currentHour = new Date().getHours();
-    return currentHour >= 9 && currentHour <= 21; // Mock logic since we don't know the exact schema
+    if (!business) return true;
+    const currentDay = format(new Date(), 'EEEE').toLowerCase();
+    if (business.workingDays && Array.isArray(business.workingDays) && !business.workingDays.includes(currentDay)) return false;
+    
+    if (business.openTime && business.closeTime) {
+       const currentHour = new Date().getHours();
+       const openH = parseInt(business.openTime.split(':')[0] || "9");
+       const closeH = parseInt(business.closeTime.split(':')[0] || "20");
+       return currentHour >= openH && currentHour < closeH;
+    }
+    return true;
   }
   
   const currentDayName = format(new Date(), 'EEEE'); // Dynamically get today's name (e.g. Saturday)
@@ -347,9 +355,9 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                           <Twitter className="w-4 h-4" />
                         </a>
                       )}
-                      {business.socials.google && (
-                        <a href={business.socials.google} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-red-500">
-                          <Globe className="w-4 h-4" />
+                      {business.socials.whatsapp && (
+                        <a href={business.socials.whatsapp} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-red-500">
+                          <MessageCircle className="w-4 h-4" />
                         </a>
                       )}
                     </div>

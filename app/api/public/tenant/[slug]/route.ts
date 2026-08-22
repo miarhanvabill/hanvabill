@@ -37,29 +37,46 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
       address: settings["profile.address"] || "",
       phone: settings["profile.contactNumber"] || "",
       currency: settings["financial.currencySymbol"] || "₹",
+      openTime: settings["business.openTime"] || "09:00",
+      closeTime: settings["business.closeTime"] || "20:00",
+      workingDays: settings["business.workingDays"] || ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+      socials: {
+        facebook: settings["profile.socialMedia.facebook"] || "",
+        instagram: settings["profile.socialMedia.instagram"] || "",
+        twitter: settings["profile.socialMedia.twitter"] || "",
+        whatsapp: settings["profile.socialMedia.whatsapp"] || ""
+      }
     };
 
-    
     // Fetch products
     const products = await sql`
-      SELECT id, name, description, price, stock_quantity as stock, category 
+      SELECT id, name, description, price, stock_quantity as stock, category_name as category 
       FROM products 
-      WHERE tenant_id = ${tenantId} AND is_active = true
-    `.catch(() => []);
+      WHERE tenant_id = ${tenantId} AND is_active = 'true'
+    `.catch((e) => {
+      console.error("Products error:", e);
+      return [];
+    });
 
     // Fetch packages
     const packages = await sql`
       SELECT id, name, description, package_price as price, original_price, validity_days 
-      FROM packages 
-      WHERE tenant_id = ${tenantId} AND is_active = true
-    `.catch(() => []);
+      FROM service_packages 
+      WHERE tenant_id = ${tenantId} AND is_active = 'true'
+    `.catch((e) => {
+      console.error("Packages error:", e);
+      return [];
+    });
 
     // Fetch memberships
     const memberships = await sql`
-      SELECT id, name, description, amount_paid as price, validity_days 
-      FROM memberships 
-      WHERE tenant_id = ${tenantId} AND is_active = true
-    `.catch(() => []);
+      SELECT id, name, description, price, duration_months as validity_days 
+      FROM membership_plans 
+      WHERE tenant_id = ${tenantId} AND status = 'active'
+    `.catch((e) => {
+      console.error("Memberships error:", e);
+      return [];
+    });
 
     // Get active services
     const services = await sql`
