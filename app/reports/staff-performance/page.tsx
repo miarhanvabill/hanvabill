@@ -114,7 +114,7 @@ export default function StaffPerformancePage() {
             </Card>
             <Card>
               <CardContent className="p-6 text-center">
-                <div className="text-2xl font-bold text-green-600">₹{totalRevenue.toLocaleString()}</div>
+                <div className="text-2xl font-bold text-green-600">₹{totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 <div className="text-sm text-gray-600">Total Revenue</div>
               </CardContent>
             </Card>

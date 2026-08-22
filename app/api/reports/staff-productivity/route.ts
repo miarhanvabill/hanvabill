@@ -28,12 +28,11 @@ export async function GET(request: Request) {
           COALESCE(s.role, 'Staff Member') as role,
           -- Calculate hours worked (assuming 8 hours per present day)
           COALESCE(
-            (SELECT COUNT(*) * 8 
-             FROM attendance a 
-             WHERE a.staff_id = s.id 
-             AND a.tenant_id = ${tenantId}
-             AND a.date >= ${startIso}
-             AND a.status = 'present'), 0
+            (SELECT COUNT(DISTINCT booking_date) * 8 
+             FROM bookings b_att 
+             WHERE b_att.staff_id = s.id 
+             AND b_att.tenant_id = ${tenantId}
+             AND b_att.booking_date >= ${startIso}), 0
           ) as hours_worked,
           -- Count services completed
           COUNT(bs.id) as services_completed,
@@ -44,14 +43,14 @@ export async function GET(request: Request) {
             ELSE 85 
           END as efficiency_rate,
           -- Average customer rating
-          COALESCE(AVG(r.rating), 4.5) as customer_rating,
+          COALESCE(AVG(r.rating), 5.0) as customer_rating,
           -- Revenue generated
           COALESCE(SUM(b.total_amount), 0) as revenue_generated,
           -- Productivity score (combination of efficiency, rating, and service count)
           CASE 
             WHEN COUNT(bs.id) > 0 THEN
               LEAST(100, (
-                (COALESCE(AVG(r.rating), 4.5) * 10) + 
+                (COALESCE(AVG(r.rating), 5.0) * 10) + 
                 (COUNT(bs.id) * 2) + 
                 (LEAST(100, COUNT(bs.id) * 100.0 / GREATEST(COUNT(b.id), 1)) * 0.5)
               ) / 2)

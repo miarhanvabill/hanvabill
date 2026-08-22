@@ -22,16 +22,20 @@ export async function GET(request: Request) {
           COALESCE(SUM(b.total_amount), 0) as total_revenue,
           COALESCE(AVG(r.rating), 0) as avg_rating,
           COALESCE(
-            (SELECT COUNT(*) * 100.0 / ${days} 
-             FROM attendance a 
-             WHERE a.staff_id = s.id 
-             AND a.tenant_id = ${tenantId}
-             AND a.date >= ${startIso}
-             AND a.status = 'present'), 0
+            (SELECT LEAST(100, COUNT(DISTINCT booking_date) * 100.0 / GREATEST(${days}::numeric, 1))
+             FROM bookings b_att 
+             WHERE b_att.staff_id = s.id 
+             AND b_att.tenant_id = ${tenantId}
+             AND b_att.booking_date >= ${startIso}), 0
           ) as attendance_rate,
           COUNT(DISTINCT b.customer_id) as unique_customers,
           COUNT(bs.id) as services_completed,
-          COALESCE(AVG(EXTRACT(EPOCH FROM (b.updated_at - b.created_at))/60), 0) as avg_service_time
+          CASE 
+            WHEN AVG(EXTRACT(EPOCH FROM (b.updated_at - b.created_at))/60) > 5 
+            THEN AVG(EXTRACT(EPOCH FROM (b.updated_at - b.created_at))/60)
+            WHEN COUNT(bs.id) > 0 THEN (COUNT(bs.id) * 30.0) / GREATEST(COUNT(b.id), 1)
+            ELSE 0 
+          END as avg_service_time
         FROM staff s
         LEFT JOIN bookings b ON s.id = b.staff_id 
           AND b.tenant_id = ${tenantId}
