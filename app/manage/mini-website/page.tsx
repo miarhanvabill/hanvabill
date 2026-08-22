@@ -1,17 +1,11 @@
 import { Suspense } from "react"
-import { getAuthTenant } from "@/lib/auth-server"
 import { getMiniWebsiteSettings, saveMiniWebsiteSettings } from "./actions"
 import MiniWebsiteForm from "./mini-website-form"
 
 export default async function MiniWebsitePage() {
-  const tenantKey = await getAuthTenant()
-  
-  if (!tenantKey) {
-    return <div>Unauthorized</div>
-  }
-  
-  const settingsResult = await getMiniWebsiteSettings(tenantKey)
-  const initialData = settingsResult.success ? settingsResult.data : null
+  const settingsResult = await getMiniWebsiteSettings()
+  // @ts-ignore
+  const initialData = settingsResult?.success ? settingsResult.data : null
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
@@ -27,7 +21,6 @@ export default async function MiniWebsitePage() {
         <MiniWebsiteForm 
           initialData={initialData} 
           saveAction={saveMiniWebsiteSettings}
-          tenantKey={tenantKey}
         />
       </Suspense>
     </div>

@@ -589,7 +589,7 @@ export default function UserManagementPage() {
       
       const tenantRolesResponse = await getTenantRoles();
       const tenantRolesData = tenantRolesResponse.success ? tenantRolesResponse.data || [] : [];
-      const mappedRoles: Role[] = tenantRolesData.map(tr => ({
+      const mappedRoles: Role[] = tenantRoles.map(tr => ({
         id: tr.id,
         name: tr.name,
         description: tr.description || "",
