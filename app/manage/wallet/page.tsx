@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "@/hooks/use-toast"
 import { Plus, Search, Wallet, TrendingUp, Users, Gift, Eye, History } from "lucide-react"
 import { formatCurrency } from "@/lib/currency"
-
+import { getCustomerWallets, getWalletTransactions, addWalletPoints } from "@/app/actions/wallet"
 interface WalletTransaction {
   id: string
   customerId: string
@@ -55,26 +55,15 @@ export default function WalletManagePage() {
 
   const fetchWalletData = useCallback(async () => {
     try {
-      const [walletsResponse, transactionsResponse] = await Promise.all([
-        fetch("/api/wallet"),
-        fetch("/api/wallet?type=transactions"),
+      const [walletsData, transactionsData] = await Promise.all([
+        getCustomerWallets(),
+        getWalletTransactions(),
       ])
 
-      if (walletsResponse.ok && transactionsResponse.ok) {
-        const walletsData = await walletsResponse.json()
-        const transactionsData = await transactionsResponse.json()
-
-        if (walletsData.success && transactionsData.success) {
-          setWallets(walletsData.wallets)
-          setTransactions(transactionsData.transactions)
-          setLastFetch(new Date())
-          setIsOnline(true)
-          return
-        }
-      }
-
-      // Fallback to mock data if API fails
-      throw new Error("API request failed")
+      setWallets(walletsData)
+      setTransactions(transactionsData)
+      setLastFetch(new Date())
+      setIsOnline(true)
     } catch (error) {
       console.error("Failed to fetch wallet data:", error)
       setIsOnline(false)
@@ -158,20 +147,12 @@ export default function WalletManagePage() {
     }
 
     try {
-      const response = await fetch("/api/wallet", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          customerId: selectedWallet.customerId,
-          points: Number(formData.points),
-          type: formData.type,
-          description: formData.description,
-        }),
-      })
-
-      const result = await response.json()
+      const result = await addWalletPoints(
+        selectedWallet.customerId,
+        Number(formData.points),
+        formData.type,
+        formData.description
+      )
 
       if (result.success) {
         // Refresh data
