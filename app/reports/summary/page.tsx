@@ -285,6 +285,9 @@ export default function SummaryPage() {
                 <CardTitle>Expense Categories</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                {summaryData.expenses.categories.length === 0 && (
+                  <p className="text-sm text-gray-500 py-4 text-center">No expenses recorded for this period.</p>
+                )}
                 {summaryData.expenses.categories.map((category, index) => (
                   <div key={index} className="space-y-2">
                     <div className="flex justify-between items-center">

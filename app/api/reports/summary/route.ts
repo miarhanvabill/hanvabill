@@ -25,61 +25,82 @@ export async function GET(request: Request) {
       }
       const startIso = startDate.toISOString().split("T")[0]
 
-      // Get revenue data
-      const revenueData = await sql`
+      // Get bookings & revenue data
+      const bookingData = await sql\`
         SELECT 
-          COALESCE(SUM(total_amount), 0) as total_revenue,
-          COUNT(*) as total_bookings
+          COUNT(*) as total_bookings,
+          COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_bookings,
+          COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_bookings,
+          COALESCE(SUM(CASE WHEN status IN ('completed', 'confirmed') THEN total_amount ELSE 0 END), 0) as total_revenue
         FROM bookings 
-        WHERE booking_date >= ${startIso}
-          AND tenant_id = ${tenantId}
-          AND status IN ('completed', 'confirmed')
-      `
+        WHERE booking_date >= \${startIso}
+          AND tenant_id = \${tenantId}
+      \`
 
       // Get customer data
-      const customerData = await sql`
+      const customerData = await sql\`
         SELECT 
           COUNT(*) as total_customers,
-          COUNT(CASE WHEN created_at >= ${startIso} THEN 1 END) as new_customers
+          COUNT(CASE WHEN created_at >= \${startIso} THEN 1 END) as new_customers
         FROM customers
-        WHERE tenant_id = ${tenantId}
-      `
+        WHERE tenant_id = \${tenantId}
+      \`
 
       // Get inventory data
-      const inventoryData = await sql`
+      const inventoryData = await sql\`
         SELECT 
           COUNT(*) as total_items,
           COUNT(CASE WHEN stock_quantity <= min_stock_level THEN 1 END) as low_stock,
           COUNT(CASE WHEN stock_quantity = 0 THEN 1 END) as out_of_stock,
           COALESCE(SUM(stock_quantity * COALESCE(price, 0)), 0) as total_value
         FROM products
-        WHERE is_active = true
-          AND tenant_id = ${tenantId}
-      `
+        WHERE is_active = 'true'
+          AND tenant_id = \${tenantId}
+      \`
 
-      // Calculate summary
-      const revenue = Number(revenueData[0]?.total_revenue) || 0
-      const expenses = revenue * 0.36 // Estimated 36% expense ratio
-      const grossProfit = revenue - expenses
-      const netProfit = grossProfit * 0.78 // After taxes and other deductions
+      // Get staff salary for expenses
+      const staffData = await sql\`
+        SELECT COALESCE(SUM(salary), 0) as total_salary
+        FROM staff
+        WHERE tenant_id = \${tenantId}
+      \`.catch(() => [{ total_salary: 0 }]);
+
+      // Calculations
+      const revenue = Number(bookingData[0]?.total_revenue) || 0;
+      const totalBookings = Number(bookingData[0]?.total_bookings) || 0;
+      const completedBookings = Number(bookingData[0]?.completed_bookings) || 0;
+      const cancelledBookings = Number(bookingData[0]?.cancelled_bookings) || 0;
+      const completionRate = totalBookings > 0 ? (completedBookings / totalBookings) * 100 : 0;
+
+      const totalCustomers = Number(customerData[0]?.total_customers) || 0;
+      const newCustomers = Number(customerData[0]?.new_customers) || 0;
+      const returningCustomers = totalCustomers > newCustomers ? totalCustomers - newCustomers : 0;
+      const retentionRate = totalCustomers > 0 ? (returningCustomers / totalCustomers) * 100 : 0;
+
+      // Expense & Profit calculation
+      // Since there is no expense module, we just use staff salaries.
+      const staffSalary = Number(staffData[0]?.total_salary) || 0;
+      const expenses = staffSalary;
+      const netProfit = revenue - expenses;
+      const profitMargin = revenue > 0 ? (netProfit / revenue) * 100 : 0;
 
       const summaryData = {
         revenue: {
           total: revenue,
-          growth: 12.5, // Mock growth percentage
+          growth: 0, // Need historical data to calculate actual growth
           trend: "up" as const,
         },
         bookings: {
-          total: Number(revenueData[0]?.total_bookings) || 0,
-          completed: Math.floor((Number(revenueData[0]?.total_bookings) || 0) * 0.93),
-          cancelled: Math.floor((Number(revenueData[0]?.total_bookings) || 0) * 0.07),
-          completion_rate: 93.3,
+          total: totalBookings,
+          completed: completedBookings,
+          cancelled: cancelledBookings,
+          completion_rate: parseFloat(completionRate.toFixed(1)),
         },
         customers: {
-          total: Number(customerData[0]?.total_customers) || 0,
-          new: Number(customerData[0]?.new_customers) || 0,
-          returning: (Number(customerData[0]?.total_customers) || 0) - (Number(customerData[0]?.new_customers) || 0),
-          retention_rate: 84.0,
+          total: totalCustomers,
+          new: newCustomers,
+          returning: returningCustomers,
+          retention_rate: parseFloat(retentionRate.toFixed(1)),
         },
         inventory: {
           total_items: Number(inventoryData[0]?.total_items) || 0,
@@ -89,17 +110,14 @@ export async function GET(request: Request) {
         },
         expenses: {
           total: expenses,
-          categories: [
-            { name: "Staff Salaries", amount: expenses * 0.556, percentage: 55.6 },
-            { name: "Inventory", amount: expenses * 0.267, percentage: 26.7 },
-            { name: "Utilities", amount: expenses * 0.111, percentage: 11.1 },
-            { name: "Marketing", amount: expenses * 0.067, percentage: 6.7 },
-          ],
+          categories: expenses > 0 ? [
+            { name: "Staff Salaries", amount: staffSalary, percentage: 100 },
+          ] : [],
         },
         profit: {
-          gross: grossProfit,
+          gross: revenue, // Without COGS, gross is just revenue
           net: netProfit,
-          margin: revenue > 0 ? (netProfit / revenue) * 100 : 0,
+          margin: parseFloat(profitMargin.toFixed(1)),
         },
       }
 
