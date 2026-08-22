@@ -78,6 +78,17 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
       return [];
     });
 
+    
+    // Fetch staff
+    const staff = await sql`
+      SELECT id, name, role 
+      FROM staff 
+      WHERE tenant_id = ${tenantId} AND status = 'active'
+    `.catch((e) => {
+      console.error("Staff error:", e);
+      return [];
+    });
+
     // Get active services
     const services = await sql`
       SELECT id, name, description, duration_minutes as duration, price, category 
@@ -93,7 +104,8 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
       services,
       products,
       packages,
-      memberships
+      memberships,
+      staff
     });
   } catch (error) {
     console.error("Error fetching public tenant info:", error);

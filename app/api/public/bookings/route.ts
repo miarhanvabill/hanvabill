@@ -4,7 +4,7 @@ import { sql } from "@/lib/db";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { tenantId, service_ids, date, time, customer } = body;
+    const { tenantId, service_ids, date, time, customer, staff_id } = body;
     // Support legacy single service_id for safety
     const servicesToBook = service_ids || (body.service_id ? [body.service_id] : []);
 
@@ -49,9 +49,9 @@ export async function POST(req: Request) {
     // Create booking
     const newBooking = await sql`
       INSERT INTO bookings (
-        tenant_id, booking_number, customer_id, booking_date, booking_time, status, total_amount, notes
+        tenant_id, booking_number, customer_id, staff_id, booking_date, booking_time, status, total_amount, notes
       ) VALUES (
-        ${tenantId}, ${bookingNumber}, ${customerId}, ${date}, ${time}, 'pending', ${amount}, 'Online Booking'
+        ${tenantId}, ${bookingNumber}, ${customerId}, ${staff_id || null}, ${date}, ${time}, 'pending', ${amount}, 'Online Booking'
       )
       RETURNING id, booking_date, booking_time
     `;

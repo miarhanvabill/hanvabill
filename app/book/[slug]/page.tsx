@@ -40,6 +40,12 @@ interface Membership {
   price: number
 }
 
+interface Staff {
+  id: number
+  name: string
+  role: string
+}
+
 const getCategoryFallbackImage = (categoryName: string) => {
   const name = (categoryName || '').toLowerCase();
   if (name.includes('hair') || name.includes('cut') || name.includes('bangs')) return 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=400&q=80';
@@ -81,11 +87,13 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [products, setProducts] = useState<Product[]>([])
   const [packages, setPackages] = useState<Package[]>([])
   const [memberships, setMemberships] = useState<Membership[]>([])
+  const [staffList, setStaffList] = useState<Staff[]>([])
   
   const [error, setError] = useState<string | null>(null)
 
   const [step, setStep] = useState(1) // 1: Main, 2: DateTime, 3: Details, 4: Success
   const [selectedServices, setSelectedServices] = useState<Service[]>([])
+  const [selectedStaff, setSelectedStaff] = useState<Staff | 'any' | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
@@ -117,6 +125,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
         setProducts(data.products || [])
         setPackages(data.packages || [])
         setMemberships(data.memberships || [])
+        setStaffList(data.staff || [])
       } catch (err: any) {
         setError(err.message || "Failed to load booking page")
       } finally {
@@ -212,6 +221,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
           service_ids: selectedServices.map(s => s.id),
           date: format(selectedDate, "yyyy-MM-dd"),
           time: selectedTime,
+          staff_id: selectedStaff === 'any' ? null : selectedStaff?.id,
           customer: customerForm
         })
       })
@@ -219,7 +229,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to book")
       
-      setStep(4)
+      setStep(5)
     } catch (err: any) {
       alert(err.message || "Something went wrong. Please try again.")
     } finally {
@@ -664,12 +674,77 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
         </div>
       )}
 
-      {/* Step 2: Date & Time */}
+      
+      {/* Step 2: Select Staff */}
       {step === 2 && (
+        <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen bg-white">
+          <div className="flex items-center gap-4 mb-8 pt-4">
+            <Button variant="ghost" size="icon" onClick={() => setStep(1)} className="rounded-full bg-gray-100 hover:bg-gray-200">
+              <ChevronLeft className="w-5 h-5" />
+            </Button>
+            <h2 className="text-2xl font-bold">Select Professional</h2>
+          </div>
+          
+          <div className="space-y-4 pb-32">
+            <button
+              onClick={() => setSelectedStaff('any')}
+              className={`w-full p-4 rounded-2xl border flex items-center gap-4 transition-all ${
+                selectedStaff === 'any' 
+                  ? 'bg-black border-black text-white shadow-md' 
+                  : 'bg-white border-gray-200 text-gray-900 hover:border-gray-300'
+              }`}
+            >
+              <div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold ${selectedStaff === 'any' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                <CheckCircle className="w-6 h-6" />
+              </div>
+              <div className="text-left flex-1">
+                <h3 className="font-bold text-lg">Any Professional</h3>
+                <p className={`text-sm ${selectedStaff === 'any' ? 'text-gray-300' : 'text-gray-500'}`}>Maximum availability</p>
+              </div>
+            </button>
+            
+            {staffList.map(staff => (
+              <button
+                key={staff.id}
+                onClick={() => setSelectedStaff(staff)}
+                className={`w-full p-4 rounded-2xl border flex items-center gap-4 transition-all ${
+                  selectedStaff !== 'any' && selectedStaff?.id === staff.id 
+                    ? 'bg-black border-black text-white shadow-md' 
+                    : 'bg-white border-gray-200 text-gray-900 hover:border-gray-300'
+                }`}
+              >
+                <div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold uppercase ${selectedStaff !== 'any' && selectedStaff?.id === staff.id ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                  {staff.name.charAt(0)}
+                </div>
+                <div className="text-left flex-1">
+                  <h3 className="font-bold text-lg">{staff.name}</h3>
+                  <p className={`text-sm ${selectedStaff !== 'any' && selectedStaff?.id === staff.id ? 'text-gray-300' : 'text-gray-500'}`}>{staff.role || 'Professional'}</p>
+                </div>
+                {selectedStaff !== 'any' && selectedStaff?.id === staff.id && <CheckCircle className="w-6 h-6" />}
+              </button>
+            ))}
+          </div>
+
+          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 z-30">
+            <div className="max-w-xl mx-auto">
+              <Button 
+                onClick={() => setStep(3)} 
+                disabled={!selectedStaff} 
+                className="w-full bg-black text-white hover:bg-gray-800 rounded-2xl h-14 text-base font-bold shadow-xl disabled:bg-gray-200 disabled:text-gray-400"
+              >
+                Continue to Date & Time
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Date & Time */}
+      {step === 3 && (
         <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen bg-white">
           {/* ... (Same as before) ... */}
           <div className="flex items-center gap-4 mb-8 pt-4">
-            <Button variant="ghost" size="icon" onClick={() => setStep(1)} className="rounded-full bg-gray-100 hover:bg-gray-200">
+            <Button variant="ghost" size="icon" onClick={() => setStep(2)} className="rounded-full bg-gray-100 hover:bg-gray-200">
               <ChevronLeft className="w-5 h-5" />
             </Button>
             <h2 className="text-2xl font-bold">Select Date & Time</h2>
@@ -732,7 +807,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
           <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 z-30">
             <div className="max-w-xl mx-auto">
               <Button 
-                onClick={() => setStep(3)} 
+                onClick={() => setStep(4)} 
                 disabled={!selectedDate || !selectedTime} 
                 className="w-full bg-black text-white hover:bg-gray-800 rounded-2xl h-14 text-base font-bold shadow-xl disabled:bg-gray-200 disabled:text-gray-400"
               >
@@ -744,11 +819,11 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
       )}
 
       {/* Step 3: Details */}
-      {step === 3 && (
+      {step === 4 && (
         <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen bg-white pb-32">
           {/* ... (Same as before) ... */}
           <div className="flex items-center gap-4 mb-8 pt-4">
-            <Button variant="ghost" size="icon" onClick={() => setStep(2)} className="rounded-full bg-gray-100 hover:bg-gray-200">
+            <Button variant="ghost" size="icon" onClick={() => setStep(3)} className="rounded-full bg-gray-100 hover:bg-gray-200">
               <ChevronLeft className="w-5 h-5" />
             </Button>
             <h2 className="text-2xl font-bold">Your Details</h2>
@@ -763,6 +838,9 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                     <Calendar className="w-3.5 h-3.5" />
                     {selectedDate && format(selectedDate, "EEE, MMM d")} at {selectedTime}
                   </p>
+                  {selectedStaff !== 'any' && selectedStaff && (
+                    <p className="text-sm text-gray-500 font-medium mt-1">Professional: {selectedStaff.name}</p>
+                  )}
                 </div>
                 <div className="text-right">
                   <div className="font-black text-lg text-red-500">{business.currency}{totalAmount}</div>
@@ -839,7 +917,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
       )}
 
       {/* Step 4: Success */}
-      {step === 4 && (
+      {step === 5 && (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
           {/* ... (Same as before) ... */}
           <Card className="w-full max-w-md border-0 shadow-2xl rounded-3xl overflow-hidden bg-white">
