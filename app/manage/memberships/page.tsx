@@ -534,7 +534,7 @@ export default function MembershipsPage() {
                               />
                             </div>
                             <div>
-                              <Label htmlFor="price">Price ($)</Label>
+                              <Label htmlFor="price">Price (₹)</Label>
                               <Input
                                 id="price"
                                 type="number"
@@ -947,7 +947,7 @@ export default function MembershipsPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="edit_price">Price ($)</Label>
+                <Label htmlFor="edit_price">Price (₹)</Label>
                 <Input
                   id="edit_price"
                   type="number"

@@ -662,7 +662,7 @@ export default function StaffRevenueGoalsPage() {
                       </div>
 
                       <div>
-                        <Label htmlFor="target_value">Target Value ($)</Label>
+                        <Label htmlFor="target_value">Target Value (₹)</Label>
                         <Input
                           id="target_value"
                           type="number"
@@ -696,7 +696,7 @@ export default function StaffRevenueGoalsPage() {
                       </div>
 
                       <div>
-                        <Label htmlFor="reward_amount">Reward Amount ($)</Label>
+                        <Label htmlFor="reward_amount">Reward Amount (₹)</Label>
                         <Input
                           id="reward_amount"
                           type="number"
@@ -774,12 +774,12 @@ export default function StaffRevenueGoalsPage() {
                           </TableCell>
                           <TableCell>
                             {goal.goal_type === "revenue"
-                              ? `$${goal.target_value.toLocaleString()}`
+                              ? `₹${goal.target_value.toLocaleString()}`
                               : goal.target_value.toString()}
                           </TableCell>
                           <TableCell>
                             {goal.goal_type === "revenue"
-                              ? `$${goal.current_value.toLocaleString()}`
+                              ? `₹${goal.current_value.toLocaleString()}`
                               : goal.current_value.toString()}
                           </TableCell>
                           <TableCell>
@@ -890,7 +890,7 @@ export default function StaffRevenueGoalsPage() {
             </div>
 
             <div>
-              <Label htmlFor="edit_target_value">Target Value ($)</Label>
+              <Label htmlFor="edit_target_value">Target Value (₹)</Label>
               <Input
                 id="edit_target_value"
                 type="number"
@@ -922,7 +922,7 @@ export default function StaffRevenueGoalsPage() {
             </div>
 
             <div>
-              <Label htmlFor="edit_reward_amount">Reward Amount ($)</Label>
+              <Label htmlFor="edit_reward_amount">Reward Amount (₹)</Label>
               <Input
                 id="edit_reward_amount"
                 type="number"

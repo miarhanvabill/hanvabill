@@ -416,7 +416,7 @@ export default function CommissionProfilesPage() {
                               <div key={index} className="flex items-center gap-3 p-3 border rounded-lg">
                                 <div className="flex-1 grid grid-cols-3 gap-3">
                                   <div>
-                                    <Label className="text-xs">Min Amount ($)</Label>
+                                    <Label className="text-xs">Min Amount (₹)</Label>
                                     <Input
                                       type="number"
                                       value={tier.min_amount}
@@ -427,7 +427,7 @@ export default function CommissionProfilesPage() {
                                     />
                                   </div>
                                   <div>
-                                    <Label className="text-xs">Max Amount ($)</Label>
+                                    <Label className="text-xs">Max Amount (₹)</Label>
                                     <Input
                                       type="number"
                                       value={tier.max_amount}
