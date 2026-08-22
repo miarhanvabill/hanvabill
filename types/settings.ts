@@ -1,40 +1,14 @@
 export interface BusinessSettings {
-  id: string
-  name: string
-  address: string
-  phone: string
-  email: string
-  logo?: string
-  gstin?: string
-  pan?: string
-  sacCode?: string
-  placeOfSupply: string
-  gstRate: number
-  // Social media links
-  instagram?: string
-  facebook?: string
-  // Appointment booking
-  appointmentLink?: string
-  // Referral settings
-  referralCashbackPercentage: number
-  // Other business settings
-  currency: string
-  timezone: string
-  businessHours: {
-    [key: string]: {
-      open: string
-      close: string
-      isOpen: boolean
-    }
-  }
-  whatsapp?: {
-    enabled?: boolean
-    userid?: string
-    password?: string
-    wabaNumber?: string
-    autoInvoice?: boolean
-    autoReminders?: boolean
-  }
+  profile?: any
+  business?: any
+  notifications?: any
+  payments?: any
+  whatsapp?: any
+  security?: any
+  appearance?: any
+  integrations?: any
+  system?: any
+  [key: string]: any
 }
 
 export interface NotificationSettings {

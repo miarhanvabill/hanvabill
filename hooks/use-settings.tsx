@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, useContext, createContext, type ReactNode } from "react"
-import { getBusinessSettings, type BusinessSettings } from "@/app/actions/settings"
+import { getBusinessSettings } from "@/app/actions/settings"
+import type { BusinessSettings } from "@/types/settings"
 
 interface SettingsContextType {
   settings: BusinessSettings | null
