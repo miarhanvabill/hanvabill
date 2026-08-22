@@ -375,7 +375,7 @@ export default function CommissionProfilesPage() {
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <Label htmlFor="base_rate">
-                              {formData.commission_type === "percentage" ? "Commission Rate (%)" : "Fixed Amount ($)"}
+                              {formData.commission_type === "percentage" ? "Commission Rate (%)" : "Fixed Amount (₹)"}
                             </Label>
                             <Input
                               id="base_rate"
@@ -388,7 +388,7 @@ export default function CommissionProfilesPage() {
                             />
                           </div>
                           <div>
-                            <Label htmlFor="min_threshold">Minimum Threshold ($)</Label>
+                            <Label htmlFor="min_threshold">Minimum Threshold (₹)</Label>
                             <Input
                               id="min_threshold"
                               type="number"
@@ -540,7 +540,7 @@ export default function CommissionProfilesPage() {
                         </TableCell>
                         <TableCell>
                           {profile.commission_type === "percentage" && `${profile.base_rate}%`}
-                          {profile.commission_type === "fixed" && `$${profile.base_rate}`}
+                          {profile.commission_type === "fixed" && `₹${profile.base_rate}`}
                           {profile.commission_type === "tiered" && "Tiered Structure"}
                         </TableCell>
                         <TableCell>
@@ -622,7 +622,7 @@ export default function CommissionProfilesPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="edit_base_rate">
-                    {formData.commission_type === "percentage" ? "Commission Rate (%)" : "Fixed Amount ($)"}
+                    {formData.commission_type === "percentage" ? "Commission Rate (%)" : "Fixed Amount (₹)"}
                   </Label>
                   <Input
                     id="edit_base_rate"
@@ -633,7 +633,7 @@ export default function CommissionProfilesPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="edit_min_threshold">Minimum Threshold ($)</Label>
+                  <Label htmlFor="edit_min_threshold">Minimum Threshold (₹)</Label>
                   <Input
                     id="edit_min_threshold"
                     type="number"

@@ -103,7 +103,7 @@ export async function createCommissionProfile(data: Omit<CommissionProfile, "id"
                   is_active, created_at::text
       `
 
-      const profile = result.rows[0]
+      const profile = result[0]
       const formattedProfile = {
         ...profile,
         base_rate: Number(profile.base_rate),
@@ -147,11 +147,11 @@ export async function updateCommissionProfile(id: string, data: Partial<Commissi
                   is_active, created_at::text
       `
 
-      if (result.rows.length === 0) {
+      if (result.length === 0) {
         return { success: false, message: "Commission profile not found" }
       }
 
-      const profile = result.rows[0]
+      const profile = result[0]
       const formattedProfile = {
         ...profile,
         base_rate: Number(profile.base_rate),
@@ -197,7 +197,7 @@ export async function deleteCommissionProfile(id: string) {
         RETURNING id
       `
 
-      if (result.rows.length === 0) {
+      if (result.length === 0) {
         return { success: false, message: "Commission profile not found" }
       }
 
