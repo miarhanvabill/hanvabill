@@ -101,7 +101,11 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     <div className="min-h-screen bg-slate-50 py-12 print:py-0 print:bg-white">
       <div className="max-w-4xl mx-auto px-4 print:px-0 print:max-w-none" id="invoice-template-wrapper">
         <InvoiceTemplate data={data} className="bg-white shadow-xl mx-auto print:shadow-none" />
-        <ReviewWidget tenantId={inv.tenant_id} bookingId={inv.booking_id} />
+        <ReviewWidget 
+          tenantId={inv.tenant_id} 
+          bookingId={inv.booking_id} 
+          gmbUrl={bizProfile.googleMyBusinessUrl} 
+        />
       </div>
     </div>
   )

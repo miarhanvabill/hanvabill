@@ -183,6 +183,16 @@ export function StoreSettingsClient({ initialSettings }: { initialSettings: any 
                 placeholder="https://www.yoursalon.com"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="gmbUrl">Google My Business Review URL</Label>
+              <Input
+                id="gmbUrl"
+                type="url"
+                value={profile.googleMyBusinessUrl || ""}
+                onChange={(e) => handleProfileChange("googleMyBusinessUrl", e.target.value)}
+                placeholder="https://g.page/r/.../review"
+              />
+            </div>
           </CardContent>
           <CardFooter>
             <Button onClick={handleSaveProfile} disabled={isSaving}>
