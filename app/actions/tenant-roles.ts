@@ -14,7 +14,7 @@ export interface TenantRole {
 }
 
 export async function getTenantRoles(): Promise<{ success: boolean; data?: any[]; error?: string }> {
-  const action = withTenantAuth(async ({ sql, tenantId }) => {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       // First ensure default roles exist
       const checkRoles = await sql`SELECT id FROM tenant_roles WHERE tenant_id = ${tenantId}`
@@ -72,30 +72,28 @@ export async function getTenantRoles(): Promise<{ success: boolean; data?: any[]
       
       return { success: true, data: roles }
     } catch (error: any) {
-      console.error("Error fetching roles:", error)
+      console.error("Error fetching roles:", error.message)
       return { success: false, error: error.message }
     }
   });
-  return await action();
 }
 
 export async function getTenantPermissions(): Promise<{ success: boolean; data?: any[]; error?: string }> {
-  const action = withTenantAuth(async ({ sql }) => {
+  return await withTenantAuth(async ({ sql }) => {
     try {
       const permissions = await sql`SELECT id, name, description, category, level FROM tenant_permissions ORDER BY category, id`
       return { success: true, data: permissions }
     } catch (error: any) {
-      console.error("Error fetching permissions:", error)
+      console.error("Error fetching permissions:", error.message)
       return { success: false, error: error.message }
     }
   });
-  return await action();
 }
 
 export async function createTenantRole(data: any): Promise<{ success: boolean; error?: string }> {
-  const action = withTenantAuth(async ({ sql, tenantId }, roleData) => {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const { name, description, color, permissions } = roleData
+      const { name, description, color, permissions } = data
       
       const res = await sql`
         INSERT INTO tenant_roles (tenant_id, name, description, color, is_system) 
@@ -112,17 +110,16 @@ export async function createTenantRole(data: any): Promise<{ success: boolean; e
       revalidatePath("/user-management")
       return { success: true }
     } catch (error: any) {
-      console.error("Error creating role:", error)
+      console.error("Error creating role:", error.message)
       return { success: false, error: error.message }
     }
   });
-  return await action(data);
 }
 
 export async function updateTenantRole(id: string, data: any): Promise<{ success: boolean; error?: string }> {
-  const action = withTenantAuth(async ({ sql, tenantId }, roleData) => {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const { name, description, color, permissions } = roleData
+      const { name, description, color, permissions } = data
       
       const check = await sql`SELECT is_system FROM tenant_roles WHERE id = ${id} AND tenant_id = ${tenantId}`
       if (check.length > 0 && check[0].is_system) {
@@ -150,31 +147,29 @@ export async function updateTenantRole(id: string, data: any): Promise<{ success
       revalidatePath("/user-management")
       return { success: true }
     } catch (error: any) {
-      console.error("Error updating role:", error)
+      console.error("Error updating role:", error.message)
       return { success: false, error: error.message }
     }
   });
-  return await action(data);
 }
 
 export async function deleteTenantRole(id: string): Promise<{ success: boolean; error?: string }> {
-  const action = withTenantAuth(async ({ sql, tenantId }, roleId) => {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const check = await sql`SELECT is_system FROM tenant_roles WHERE id = ${roleId} AND tenant_id = ${tenantId}`
+      const check = await sql`SELECT is_system FROM tenant_roles WHERE id = ${id} AND tenant_id = ${tenantId}`
       if (check.length === 0) return { success: false, error: "Role not found" }
       if (check[0].is_system) return { success: false, error: "Cannot delete system roles" }
       
-      const users = await sql`SELECT id FROM tenant_users WHERE role_id::text = ${roleId}`
+      const users = await sql`SELECT id FROM tenant_users WHERE role_id::text = ${id}`
       if (users.length > 0) return { success: false, error: "Cannot delete role while users are assigned to it" }
       
-      await sql`DELETE FROM tenant_roles WHERE id = ${roleId} AND tenant_id = ${tenantId}`
+      await sql`DELETE FROM tenant_roles WHERE id = ${id} AND tenant_id = ${tenantId}`
       
       revalidatePath("/user-management")
       return { success: true }
     } catch (error: any) {
-      console.error("Error deleting role:", error)
+      console.error("Error deleting role:", error.message)
       return { success: false, error: error.message }
     }
   });
-  return await action(id);
 }

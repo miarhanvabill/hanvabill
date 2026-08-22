@@ -18,7 +18,7 @@ export interface TenantUser {
 }
 
 export async function getTenantUsers(): Promise<TenantUser[]> {
-  const action = withTenantAuth(async ({ sql, tenantId }) => {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
     return await cacheFetch(`tenant_users:${tenantId}`, async () => {
       try {
         const users = await sql`
@@ -44,7 +44,6 @@ export async function getTenantUsers(): Promise<TenantUser[]> {
       }
     })
   });
-  return await action();
 }
 
 export async function createTenantUser(data: {
@@ -53,7 +52,7 @@ export async function createTenantUser(data: {
   phone?: string
   role_id?: string
 }) {
-  const action = withTenantAuth(async ({ sql, tenantId }) => {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
     const result = await sql`
       INSERT INTO tenant_users (
         tenant_id,
@@ -77,7 +76,6 @@ export async function createTenantUser(data: {
     revalidatePath("/user-management")
     return { success: true, user: result[0] }
   });
-  return await action();
 }
 
 export async function updateTenantUser(id: string, data: {
@@ -87,7 +85,7 @@ export async function updateTenantUser(id: string, data: {
   role_id?: string
   is_active?: boolean
 }) {
-  const action = withTenantAuth(async ({ sql, tenantId }) => {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
     // Dynamic update query building based on provided fields
     if (data.name !== undefined) {
       await sql`UPDATE tenant_users SET name = ${data.name} WHERE id = ${id} AND tenant_id = ${tenantId}`
@@ -109,11 +107,10 @@ export async function updateTenantUser(id: string, data: {
     revalidatePath("/user-management")
     return { success: true }
   });
-  return await action();
 }
 
 export async function deleteTenantUser(id: string) {
-  const action = withTenantAuth(async ({ sql, tenantId }) => {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
     await sql`
       DELETE FROM tenant_users 
       WHERE id = ${id} AND tenant_id = ${tenantId}
@@ -123,11 +120,10 @@ export async function deleteTenantUser(id: string) {
     revalidatePath("/user-management")
     return { success: true }
   });
-  return await action();
 }
 
 export async function toggleTenantUserStatus(id: string, currentStatus: boolean) {
-  const action = withTenantAuth(async ({ sql, tenantId }) => {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
     await sql`
       UPDATE tenant_users 
       SET is_active = ${!currentStatus}
@@ -138,5 +134,4 @@ export async function toggleTenantUserStatus(id: string, currentStatus: boolean)
     revalidatePath("/user-management")
     return { success: true, is_active: !currentStatus }
   });
-  return await action();
 }

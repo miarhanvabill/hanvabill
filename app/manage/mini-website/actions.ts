@@ -28,7 +28,7 @@ export async function getMiniWebsiteSettings() {
       console.error("Error getting mini website settings:", error)
       return { success: false, error: error.message }
     }
-  })()
+  })
 }
 
 export async function saveMiniWebsiteSettings(formData: any) {
@@ -105,5 +105,5 @@ export async function saveMiniWebsiteSettings(formData: any) {
       console.error("Error saving mini website settings:", error)
       return { success: false, error: error.message }
     }
-  })()
+  })
 }
