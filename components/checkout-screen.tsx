@@ -73,6 +73,7 @@ interface CheckoutScreenProps {
   cartItems: CartItem[]
   onComplete: (invoice: Invoice) => void
   onBack: () => void
+  bookingId?: number | null
 }
 
 interface LoyaltySettingsUI {
@@ -84,7 +85,7 @@ interface LoyaltySettingsUI {
   minimum_order_amount: number
 }
 
-function CheckoutScreenComp({ customer, cartItems, onComplete, onBack }: CheckoutScreenProps) {
+function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId = null }: CheckoutScreenProps) {
   const [paymentMethod, setPaymentMethod] = useState<string>("cash")
   const [discountPercent, setDiscountPercent] = useState<number>(0)
   const [notes, setNotes] = useState<string>("")
