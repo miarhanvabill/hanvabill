@@ -9,7 +9,9 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Star, ThumbsUp, MessageSquare, TrendingUp, Filter, Search, ExternalLink, Reply } from "lucide-react"
-import { getReviews, updateReviewStatus, type Review } from "@/app/actions/reviews"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { getReviews, updateReviewStatus, replyToReview, type Review } from "@/app/actions/reviews"
 
 export default function ReviewsPage() {
   const [reviews, setReviews] = useState<Review[]>([])
@@ -17,6 +19,12 @@ export default function ReviewsPage() {
   const [filterRating, setFilterRating] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [loading, setLoading] = useState(true)
+
+  // Reply dialog state
+  const [replyDialogOpen, setReplyDialogOpen] = useState(false)
+  const [selectedReview, setSelectedReview] = useState<Review | null>(null)
+  const [replyText, setReplyText] = useState("")
+  const [submittingReply, setSubmittingReply] = useState(false)
 
   useEffect(() => {
     loadReviews()
@@ -40,6 +48,30 @@ export default function ReviewsPage() {
       loadReviews()
     } else {
       alert(result.message)
+    }
+  }
+
+  const openReplyDialog = (review: Review) => {
+    setSelectedReview(review)
+    setReplyText(review.owner_reply || "")
+    setReplyDialogOpen(true)
+  }
+
+  const handleReplySubmit = async () => {
+    if (!selectedReview) return
+    setSubmittingReply(true)
+    try {
+      const result = await replyToReview(selectedReview.id, replyText)
+      if (result.success) {
+        setReplyDialogOpen(false)
+        loadReviews()
+      } else {
+        alert(result.message)
+      }
+    } catch (error) {
+      console.error("Error submitting reply:", error)
+    } finally {
+      setSubmittingReply(false)
     }
   }
 
@@ -179,7 +211,7 @@ export default function ReviewsPage() {
             <Card className="lg:col-span-2">
               <CardContent className="p-6">
                 <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 flex-wrap">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                       <Input
@@ -239,8 +271,8 @@ export default function ReviewsPage() {
                         </AvatarFallback>
                       </Avatar>
 
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
+                      <div className="flex-1 space-y-3">
+                        <div className="flex items-center gap-3">
                           <h3 className="font-semibold">{review.customer_name || "Anonymous"}</h3>
                           <div className="flex items-center gap-1">{renderStars(review.rating)}</div>
                           <Badge className={getStatusColor(review.status)}>{review.status}</Badge>
@@ -252,9 +284,16 @@ export default function ReviewsPage() {
                           )}
                         </div>
 
-                        <p className="text-gray-700 mb-3">{review.review_text}</p>
+                        <p className="text-gray-700">{review.review_text}</p>
+                        
+                        {review.owner_reply && (
+                          <div className="bg-gray-50 border-l-4 border-blue-500 p-4 mt-4 rounded-r-md">
+                            <p className="text-sm font-semibold text-gray-900 mb-1">Owner Reply</p>
+                            <p className="text-sm text-gray-700">{review.owner_reply}</p>
+                          </div>
+                        )}
 
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between pt-2">
                           <span className="text-sm text-gray-500">
                             {new Date(review.created_at).toLocaleDateString()} at{" "}
                             {new Date(review.created_at).toLocaleTimeString()}
@@ -281,9 +320,14 @@ export default function ReviewsPage() {
                                 </Button>
                               </>
                             )}
-                            <Button size="sm" variant="outline" className="gap-1 bg-transparent">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              className="gap-1 bg-transparent"
+                              onClick={() => openReplyDialog(review)}
+                            >
                               <Reply className="w-3 h-3" />
-                              Reply
+                              {review.owner_reply ? "Edit Reply" : "Reply"}
                             </Button>
                           </div>
                         </div>
@@ -308,6 +352,41 @@ export default function ReviewsPage() {
           </div>
         </div>
       </main>
+
+      {/* Reply Dialog */}
+      <Dialog open={replyDialogOpen} onOpenChange={setReplyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reply to Review</DialogTitle>
+            <DialogDescription>
+              Your reply will be visible to {selectedReview?.customer_name || "the customer"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
+               <div className="flex items-center gap-1 mb-2">{selectedReview && renderStars(selectedReview.rating)}</div>
+               <p className="text-sm italic text-gray-700">"{selectedReview?.review_text}"</p>
+            </div>
+            <div>
+              <Textarea
+                placeholder="Write your reply here..."
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                rows={5}
+                className="resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReplyDialogOpen(false)} disabled={submittingReply}>
+              Cancel
+            </Button>
+            <Button onClick={handleReplySubmit} disabled={submittingReply || !replyText.trim()}>
+              {submittingReply ? "Saving..." : "Save Reply"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

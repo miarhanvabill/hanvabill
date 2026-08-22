@@ -15,6 +15,7 @@ export interface Review {
   review_text?: string
   platform?: string
   status: string
+  owner_reply?: string
   created_at: string
 }
 
@@ -34,49 +35,7 @@ export async function getReviews() {
       return reviews as Review[]
     } catch (error) {
       console.error("Error fetching reviews:", error)
-      return [
-        {
-          id: 1,
-          customer_id: 1,
-          customer_name: "Rashad",
-          rating: 5,
-          review_text:
-            "Excellent service! Very professional staff and great ambiance. I'm extremely satisfied with my haircut and the overall experience.",
-          platform: "Google",
-          status: "approved",
-          created_at: new Date().toISOString(),
-        },
-        {
-          id: 2,
-          customer_id: 2,
-          customer_name: "Sarfaraz",
-          rating: 4,
-          review_text: "Good haircut, will come back again. The staff was friendly and the service was quick.",
-          platform: "Facebook",
-          status: "approved",
-          created_at: new Date(Date.now() - 86400000).toISOString(),
-        },
-        {
-          id: 3,
-          customer_id: 3,
-          customer_name: "Shamshuddin",
-          rating: 5,
-          review_text:
-            "Amazing experience, highly recommended! The salon has a great atmosphere and the stylists are very skilled.",
-          platform: "Google",
-          status: "approved",
-          created_at: new Date(Date.now() - 172800000).toISOString(),
-        },
-        {
-          id: 4,
-          customer_name: "Anonymous Customer",
-          rating: 3,
-          review_text: "Service was okay, but had to wait longer than expected. The final result was good though.",
-          platform: "Google",
-          status: "pending",
-          created_at: new Date(Date.now() - 3600000).toISOString(),
-        },
-      ] as Review[]
+      return [] as Review[]
     }
   })
 }
@@ -99,6 +58,22 @@ export async function updateReviewStatus(reviewId: number, status: string) {
   })
 }
 
+export async function replyToReview(reviewId: number, replyText: string) {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      await sql`
+        UPDATE reviews 
+        SET owner_reply = ${replyText}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${reviewId} AND tenant_id = ${tenantId}
+      `
+      revalidatePath("/reviews")
+      return { success: true, message: "Reply added successfully!" }
+    } catch (error) {
+      console.error("Error replying to review:", error)
+      return { success: false, message: "Failed to reply to review" }
+    }
+  })
+}
 
 export async function ensureReviewsTable(sql: any) {
   await sql`
@@ -115,6 +90,20 @@ export async function ensureReviewsTable(sql: any) {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `
+  
+  try {
+    await sql`
+      DO $$ 
+      BEGIN
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                         WHERE table_name='reviews' AND column_name='owner_reply') THEN
+              ALTER TABLE reviews ADD COLUMN owner_reply TEXT;
+          END IF;
+      END $$;
+    `
+  } catch (error) {
+    console.error("Error adding owner_reply column:", error)
+  }
 }
 
 export async function submitReviewPublic(tenantId: string, bookingId: number, rating: number, reviewText: string = '') {
