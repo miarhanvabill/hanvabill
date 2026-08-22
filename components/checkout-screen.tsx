@@ -306,6 +306,7 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack }: Checkou
         points_earned_client: pointsEarned,
         gift_cards: giftCards,
         idempotency_key: idempotencyKeyRef.current,
+        booking_id: bookingId,
       }
       const res = await fetch("/api/checkout/finalize", {
         method: "POST",

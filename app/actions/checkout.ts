@@ -27,6 +27,7 @@ export interface FinalizeCheckoutInput {
   points_earned_client?: number
   gift_cards?: Array<{ code: string; amount: number }>
   idempotency_key?: string | null
+  booking_id?: number
 }
 
 export interface FinalizeCheckoutResult {
@@ -98,7 +99,18 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
       let bookingId: number | null = null
 
       const serviceItems = input.items.filter((item) => item.type === "service")
-      if (serviceItems.length > 0) {
+      if (input.booking_id) {
+        bookingId = input.booking_id;
+        // Update existing booking
+        await sql`
+          UPDATE bookings 
+          SET status = 'completed',
+              payment_method = ${input.payment_method},
+              total_amount = ${total},
+              updated_at = NOW()
+          WHERE id = ${bookingId} AND tenant_id = ${tenantId}
+        `;
+      } else if (serviceItems.length > 0) {
         const serviceIds = serviceItems.map((item) => item.id)
 
         // Check services exist within tenant
@@ -131,7 +143,7 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
         const [booking] = await sql`
           INSERT INTO bookings (
             booking_number, customer_id, staff_id, booking_date, booking_time, 
-            total_amount, status, notes, tenant_id, created_at, updated_at
+            total_amount, status, payment_method, notes, tenant_id, created_at, updated_at
           ) VALUES (
             ${bookingNumber},
             ${customerId},
@@ -140,6 +152,7 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
             ${bookingTime},
             ${total},
             'completed',
+            ${input.payment_method || 'cash'},
             ${[
             input.notes,
             input.coupon_code ? `Coupon: ${input.coupon_code} (-${couponDiscount})` : null,
