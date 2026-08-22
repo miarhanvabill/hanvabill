@@ -28,7 +28,13 @@ export async function GET(request: Request) {
           b.payment_method,
           c.full_name as customer_name,
           s.name as staff_name,
-          b.service_names
+          b.service_names,
+          (
+            SELECT array_agg(srv.name)
+            FROM booking_services bs
+            JOIN services srv ON bs.service_id = srv.id
+            WHERE bs.booking_id = b.id
+          ) as rel_service_names
         FROM bookings b
         LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
         LEFT JOIN staff s ON b.staff_id = s.id AND s.tenant_id = ${tenantId}
@@ -40,10 +46,13 @@ export async function GET(request: Request) {
 
       const formattedBookings = bookings.map((booking) => ({
         ...booking,
-        service_names: booking.service_names || [],
+        service_names: Array.isArray(booking.rel_service_names) && booking.rel_service_names.length > 0 
+          ? booking.rel_service_names 
+          : (booking.service_names || []),
         total_amount: Number(booking.total_amount) || 0,
         customer_name: booking.customer_name || "Unknown Customer",
         staff_name: booking.staff_name || "Unassigned",
+        payment_method: booking.status === "pending" && booking.payment_method === "cash" ? "unpaid" : booking.payment_method,
       }))
 
       return NextResponse.json(formattedBookings)

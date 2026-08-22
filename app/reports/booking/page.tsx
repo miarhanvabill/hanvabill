@@ -172,7 +172,7 @@ export default function BookingReportPage() {
                         <td className="p-3">
                           <div className="max-w-xs">{booking.service_names.join(", ")}</div>
                         </td>
-                        <td className="p-3">{booking.booking_date}</td>
+                        <td className="p-3">{new Date(booking.booking_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
                         <td className="p-3">{booking.booking_time}</td>
                         <td className="p-3">{booking.staff_name}</td>
                         <td className="p-3 text-center">

@@ -1,4 +1,6 @@
-import { NextResponse } from "next/server";
+tenant_id, booking_number, customer_id, staff_id, booking_date, booking_time, status, total_amount, notes, payment_method
+      ) VALUES (
+        ${tenantId}, ${bookingNumber}, ${customerId}, ${staff_id || null}, ${date}, ${time}, 'pending', ${amount}, 'Online Booking', 'unpaid'import { NextResponse } from "next/server";
 import { sql } from "@/lib/db";
 
 export async function POST(req: Request) {
