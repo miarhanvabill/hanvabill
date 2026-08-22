@@ -31,7 +31,7 @@ export async function getCommissionProfiles(): Promise<CommissionProfile[]> {
       console.log("[v0] Attempting to fetch commission profiles...")
 
       const connectionTest = await sql`SELECT 1 as test`
-      if (!connectionTest.rows || connectionTest.rows.length === 0) {
+      if (!connectionTest || connectionTest.length === 0) {
         throw new Error("Database connection failed")
       }
 
@@ -58,7 +58,7 @@ export async function getCommissionProfiles(): Promise<CommissionProfile[]> {
 
       console.log("[v0] Raw commission profiles result:", profilesResult)
 
-      const profiles = profilesResult.rows.map((row: any) => ({
+      const profiles = profilesResult.map((row: any) => ({
         id: row.id,
         name: row.name,
         description: row.description || "",
