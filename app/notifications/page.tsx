@@ -2,84 +2,50 @@
 
 import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
 import {
   Bell,
-  Calendar,
-  IndianRupee,
-  Users,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
+  Mail,
   MessageSquare,
+  Smartphone,
+  CheckCircle,
+  XCircle,
+  Clock,
   Settings,
-  Trash2,
-  BookMarkedIcon as MarkAsUnread,
-  Filter,
+  History,
+  AlertCircle
 } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import {
+  getNotificationLogs,
+  getNotificationPreferences,
+  saveNotificationPreferences,
+  NotificationLog,
+  NotificationPreference
+} from "./actions"
 
-interface Notification {
-  id: number
-  type: "appointment" | "payment" | "customer" | "system" | "marketing" | "reminder"
-  title: string
-  message: string
-  created_at: string
-  read: boolean
-  priority: "low" | "medium" | "high"
-  action_url?: string
-}
-
-interface NotificationStats {
-  total: number
-  unread: number
-  highPriority: number
-  appointments: number
-}
-
-const notificationSettings = {
-  appointments: {
-    newBooking: true,
-    cancellation: true,
-    reminder: true,
-    noShow: true,
-  },
-  payments: {
-    received: true,
-    failed: false,
-    refund: true,
-    lowBalance: true,
-  },
-  customers: {
-    newCustomer: true,
-    birthday: true,
-    anniversary: true,
-    feedback: true,
-  },
-  system: {
-    updates: true,
-    maintenance: true,
-    security: true,
-    backup: false,
-  },
-  marketing: {
-    campaigns: false,
-    promotions: true,
-    analytics: false,
-    social: false,
-  },
-}
+const DEFAULT_EVENTS = [
+  { id: "booking_created", label: "Booking Created", category: "Appointments" },
+  { id: "booking_rescheduled", label: "Booking Rescheduled", category: "Appointments" },
+  { id: "booking_cancelled", label: "Booking Cancelled", category: "Appointments" },
+  { id: "appointment_reminder", label: "Appointment Reminder", category: "Appointments" },
+  { id: "payment_received", label: "Payment Received", category: "Billing" },
+  { id: "payment_failed", label: "Payment Failed", category: "Billing" },
+  { id: "marketing_campaign", label: "Marketing Campaign", category: "Marketing" },
+  { id: "birthday_wish", label: "Birthday Wish", category: "Marketing" },
+]
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState<Notification[]>([])
-  const [stats, setStats] = useState<NotificationStats>({ total: 0, unread: 0, highPriority: 0, appointments: 0 })
-  const [activeTab, setActiveTab] = useState("all")
-  const [settings, setSettings] = useState(notificationSettings)
+  const [logs, setLogs] = useState<NotificationLog[]>([])
+  const [preferences, setPreferences] = useState<NotificationPreference[]>([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const { toast } = useToast()
 
   useEffect(() => {
     loadData()
@@ -88,348 +54,280 @@ export default function NotificationsPage() {
   const loadData = async () => {
     setLoading(true)
     try {
-      console.log("[v0] Loading notifications data")
-
-      const [notificationsResponse, statsResponse] = await Promise.all([
-        fetch("/api/notifications"),
-        fetch("/api/notifications?stats=true"),
+      const [logsRes, prefsRes] = await Promise.all([
+        getNotificationLogs(),
+        getNotificationPreferences()
       ])
 
-      if (notificationsResponse.ok && statsResponse.ok) {
-        const notificationsData = await notificationsResponse.json()
-        const statsData = await statsResponse.json()
-
-        console.log("[v0] Loaded notifications:", notificationsData.length)
-        console.log("[v0] Loaded stats:", statsData)
-
-        setNotifications(notificationsData)
-        setStats(statsData)
+      if (logsRes?.success) {
+        setLogs(logsRes.data)
+      }
+      
+      if (prefsRes?.success) {
+        // Merge with defaults if not exists
+        const dbPrefs = prefsRes.data
+        const mergedPrefs = DEFAULT_EVENTS.map(event => {
+          const existing = dbPrefs.find((p: any) => p.event_type === event.id)
+          if (existing) return existing
+          return {
+            event_type: event.id,
+            email_enabled: false,
+            sms_enabled: false,
+            whatsapp_enabled: false
+          }
+        })
+        setPreferences(mergedPrefs)
       } else {
-        console.error("[v0] Failed to load notifications data")
-        // Fallback to empty data
-        setNotifications([])
-        setStats({ total: 0, unread: 0, highPriority: 0, appointments: 0 })
+        // Use defaults if fetch fails or no data
+        setPreferences(DEFAULT_EVENTS.map(event => ({
+          event_type: event.id,
+          email_enabled: false,
+          sms_enabled: false,
+          whatsapp_enabled: false
+        })))
       }
     } catch (error) {
-      console.error("[v0] Error loading notifications:", error)
-      // Fallback to empty data
-      setNotifications([])
-      setStats({ total: 0, unread: 0, highPriority: 0, appointments: 0 })
+      console.error("Failed to load notifications page data:", error)
+      toast({ title: "Error", description: "Failed to load data.", variant: "destructive" })
     } finally {
       setLoading(false)
     }
   }
 
-  const markAsRead = async (id: number) => {
+  const handleTogglePreference = (eventType: string, channel: 'email_enabled' | 'sms_enabled' | 'whatsapp_enabled') => {
+    setPreferences(prev => prev.map(p => {
+      if (p.event_type === eventType) {
+        return { ...p, [channel]: !p[channel] }
+      }
+      return p
+    }))
+  }
+
+  const handleSavePreferences = async () => {
+    setSaving(true)
     try {
-      console.log("[v0] Marking notification as read:", id)
-
-      const response = await fetch(`/api/notifications/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "mark_read" }),
-      })
-
-      if (response.ok) {
-        setNotifications(notifications.map((notif) => (notif.id === id ? { ...notif, read: true } : notif)))
-        setStats((prev) => ({ ...prev, unread: Math.max(0, prev.unread - 1) }))
+      const res = await saveNotificationPreferences(preferences)
+      if (res?.success) {
+        toast({ title: "Success", description: "Notification preferences saved." })
       } else {
-        console.error("[v0] Failed to mark notification as read")
+        toast({ title: "Error", description: "Failed to save preferences.", variant: "destructive" })
       }
     } catch (error) {
-      console.error("[v0] Error marking notification as read:", error)
+      console.error(error)
+      toast({ title: "Error", description: "Failed to save preferences.", variant: "destructive" })
+    } finally {
+      setSaving(false)
     }
   }
 
-  const markAllAsRead = async () => {
-    try {
-      console.log("[v0] Marking all notifications as read")
-
-      const response = await fetch("/api/notifications/mark-all-read", {
-        method: "POST",
-      })
-
-      if (response.ok) {
-        setNotifications(notifications.map((notif) => ({ ...notif, read: true })))
-        setStats((prev) => ({ ...prev, unread: 0 }))
-      } else {
-        console.error("[v0] Failed to mark all notifications as read")
-      }
-    } catch (error) {
-      console.error("[v0] Error marking all notifications as read:", error)
+  const getChannelIcon = (channel: string) => {
+    switch (channel.toLowerCase()) {
+      case "email": return <Mail className="w-4 h-4" />
+      case "sms": return <Smartphone className="w-4 h-4" />
+      case "whatsapp": return <MessageSquare className="w-4 h-4 text-green-500" />
+      default: return <Bell className="w-4 h-4" />
     }
   }
 
-  const deleteNotification = async (id: number) => {
-    try {
-      console.log("[v0] Deleting notification:", id)
-
-      const response = await fetch(`/api/notifications/${id}`, {
-        method: "DELETE",
-      })
-
-      if (response.ok) {
-        const deletedNotif = notifications.find((n) => n.id === id)
-        setNotifications(notifications.filter((notif) => notif.id !== id))
-        setStats((prev) => ({
-          ...prev,
-          total: Math.max(0, prev.total - 1),
-          unread: deletedNotif && !deletedNotif.read ? Math.max(0, prev.unread - 1) : prev.unread,
-          highPriority:
-            deletedNotif && deletedNotif.priority === "high" ? Math.max(0, prev.highPriority - 1) : prev.highPriority,
-          appointments:
-            deletedNotif && deletedNotif.type === "appointment"
-              ? Math.max(0, prev.appointments - 1)
-              : prev.appointments,
-        }))
-      } else {
-        console.error("[v0] Failed to delete notification")
-      }
-    } catch (error) {
-      console.error("[v0] Error deleting notification:", error)
+  const getStatusIcon = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "delivered":
+      case "sent": return <CheckCircle className="w-4 h-4 text-green-500" />
+      case "failed": return <XCircle className="w-4 h-4 text-red-500" />
+      case "pending": return <Clock className="w-4 h-4 text-yellow-500" />
+      default: return <AlertCircle className="w-4 h-4 text-gray-500" />
     }
   }
-
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case "appointment":
-        return Calendar
-      case "payment":
-        return IndianRupee
-      case "customer":
-        return Users
-      case "system":
-        return AlertTriangle
-      case "marketing":
-        return MessageSquare
-      case "reminder":
-        return Clock
-      default:
-        return Bell
-    }
-  }
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "high":
-        return "bg-red-100 text-red-800"
-      case "medium":
-        return "bg-yellow-100 text-yellow-800"
-      case "low":
-        return "bg-green-100 text-green-800"
-      default:
-        return "bg-gray-100 text-gray-800"
-    }
-  }
-
-  const filteredNotifications = notifications.filter((notif) => {
-    if (activeTab === "all") return true
-    if (activeTab === "unread") return !notif.read
-    return notif.type === activeTab
-  })
-
-  const unreadCount = stats.unread
 
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading notifications...</p>
+          <p className="mt-2 text-gray-600">Loading notifications center...</p>
         </div>
       </div>
     )
   }
 
+  // Group events for settings view
+  const eventsByCategory = DEFAULT_EVENTS.reduce((acc, event) => {
+    if (!acc[event.category]) acc[event.category] = []
+    acc[event.category].push(event)
+    return acc
+  }, {} as Record<string, typeof DEFAULT_EVENTS>)
+
   return (
     <div className="flex-1 flex flex-col">
-      <PageHeader title="Notifications" subtitle="Stay updated with important alerts and messages from your salon." />
+      <PageHeader title="Notification Center" subtitle="Manage customer communications and view messaging history." />
 
       <main className="flex-1 p-6 bg-gray-50">
-        <div className="max-w-4xl mx-auto space-y-6">
-          {/* Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <Card>
-              <CardContent className="p-6 text-center">
-                <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
-                <div className="text-sm text-gray-600">Total Notifications</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-6 text-center">
-                <div className="text-2xl font-bold text-red-600">{stats.unread}</div>
-                <div className="text-sm text-gray-600">Unread</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-6 text-center">
-                <div className="text-2xl font-bold text-yellow-600">{stats.highPriority}</div>
-                <div className="text-sm text-gray-600">High Priority</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-6 text-center">
-                <div className="text-2xl font-bold text-green-600">{stats.appointments}</div>
-                <div className="text-sm text-gray-600">Appointments</div>
-              </CardContent>
-            </Card>
-          </div>
+        <div className="max-w-6xl mx-auto space-y-6">
+          <Tabs defaultValue="history">
+            <TabsList className="mb-4">
+              <TabsTrigger value="history" className="flex items-center gap-2">
+                <History className="w-4 h-4" />
+                Notification History
+              </TabsTrigger>
+              <TabsTrigger value="settings" className="flex items-center gap-2">
+                <Settings className="w-4 h-4" />
+                Settings
+              </TabsTrigger>
+            </TabsList>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <div className="flex items-center justify-between">
-              <TabsList>
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="unread">
-                  Unread {unreadCount > 0 && <Badge className="ml-2">{unreadCount}</Badge>}
-                </TabsTrigger>
-                <TabsTrigger value="appointment">Appointments</TabsTrigger>
-                <TabsTrigger value="payment">Payments</TabsTrigger>
-                <TabsTrigger value="customer">Customers</TabsTrigger>
-                <TabsTrigger value="system">System</TabsTrigger>
-              </TabsList>
-
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={markAllAsRead}>
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  Mark All Read
-                </Button>
-                <Button variant="outline" size="sm">
-                  <Filter className="w-4 h-4 mr-2" />
-                  Filter
-                </Button>
-              </div>
-            </div>
-
-            <TabsContent value={activeTab} className="space-y-4">
-              {filteredNotifications.length === 0 ? (
-                <Card>
-                  <CardContent className="p-12 text-center">
-                    <Bell className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500">No notifications found</p>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="space-y-3">
-                  {filteredNotifications.map((notification) => {
-                    const IconComponent = getNotificationIcon(notification.type)
-                    return (
-                      <Card
-                        key={notification.id}
-                        className={`hover:shadow-sm transition-shadow cursor-pointer ${
-                          !notification.read ? "border-l-4 border-l-blue-500 bg-blue-50/30" : ""
-                        }`}
-                        onClick={() => markAsRead(notification.id)}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-start gap-4">
-                            <div
-                              className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                                notification.type === "appointment"
-                                  ? "bg-blue-100 text-blue-600"
-                                  : notification.type === "payment"
-                                    ? "bg-green-100 text-green-600"
-                                    : notification.type === "customer"
-                                      ? "bg-purple-100 text-purple-600"
-                                      : notification.type === "system"
-                                        ? "bg-red-100 text-red-600"
-                                        : notification.type === "marketing"
-                                          ? "bg-orange-100 text-orange-600"
-                                          : "bg-gray-100 text-gray-600"
-                              }`}
-                            >
-                              <IconComponent className="w-5 h-5" />
-                            </div>
-
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <h3 className={`font-medium ${!notification.read ? "font-semibold" : ""}`}>
-                                  {notification.title}
-                                </h3>
-                                <Badge className={getPriorityColor(notification.priority)}>
-                                  {notification.priority}
+            <TabsContent value="history">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Message Log</CardTitle>
+                  <CardDescription>A log of all messages sent to your customers.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {logs.length === 0 ? (
+                    <div className="text-center p-12 text-gray-500">
+                      <History className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>No messages have been sent yet.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm text-left">
+                        <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3">Date & Time</th>
+                            <th className="px-4 py-3">Customer</th>
+                            <th className="px-4 py-3">Event Type</th>
+                            <th className="px-4 py-3">Channel</th>
+                            <th className="px-4 py-3">Status</th>
+                            <th className="px-4 py-3">Content</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {logs.map((log) => (
+                            <tr key={log.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                                {new Date(log.sent_at).toLocaleString()}
+                              </td>
+                              <td className="px-4 py-3 font-medium">
+                                {log.customer_name || 'Unknown'}
+                                <span className="block text-xs text-gray-500">{log.customer_phone}</span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <Badge variant="outline" className="capitalize">
+                                  {log.type.replace(/_/g, ' ')}
                                 </Badge>
-                                {!notification.read && <div className="w-2 h-2 bg-blue-500 rounded-full"></div>}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-1.5 capitalize text-gray-700">
+                                  {getChannelIcon(log.channel)}
+                                  {log.channel}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-1.5 capitalize">
+                                  {getStatusIcon(log.status)}
+                                  <span className={
+                                    log.status === 'failed' ? 'text-red-600' :
+                                    log.status === 'delivered' ? 'text-green-600' : 'text-gray-600'
+                                  }>
+                                    {log.status}
+                                  </span>
+                                </div>
+                                {log.error_message && (
+                                  <span className="block text-xs text-red-500 mt-1 max-w-[150px] truncate" title={log.error_message}>
+                                    {log.error_message}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3 text-gray-600 truncate max-w-xs" title={log.content}>
+                                {log.content}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="settings">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Notification Preferences</CardTitle>
+                    <CardDescription>Configure how and when your customers receive messages.</CardDescription>
+                  </div>
+                  <Button onClick={handleSavePreferences} disabled={saving}>
+                    {saving ? "Saving..." : "Save Preferences"}
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-8">
+                  {Object.entries(eventsByCategory).map(([category, events]) => (
+                    <div key={category}>
+                      <h3 className="text-lg font-semibold mb-4 text-gray-800 border-b pb-2">{category}</h3>
+                      <div className="grid gap-6">
+                        {events.map((event) => {
+                          const pref = preferences.find(p => p.event_type === event.id)
+                          if (!pref) return null
+                          
+                          return (
+                            <div key={event.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-white border rounded-lg shadow-sm">
+                              <div className="mb-4 md:mb-0">
+                                <h4 className="font-medium text-gray-900">{event.label}</h4>
+                                <p className="text-sm text-gray-500">Triggers when a {event.label.toLowerCase()} event occurs.</p>
                               </div>
-                              <p className="text-gray-600 text-sm mb-2">{notification.message}</p>
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs text-gray-500">
-                                  {new Date(notification.created_at).toLocaleString()}
-                                </span>
-                                <div className="flex items-center gap-1">
-                                  {!notification.read && (
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        markAsRead(notification.id)
-                                      }}
-                                    >
-                                      <MarkAsUnread className="w-4 h-4" />
-                                    </Button>
-                                  )}
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="text-red-600"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      deleteNotification(notification.id)
-                                    }}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
+                              
+                              <div className="flex items-center gap-6">
+                                <div className="flex items-center space-x-2">
+                                  <Switch 
+                                    id={`email-${event.id}`}
+                                    checked={pref.email_enabled}
+                                    onCheckedChange={() => handleTogglePreference(event.id, 'email_enabled')}
+                                  />
+                                  <Label htmlFor={`email-${event.id}`} className="flex items-center gap-1 cursor-pointer">
+                                    <Mail className="w-4 h-4 text-gray-500" />
+                                    Email
+                                  </Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Switch 
+                                    id={`sms-${event.id}`}
+                                    checked={pref.sms_enabled}
+                                    onCheckedChange={() => handleTogglePreference(event.id, 'sms_enabled')}
+                                  />
+                                  <Label htmlFor={`sms-${event.id}`} className="flex items-center gap-1 cursor-pointer">
+                                    <Smartphone className="w-4 h-4 text-gray-500" />
+                                    SMS
+                                  </Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Switch 
+                                    id={`wa-${event.id}`}
+                                    checked={pref.whatsapp_enabled}
+                                    onCheckedChange={() => handleTogglePreference(event.id, 'whatsapp_enabled')}
+                                  />
+                                  <Label htmlFor={`wa-${event.id}`} className="flex items-center gap-1 cursor-pointer">
+                                    <MessageSquare className="w-4 h-4 text-green-500" />
+                                    WhatsApp
+                                  </Label>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
-                </div>
-              )}
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  <div className="flex justify-end pt-4">
+                    <Button onClick={handleSavePreferences} disabled={saving} size="lg">
+                      {saving ? "Saving..." : "Save Preferences"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
-
-          {/* Notification Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="w-5 h-5" />
-                Notification Preferences
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {Object.entries(settings).map(([category, categorySettings]) => (
-                <div key={category}>
-                  <h3 className="font-medium mb-3 capitalize">{category}</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {Object.entries(categorySettings).map(([setting, enabled]) => (
-                      <div key={setting} className="flex items-center justify-between">
-                        <Label htmlFor={`${category}-${setting}`} className="capitalize">
-                          {setting.replace(/([A-Z])/g, " $1").trim()}
-                        </Label>
-                        <Switch
-                          id={`${category}-${setting}`}
-                          checked={enabled}
-                          onCheckedChange={(checked) => {
-                            setSettings({
-                              ...settings,
-                              [category]: {
-                                ...categorySettings,
-                                [setting]: checked,
-                              },
-                            })
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
         </div>
       </main>
     </div>
