@@ -39,6 +39,28 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
       currency: settings["financial.currencySymbol"] || "₹",
     };
 
+    
+    // Fetch products
+    const products = await sql`
+      SELECT id, name, description, price, stock_quantity as stock, category 
+      FROM products 
+      WHERE tenant_id = ${tenantId} AND is_active = true
+    `.catch(() => []);
+
+    // Fetch packages
+    const packages = await sql`
+      SELECT id, name, description, package_price as price, original_price, validity_days 
+      FROM packages 
+      WHERE tenant_id = ${tenantId} AND is_active = true
+    `.catch(() => []);
+
+    // Fetch memberships
+    const memberships = await sql`
+      SELECT id, name, description, amount_paid as price, validity_days 
+      FROM memberships 
+      WHERE tenant_id = ${tenantId} AND is_active = true
+    `.catch(() => []);
+
     // Get active services
     const services = await sql`
       SELECT id, name, description, duration_minutes as duration, price, category 
@@ -52,6 +74,9 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
       tenantId,
       business,
       services,
+      products,
+      packages,
+      memberships
     });
   } catch (error) {
     console.error("Error fetching public tenant info:", error);

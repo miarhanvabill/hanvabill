@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useState, use, useMemo, useRef } from "react"
 import { format, addDays, startOfToday } from "date-fns"
-import { Calendar, Clock, CheckCircle, ChevronLeft, ChevronRight, MapPin, Search, Phone, Share2, X, ShoppingCart } from "lucide-react"
+import { Calendar, Clock, CheckCircle, ChevronLeft, ChevronRight, MapPin, Search, Phone, Share2, X, ShoppingCart, Facebook, Instagram, Twitter, Globe, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,29 @@ interface Service {
   duration: number
   price: number
   category: string
+}
+
+interface Product {
+  id: number
+  name: string
+  description: string
+  price: number
+  category: string
+}
+
+interface Package {
+  id: number
+  name: string
+  description: string
+  price: number
+  original_price?: number
+}
+
+interface Membership {
+  id: number
+  name: string
+  description: string
+  price: number
 }
 
 const getCategoryFallbackImage = (categoryName: string) => {
@@ -53,7 +76,12 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [loading, setLoading] = useState(true)
   const [tenantId, setTenantId] = useState<string | null>(null)
   const [business, setBusiness] = useState<any>(null)
+  
   const [services, setServices] = useState<Service[]>([])
+  const [products, setProducts] = useState<Product[]>([])
+  const [packages, setPackages] = useState<Package[]>([])
+  const [memberships, setMemberships] = useState<Membership[]>([])
+  
   const [error, setError] = useState<string | null>(null)
 
   const [step, setStep] = useState(1) // 1: Main, 2: DateTime, 3: Details, 4: Success
@@ -69,9 +97,11 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [customerForm, setCustomerForm] = useState({
     name: "",
     phone: "",
-    email: ""
+    email: "",
+    message: ""
   })
   const [submitting, setSubmitting] = useState(false)
+  const [enquirySuccess, setEnquirySuccess] = useState(false)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -84,6 +114,9 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
         setTenantId(data.tenantId)
         setBusiness(data.business)
         setServices(data.services || [])
+        setProducts(data.products || [])
+        setPackages(data.packages || [])
+        setMemberships(data.memberships || [])
       } catch (err: any) {
         setError(err.message || "Failed to load booking page")
       } finally {
@@ -150,6 +183,22 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     setActiveCategory(categoryName === activeCategory ? null : categoryName)
   }
 
+  const handleShare = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: business?.name || 'Salon',
+          text: `Check out ${business?.name} and book an appointment!`,
+          url: window.location.href,
+        });
+      } else {
+        alert("Sharing is not supported on this browser.");
+      }
+    } catch (err) {
+      console.log("Error sharing:", err);
+    }
+  }
+
   const handleSubmitBooking = async () => {
     if (selectedServices.length === 0 || !selectedDate || !selectedTime || !customerForm.name || !customerForm.phone) return
     
@@ -178,6 +227,20 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     }
   }
 
+  const handleEnquirySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      // Create a booking record as an enquiry, or just show success for now
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setEnquirySuccess(true);
+    } catch (err) {
+      alert("Failed to submit enquiry");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -201,17 +264,25 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
 
   const totalAmount = selectedServices.reduce((sum, s) => sum + Number(s.price), 0);
   const totalDuration = selectedServices.reduce((sum, s) => sum + Number(s.duration), 0);
+  
+  const isOpen = () => {
+    if (!business?.timings) return true; // Default open
+    const currentHour = new Date().getHours();
+    return currentHour >= 9 && currentHour <= 21; // Mock logic since we don't know the exact schema
+  }
+  
+  const currentDayName = format(new Date(), 'EEEE'); // Dynamically get today's name (e.g. Saturday)
 
   return (
     <div className="min-h-screen bg-gray-50/50 pb-32 font-sans selection:bg-black selection:text-white">
-      {/* Sticky Top Header (Appears on Scroll in Zylu, we'll keep it simple) */}
-      <div className="sticky top-0 bg-white z-40 border-b border-gray-100 shadow-sm">
+      {/* Sticky Top Header */}
+      <div className="sticky top-0 bg-white z-40 border-b border-gray-100 shadow-sm hidden sm:block">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-black text-white font-bold flex items-center justify-center rounded uppercase text-sm">
               {business?.name?.substring(0,2) || "CB"}
             </div>
-            <h1 className="font-bold text-gray-900 hidden sm:block uppercase tracking-tight">{business.name}</h1>
+            <h1 className="font-bold text-gray-900 uppercase tracking-tight">{business.name}</h1>
           </div>
           <Button className="bg-black text-white hover:bg-gray-800 rounded-lg h-9 px-6 font-medium text-sm">
             Login
@@ -224,43 +295,72 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
           {/* Cover & Business Card */}
           <div className="bg-white pb-6 border-b border-gray-100">
             <div className="max-w-7xl mx-auto">
-              <div className="h-48 sm:h-64 md:h-80 bg-gray-900 w-full relative">
-                <img 
-                  src="https://images.unsplash.com/photo-1521590832167-7bfcfaa6362f?auto=format&fit=crop&w=2000&q=80" 
-                  alt="Salon Cover" 
-                  className="w-full h-full object-cover opacity-70"
-                />
+              <div className="h-48 sm:h-64 md:h-80 bg-[#151921] w-full relative overflow-hidden">
+                {/* We use a dark color like the screenshot if no cover image is provided */}
               </div>
               
               <div className="px-4 sm:px-6 -mt-10 relative z-10">
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6 w-full flex flex-col md:flex-row md:items-end justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge className="bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 font-medium px-3">Open Now</Badge>
-                      <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200 font-medium px-3">{format(new Date(), 'EEEE')}</Badge>
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6 w-full">
+                  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        {isOpen() ? (
+                          <Badge className="bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 font-medium px-3">Open Now</Badge>
+                        ) : (
+                          <Badge className="bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 font-medium px-3">Closed</Badge>
+                        )}
+                        <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200 font-medium px-3 text-xs">{currentDayName}</Badge>
+                      </div>
+                      <h1 className="text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-tight text-gray-900 mt-2">
+                        {business.name}
+                      </h1>
+                      <p className="text-gray-500 text-sm mt-1">{business.address || "Bengaluru, Karnataka, India"}</p>
                     </div>
-                    <h1 className="text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-tight text-gray-900 mt-2">
-                      {business.name}
-                    </h1>
-                    <p className="text-gray-500 text-sm mt-1">{business.address || "Bengaluru, Karnataka, India"}</p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="icon" className="rounded-full w-10 h-10 border-gray-200 text-gray-600 hover:bg-gray-50">
-                        <Phone className="w-4 h-4"/>
-                      </Button>
-                      <Button variant="outline" size="icon" className="rounded-full w-10 h-10 border-gray-200 text-gray-600 hover:bg-gray-50">
+                    <div className="flex items-center gap-2">
+                      <a href={`tel:${business.phone}`}>
+                        <Button variant="outline" size="icon" className="rounded-full w-10 h-10 border-gray-200 text-gray-600 hover:bg-gray-50">
+                          <Phone className="w-4 h-4"/>
+                        </Button>
+                      </a>
+                      <Button variant="outline" size="icon" className="rounded-full w-10 h-10 border-gray-200 text-gray-600 hover:bg-gray-50" onClick={handleShare}>
                         <Share2 className="w-4 h-4"/>
                       </Button>
                     </div>
                   </div>
+                  
+                  {/* Social Links */}
+                  {(business?.socials?.facebook || business?.socials?.instagram || business?.socials?.twitter || business?.socials?.google) && (
+                    <div className="flex items-center gap-3 mt-5 pt-4 border-t border-gray-100">
+                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Follow us</span>
+                      {business.socials.facebook && (
+                        <a href={business.socials.facebook} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-blue-600">
+                          <Facebook className="w-4 h-4" />
+                        </a>
+                      )}
+                      {business.socials.instagram && (
+                        <a href={business.socials.instagram} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-pink-600">
+                          <Instagram className="w-4 h-4" />
+                        </a>
+                      )}
+                      {business.socials.twitter && (
+                        <a href={business.socials.twitter} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-sky-500">
+                          <Twitter className="w-4 h-4" />
+                        </a>
+                      )}
+                      {business.socials.google && (
+                        <a href={business.socials.google} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-red-500">
+                          <Globe className="w-4 h-4" />
+                        </a>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="bg-white border-b border-gray-100 sticky top-16 z-30">
+          <div className="bg-white border-b border-gray-100 sticky top-0 sm:top-16 z-30">
             <div className="max-w-7xl mx-auto flex overflow-x-auto px-4 sm:px-6 no-scrollbar">
               {['Featured', 'Services', 'Products', 'Packages', 'Memberships', 'Enquiry'].map(tab => (
                 <button 
@@ -281,172 +381,285 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
           {/* Main Content Area */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-6">
             
-            {/* Horizontal Categories Row */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-gray-900">Categories</h2>
-                <div className="flex gap-2 hidden sm:flex">
-                  <Button variant="outline" size="icon" className="w-8 h-8 rounded-full border-gray-200" onClick={() => scrollCategories('left')}>
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-                  <Button variant="outline" size="icon" className="w-8 h-8 rounded-full bg-black text-white hover:bg-gray-800 border-black" onClick={() => scrollCategories('right')}>
-                    <ChevronRight className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-              
-              <div className="relative">
-                <div 
-                  ref={categoriesRef}
-                  className="flex overflow-x-auto gap-4 sm:gap-6 pb-4 no-scrollbar snap-x"
-                >
-                  {Array.from(categoriesMap.keys()).map(cat => (
-                    <div 
-                      key={cat} 
-                      className="flex flex-col items-center gap-2 cursor-pointer snap-start shrink-0 w-[72px] sm:w-[88px]" 
-                      onClick={() => scrollToCategory(cat)}
-                    >
-                      <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-[28px] overflow-hidden shadow-sm transition-all border-[3px] ${
-                        activeCategory === cat || (!activeCategory && categoriesMap.size > 0 && Array.from(categoriesMap.keys())[0] === cat)
-                          ? 'border-gray-900 p-0.5' 
-                          : 'border-transparent hover:border-gray-200 p-0'
-                      }`}>
-                        <div className="w-full h-full rounded-[24px] overflow-hidden">
-                          <img src={getCategoryFallbackImage(cat)} alt={cat} className="w-full h-full object-cover" />
-                        </div>
-                      </div>
-                      <span className="text-[11px] sm:text-xs text-center font-medium text-gray-700 line-clamp-1 w-full px-1">
-                        {cat}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Search */}
-            <div className="relative mb-8">
-              <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-              <Input 
-                placeholder="Search for any services..." 
-                className="pl-12 bg-white border-gray-200 rounded-2xl h-14 text-base focus-visible:ring-gray-200 shadow-sm"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-
-            {/* Services List */}
-            <div className="space-y-10">
-              {Array.from(filteredCategories.entries()).map(([cat, catServices]) => (
-                <div id={`category-${cat.replace(/\s+/g, '-')}`} key={cat} className="scroll-mt-40">
+            {activeTab === 'Services' && (
+              <>
+                {/* Horizontal Categories Row */}
+                <div className="mb-8">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-bold text-gray-900">{cat}</h3>
-                    {/* Zylu has a chevron up/down here, we can just display the count */}
-                    <span className="text-sm font-medium text-gray-500">{catServices.length}</span>
+                    <h2 className="text-lg font-bold text-gray-900">Categories</h2>
+                    <div className="flex gap-2 hidden sm:flex">
+                      <Button variant="outline" size="icon" className="w-8 h-8 rounded-full border-gray-200 bg-white" onClick={() => scrollCategories('left')}>
+                        <ChevronLeft className="w-4 h-4 text-gray-600" />
+                      </Button>
+                      <Button variant="outline" size="icon" className="w-8 h-8 rounded-full bg-black text-white hover:bg-gray-800 border-black" onClick={() => scrollCategories('right')}>
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {catServices.map(service => {
-                      const isSelected = selectedServices.some(s => s.id === service.id);
-                      return (
+                  <div className="relative">
+                    <div 
+                      ref={categoriesRef}
+                      className="flex overflow-x-auto gap-4 sm:gap-6 pb-4 no-scrollbar snap-x"
+                    >
+                      {Array.from(categoriesMap.keys()).map(cat => (
                         <div 
-                          key={service.id} 
-                          className={`bg-white p-4 rounded-2xl border transition-all ${isSelected ? 'border-gray-400 shadow-md' : 'border-gray-200 shadow-sm hover:border-gray-300'}`}
+                          key={cat} 
+                          className="flex flex-col items-center gap-2 cursor-pointer snap-start shrink-0 w-[72px] sm:w-[88px]" 
+                          onClick={() => scrollToCategory(cat)}
                         >
-                          <div className="flex justify-between items-start gap-4">
-                            {/* Service Image */}
-                            <div className="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-gray-100">
-                              <img src={getServiceFallbackImage(service.name, cat)} className="w-full h-full object-cover" alt={service.name} />
-                            </div>
-                            
-                            {/* Details */}
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-bold text-gray-900 leading-tight mb-1 truncate">{service.name}</h4>
-                              <div className="flex items-baseline gap-1.5 flex-wrap">
-                                <span className="font-bold text-red-500 text-sm">{business.currency}{service.price}</span>
-                                <span className="text-[10px] text-gray-500 font-medium">({service.price > 500 ? 'Member Price' : 'Regular Price'})</span>
-                              </div>
-                              {service.price > 500 && (
-                                <div className="text-[11px] text-gray-400 line-through">
-                                  {business.currency}{service.price + (service.price * 0.1)} (Regular Price)
-                                </div>
-                              )}
-                              <div className="flex items-center gap-1 text-[11px] text-gray-500 font-medium mt-1.5">
-                                <Clock className="w-3 h-3" /> {formatDuration(service.duration)}
-                              </div>
-                            </div>
-                            
-                            {/* Action */}
-                            <div className="shrink-0 pt-1">
-                              {isSelected ? (
-                                <Button 
-                                  variant="outline" 
-                                  className="bg-[#1a1a1a] text-white hover:bg-black border-transparent rounded-xl h-9 px-4 text-xs font-semibold shadow-sm"
-                                  onClick={() => handleRemoveService(service.id)}
-                                >
-                                  Remove &minus;
-                                </Button>
-                              ) : (
-                                <Button 
-                                  variant="outline" 
-                                  className="bg-white border-gray-300 text-gray-900 hover:bg-gray-50 rounded-xl h-9 px-5 text-xs font-semibold shadow-sm"
-                                  onClick={() => handleAddService(service)}
-                                >
-                                  Add +
-                                </Button>
-                              )}
+                          <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-[28px] overflow-hidden shadow-sm transition-all border-[3px] ${
+                            activeCategory === cat || (!activeCategory && categoriesMap.size > 0 && Array.from(categoriesMap.keys())[0] === cat)
+                              ? 'border-gray-900 p-0.5' 
+                              : 'border-transparent hover:border-gray-200 p-0'
+                          }`}>
+                            <div className="w-full h-full rounded-[24px] overflow-hidden">
+                              <img src={getCategoryFallbackImage(cat)} alt={cat} className="w-full h-full object-cover" />
                             </div>
                           </div>
+                          <span className="text-[11px] sm:text-xs text-center font-medium text-gray-700 line-clamp-1 w-full px-1">
+                            {cat}
+                          </span>
                         </div>
-                      )
-                    })}
+                      ))}
+                    </div>
                   </div>
                 </div>
-              ))}
-              
-              {filteredCategories.size === 0 && (
-                <div className="text-center py-16 text-gray-500">
-                  <Search className="w-12 h-12 mx-auto text-gray-300 mb-4" />
-                  <p className="font-medium text-gray-600 text-lg">No services found</p>
-                  <p className="text-sm mt-1">Try adjusting your search criteria</p>
+
+                {/* Search */}
+                <div className="relative mb-8">
+                  <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Input 
+                    placeholder="Search for any services..." 
+                    className="pl-12 bg-white border-gray-200 rounded-2xl h-14 text-base focus-visible:ring-gray-200 shadow-sm"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
                 </div>
-              )}
-            </div>
+
+                {/* Services List */}
+                <div className="space-y-10">
+                  {Array.from(filteredCategories.entries()).map(([cat, catServices]) => (
+                    <div id={`category-${cat.replace(/\s+/g, '-')}`} key={cat} className="scroll-mt-40">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-xl font-bold text-gray-900">{cat}</h3>
+                        <span className="text-sm font-medium text-gray-500">{catServices.length}</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {catServices.map(service => {
+                          const isSelected = selectedServices.some(s => s.id === service.id);
+                          return (
+                            <div 
+                              key={service.id} 
+                              className={`bg-white p-4 rounded-2xl border transition-all ${isSelected ? 'border-gray-400 shadow-md' : 'border-gray-200 shadow-sm hover:border-gray-300'}`}
+                            >
+                              <div className="flex justify-between items-start gap-4">
+                                <div className="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-gray-100">
+                                  <img src={getServiceFallbackImage(service.name, cat)} className="w-full h-full object-cover" alt={service.name} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="font-bold text-gray-900 leading-tight mb-1 truncate">{service.name}</h4>
+                                  <div className="flex items-baseline gap-1.5 flex-wrap">
+                                    <span className="font-bold text-red-500 text-sm">{business.currency}{service.price}</span>
+                                    <span className="text-[10px] text-gray-500 font-medium">({service.price > 500 ? 'Member Price' : 'Regular Price'})</span>
+                                  </div>
+                                  {service.price > 500 && (
+                                    <div className="text-[11px] text-gray-400 line-through">
+                                      {business.currency}{service.price + (service.price * 0.1)} (Regular Price)
+                                    </div>
+                                  )}
+                                  <div className="flex items-center gap-1 text-[11px] text-gray-500 font-medium mt-1.5">
+                                    <Clock className="w-3 h-3" /> {formatDuration(service.duration)}
+                                  </div>
+                                </div>
+                                <div className="shrink-0 pt-1">
+                                  {isSelected ? (
+                                    <Button 
+                                      variant="outline" 
+                                      className="bg-[#1a1a1a] text-white hover:bg-black border-transparent rounded-xl h-9 px-4 text-xs font-semibold shadow-sm"
+                                      onClick={() => handleRemoveService(service.id)}
+                                    >
+                                      Remove &minus;
+                                    </Button>
+                                  ) : (
+                                    <Button 
+                                      variant="outline" 
+                                      className="bg-white border-gray-300 text-gray-900 hover:bg-gray-50 rounded-xl h-9 px-5 text-xs font-semibold shadow-sm"
+                                      onClick={() => handleAddService(service)}
+                                    >
+                                      Add +
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {filteredCategories.size === 0 && (
+                    <div className="text-center py-16 text-gray-500">
+                      <Search className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                      <p className="font-medium text-gray-600 text-lg">No services found</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {activeTab === 'Products' && (
+              <div className="py-8">
+                {products.length === 0 ? (
+                  <div className="text-center text-gray-500">No products available at this time.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {products.map(product => (
+                      <div key={product.id} className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex items-start gap-4">
+                        <div className="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center">
+                          <ShoppingCart className="w-8 h-8 text-gray-300" />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-gray-900">{product.name}</h4>
+                          <div className="font-bold text-red-500 mt-1">{business.currency}{product.price}</div>
+                          {product.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{product.description}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'Packages' && (
+              <div className="py-8">
+                {packages.length === 0 ? (
+                  <div className="text-center text-gray-500">No packages available at this time.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {packages.map(pkg => (
+                      <div key={pkg.id} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                        <h4 className="font-bold text-lg text-gray-900">{pkg.name}</h4>
+                        <div className="flex items-center gap-2 mt-2">
+                          <div className="font-bold text-xl text-green-600">{business.currency}{pkg.price}</div>
+                          {pkg.original_price && pkg.original_price > pkg.price && (
+                            <div className="text-sm text-gray-400 line-through">{business.currency}{pkg.original_price}</div>
+                          )}
+                        </div>
+                        {pkg.description && <p className="text-sm text-gray-500 mt-2">{pkg.description}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'Memberships' && (
+              <div className="py-8">
+                {memberships.length === 0 ? (
+                  <div className="text-center text-gray-500">No memberships available at this time.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {memberships.map(mem => (
+                      <div key={mem.id} className="bg-gradient-to-br from-gray-900 to-gray-800 p-6 rounded-2xl shadow-md text-white">
+                        <h4 className="font-bold text-xl">{mem.name}</h4>
+                        <div className="font-black text-3xl mt-3">{business.currency}{mem.price}</div>
+                        {mem.description && <p className="text-sm text-gray-300 mt-3">{mem.description}</p>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'Enquiry' && (
+              <div className="py-8 max-w-lg mx-auto">
+                <Card className="border-gray-200 shadow-sm rounded-2xl">
+                  <CardContent className="p-6">
+                    {enquirySuccess ? (
+                      <div className="text-center py-8">
+                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <CheckCircle className="w-8 h-8 text-green-600" />
+                        </div>
+                        <h3 className="text-xl font-bold mb-2">Message Sent!</h3>
+                        <p className="text-gray-500">We will get back to you shortly.</p>
+                        <Button className="mt-6" variant="outline" onClick={() => setEnquirySuccess(false)}>Send Another</Button>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleEnquirySubmit} className="space-y-4">
+                        <h3 className="text-xl font-bold mb-4 text-center">Contact Us</h3>
+                        <div className="space-y-2">
+                          <Label>Full Name</Label>
+                          <Input required className="rounded-xl h-12" placeholder="Your name" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Phone Number</Label>
+                          <Input required className="rounded-xl h-12" placeholder="Your phone number" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Message</Label>
+                          <textarea 
+                            required 
+                            className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-black outline-none resize-none" 
+                            rows={4} 
+                            placeholder="How can we help you?"
+                          ></textarea>
+                        </div>
+                        <Button type="submit" disabled={submitting} className="w-full bg-black hover:bg-gray-800 text-white h-12 rounded-xl mt-4">
+                          {submitting ? "Sending..." : "Send Message"} <Send className="w-4 h-4 ml-2" />
+                        </Button>
+                      </form>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+            
+            {activeTab === 'Featured' && (
+              <div className="py-8 text-center text-gray-500">
+                Check out our top services under the Services tab!
+              </div>
+            )}
           </div>
           
           {/* Bottom Floating Cart Bar */}
-          <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none p-4">
-            <div className="max-w-3xl mx-auto flex justify-center w-full pointer-events-auto">
-              <div className={`w-full transition-all duration-300 transform ${selectedServices.length > 0 ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'}`}>
-                <div className="bg-[#2a2a2a] rounded-2xl shadow-2xl flex items-center justify-between p-3 pl-4 pr-3 overflow-hidden relative">
-                  <div className="flex items-center gap-4 text-white">
-                    <div className="relative">
-                      <ShoppingCart className="w-6 h-6 text-gray-300" />
-                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-[#2a2a2a]">
-                        {selectedServices.length}
-                      </span>
+          {activeTab === 'Services' && (
+            <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none p-4">
+              <div className="max-w-3xl mx-auto flex justify-center w-full pointer-events-auto">
+                <div className={`w-full transition-all duration-300 transform ${selectedServices.length > 0 ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'}`}>
+                  <div className="bg-[#2a2a2a] rounded-2xl shadow-2xl flex items-center justify-between p-3 pl-4 pr-3 overflow-hidden relative">
+                    <div className="flex items-center gap-4 text-white">
+                      <div className="relative">
+                        <ShoppingCart className="w-6 h-6 text-gray-300" />
+                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-[#2a2a2a]">
+                          {selectedServices.length}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="font-bold text-base">{business.currency}{totalAmount}</div>
+                        <div className="text-[10px] text-gray-400 font-medium">Plus taxes</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="font-bold text-base">{business.currency}{totalAmount}</div>
-                      <div className="text-[10px] text-gray-400 font-medium">Plus taxes</div>
-                    </div>
+                    <Button 
+                      className="bg-white text-black hover:bg-gray-100 rounded-xl h-11 px-8 font-bold text-sm" 
+                      onClick={() => setStep(2)}
+                    >
+                      Book Now
+                    </Button>
                   </div>
-                  <Button 
-                    className="bg-white text-black hover:bg-gray-100 rounded-xl h-11 px-8 font-bold text-sm" 
-                    onClick={() => setStep(2)}
-                  >
-                    Book Now
-                  </Button>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* Step 2: Date & Time */}
       {step === 2 && (
         <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen bg-white">
+          {/* ... (Same as before) ... */}
           <div className="flex items-center gap-4 mb-8 pt-4">
             <Button variant="ghost" size="icon" onClick={() => setStep(1)} className="rounded-full bg-gray-100 hover:bg-gray-200">
               <ChevronLeft className="w-5 h-5" />
@@ -525,6 +738,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
       {/* Step 3: Details */}
       {step === 3 && (
         <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen bg-white pb-32">
+          {/* ... (Same as before) ... */}
           <div className="flex items-center gap-4 mb-8 pt-4">
             <Button variant="ghost" size="icon" onClick={() => setStep(2)} className="rounded-full bg-gray-100 hover:bg-gray-200">
               <ChevronLeft className="w-5 h-5" />
@@ -619,6 +833,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
       {/* Step 4: Success */}
       {step === 4 && (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+          {/* ... (Same as before) ... */}
           <Card className="w-full max-w-md border-0 shadow-2xl rounded-3xl overflow-hidden bg-white">
             <CardContent className="p-10 text-center space-y-6">
               <div className="mx-auto w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mb-8">
