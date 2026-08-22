@@ -92,6 +92,16 @@ export async function getCashRegisters() {
     try {
       console.log("[v0] Fetching cash registers from database for tenant:", tenantId)
       
+      // Auto-migrate missing columns
+      try {
+        await sql`ALTER TABLE cash_registers ADD COLUMN IF NOT EXISTS tenant_id INTEGER DEFAULT 1`;
+        await sql`UPDATE cash_registers SET tenant_id = ${tenantId} WHERE tenant_id IS NULL`;
+        await sql`ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS tenant_id INTEGER DEFAULT 1`;
+        await sql`UPDATE cash_transactions SET tenant_id = ${tenantId} WHERE tenant_id IS NULL`;
+      } catch (migrationError) {
+        console.log("[v0] Migration check error:", migrationError)
+      }
+
       // Fetch registers with tenant_id filter
       const registersResult = await sql`
         SELECT * FROM cash_registers 
@@ -122,10 +132,18 @@ export async function getCashRegisters() {
       console.log("[v0] Processed registers:", registers.length)
       console.log("[v0] Processed transactions:", transactions.length)
 
-      // If no data found in database, return fallback data
-      if (registers.length === 0 && transactions.length === 0) {
-        console.log("[v0] No data found in database, using fallback data")
-        return fallbackData
+      // If no data found in database, insert a default cash register
+      if (registers.length === 0) {
+        console.log("[v0] No registers found in database, inserting default register for tenant:", tenantId)
+        const defaultRegister = await sql`
+          INSERT INTO cash_registers (name, location, opening_balance, current_balance, status, tenant_id)
+          VALUES ('Main Counter', 'Front Desk', 0, 0, 'active', ${tenantId})
+          RETURNING *
+        `
+        const newReg = Array.isArray(defaultRegister) ? defaultRegister[0] : (defaultRegister.rows?.[0] || defaultRegister)
+        if (newReg) {
+          registers.push(newReg)
+        }
       }
 
       return {
