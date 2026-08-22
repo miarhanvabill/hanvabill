@@ -50,6 +50,8 @@ export default function CustomerAnalyticsPage() {
       if (response.ok) {
         const data = await response.json()
         setAnalytics(data)
+      } else {
+        throw new Error("Failed to fetch")
       }
     } catch (error) {
       console.error("Error fetching customer analytics:", error)

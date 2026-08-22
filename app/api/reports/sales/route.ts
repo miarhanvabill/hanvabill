@@ -1,9 +1,31 @@
 import { NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
 
-export async function GET() {
+export async function GET(request: Request) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      const { searchParams } = new URL(request.url)
+      const dateRange = searchParams.get("dateRange") || "This Month"
+      const categoryFilter = searchParams.get("category") || "all"
+
+      // Calculate date range
+      const startDate = new Date()
+      switch (dateRange) {
+        case "Today":
+          startDate.setHours(0, 0, 0, 0)
+          break
+        case "This Week":
+          startDate.setDate(startDate.getDate() - startDate.getDay())
+          break
+        case "This Month":
+          startDate.setDate(1)
+          break
+        case "Last 3 Months":
+          startDate.setMonth(startDate.getMonth() - 3)
+          break
+      }
+      const startIso = startDate.toISOString().split("T")[0]
+
       // Get total sales count and revenue
       const salesSummary = await sql`
         SELECT 
@@ -14,7 +36,13 @@ export async function GET() {
         FROM bookings 
         WHERE status = 'completed'
           AND tenant_id = ${tenantId}
-          AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+          AND booking_date >= ${startIso}
+          ${categoryFilter !== 'all' ? sql`AND EXISTS (
+            SELECT 1 FROM booking_services bs2 
+            JOIN services s2 ON bs2.service_id = s2.id 
+            LEFT JOIN categories c2 ON s2.category_id = c2.id 
+            WHERE bs2.booking_id = bookings.id AND c2.name ILIKE ${'%' + categoryFilter.split(' ')[0] + '%'}
+          )` : sql``}
       `
 
       // Get top services by revenue
@@ -29,7 +57,13 @@ export async function GET() {
         WHERE b.status = 'completed'
           AND b.tenant_id = ${tenantId}
           AND s.tenant_id = ${tenantId}
-          AND b.created_at >= CURRENT_DATE - INTERVAL '30 days'
+          AND b.booking_date >= ${startIso}
+          ${categoryFilter !== 'all' ? sql`AND EXISTS (
+            SELECT 1 FROM booking_services bs2 
+            JOIN services s2 ON bs2.service_id = s2.id 
+            LEFT JOIN categories c2 ON s2.category_id = c2.id 
+            WHERE bs2.booking_id = b.id AND c2.name ILIKE ${'%' + categoryFilter.split(' ')[0] + '%'}
+          )` : sql``}
         GROUP BY s.id, s.name
         ORDER BY revenue DESC
         LIMIT 5
@@ -52,6 +86,13 @@ export async function GET() {
         LEFT JOIN staff st ON b.staff_id = st.id
         WHERE b.status = 'completed'
           AND b.tenant_id = ${tenantId}
+          AND b.booking_date >= ${startIso}
+          ${categoryFilter !== 'all' ? sql`AND EXISTS (
+            SELECT 1 FROM booking_services bs2 
+            JOIN services s2 ON bs2.service_id = s2.id 
+            LEFT JOIN categories c2 ON s2.category_id = c2.id 
+            WHERE bs2.booking_id = b.id AND c2.name ILIKE ${'%' + categoryFilter.split(' ')[0] + '%'}
+          )` : sql``}
         GROUP BY b.id, c.full_name, b.total_amount, b.booking_date, b.status, st.name
         ORDER BY b.booking_date DESC
         LIMIT 50

@@ -43,7 +43,7 @@ export default function SalesReportPage() {
   const fetchSalesData = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/reports/sales`, {
+      const response = await fetch(`/api/reports/sales?dateRange=${dateRange}&category=${categoryFilter}`, {
         headers: {
           "Cache-Control": "no-cache",
         },
@@ -226,7 +226,7 @@ export default function SalesReportPage() {
                 <Package className="h-4 w-4 text-blue-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-blue-600">₹{stats.average_order_value}</div>
+                <div className="text-2xl font-bold text-blue-600">₹{stats.average_order_value.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                 <p className="text-xs text-muted-foreground">Per transaction</p>
               </CardContent>
             </Card>

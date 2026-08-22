@@ -66,8 +66,13 @@ export async function GET(request: Request) {
       // Get demographics
       const demographics = await sql`
         SELECT 
-          COUNT(*) FILTER (WHERE gender = 'male') * 100.0 / NULLIF(COUNT(*), 0) as male,
-          COUNT(*) FILTER (WHERE gender = 'female') * 100.0 / NULLIF(COUNT(*), 0) as female
+          COUNT(*) FILTER (WHERE LOWER(gender) = 'male') * 100.0 / NULLIF(COUNT(*), 0) as male,
+          COUNT(*) FILTER (WHERE LOWER(gender) = 'female') * 100.0 / NULLIF(COUNT(*), 0) as female,
+          COUNT(*) FILTER (WHERE date_of_birth IS NOT NULL AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_birth::DATE)) BETWEEN 18 AND 25) as age_18_25,
+          COUNT(*) FILTER (WHERE date_of_birth IS NOT NULL AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_birth::DATE)) BETWEEN 26 AND 35) as age_26_35,
+          COUNT(*) FILTER (WHERE date_of_birth IS NOT NULL AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_birth::DATE)) BETWEEN 36 AND 45) as age_36_45,
+          COUNT(*) FILTER (WHERE date_of_birth IS NOT NULL AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_birth::DATE)) >= 46) as age_46_plus,
+          COUNT(*) FILTER (WHERE date_of_birth IS NULL OR EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_birth::DATE)) < 18) as age_unknown
         FROM customers
         WHERE created_at >= ${startIso}
         AND tenant_id = ${tenantId}
@@ -100,7 +105,7 @@ export async function GET(request: Request) {
         returningCustomers,
         customerGrowth,
         avgLifetimeValue,
-        avgVisitFrequency: 2.5, // Placeholder - would need more complex calculation
+        avgVisitFrequency: totalCustomers > 0 ? (Number(topCustomers.reduce((sum, c) => sum + Number(c.visit_count), 0)) / topCustomers.length) || 1.0 : 0,
         topCustomers: topCustomers.map((customer) => ({
           ...customer,
           total_spent: Number(customer.total_spent) || 0,
@@ -111,10 +116,11 @@ export async function GET(request: Request) {
           male: Number(demographics[0]?.male) || 0,
           female: Number(demographics[0]?.female) || 0,
           age_groups: [
-            { range: "18-25", count: Math.floor(totalCustomers * 0.2) },
-            { range: "26-35", count: Math.floor(totalCustomers * 0.4) },
-            { range: "36-45", count: Math.floor(totalCustomers * 0.25) },
-            { range: "46+", count: Math.floor(totalCustomers * 0.15) },
+            { range: "18-25", count: Number(demographics[0]?.age_18_25) || 0 },
+            { range: "26-35", count: Number(demographics[0]?.age_26_35) || 0 },
+            { range: "36-45", count: Number(demographics[0]?.age_36_45) || 0 },
+            { range: "46+", count: Number(demographics[0]?.age_46_plus) || 0 },
+            { range: "Unknown", count: Number(demographics[0]?.age_unknown) || 0 },
           ],
         },
       }
