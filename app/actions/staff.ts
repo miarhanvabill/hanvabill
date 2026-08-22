@@ -17,6 +17,7 @@ export interface Staff {
   emergency_contact?: string | null
   skills?: string | null // TEXT in DB, corresponds to 'specialties' in forms
   commission_rate?: string | null // TEXT in DB, keep as string
+  avatar_url?: string | null
   created_at?: string | null // TIMESTAMP in DB, fetched as string
   updated_at?: string | null // VARCHAR in DB, fetched as string
 }
@@ -37,7 +38,7 @@ export async function getStaff(): Promise<Staff[]> {
         SELECT 
           id, name, phone, email, role, salary, 
           TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date,
-          is_active, address, emergency_contact, skills, commission_rate, 
+          is_active, address, emergency_contact, skills, commission_rate, avatar_url,
           created_at::text,
           updated_at::text
         FROM staff 
@@ -127,7 +128,7 @@ export async function getStaffMember(id: number) {
         SELECT 
           id, name, phone, email, role, salary, 
           TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date,
-          is_active, address, emergency_contact, skills, commission_rate, 
+          is_active, address, emergency_contact, skills, commission_rate, avatar_url,
           created_at,
           updated_at
         FROM staff WHERE id = ${id} AND tenant_id = ${tenantId}
@@ -170,19 +171,20 @@ export async function createStaff(data: Omit<Staff, "id" | "created_at" | "updat
       const result = await sql`
         INSERT INTO staff (
           tenant_id, name, phone, email, role, salary, hire_date, 
-          is_active, address, emergency_contact, skills, commission_rate
+          is_active, address, emergency_contact, skills, commission_rate, avatar_url
         )
         VALUES (
           ${tenantId}, ${data.name}, ${data.phone}, ${data.email || null}, ${data.role || null}, 
           ${data.salary || null}, ${data.hire_date || null}, ${data.is_active ?? true}, 
           ${data.address || null}, ${data.emergency_contact || null}, 
           ${data.skills || null},
-          ${data.commission_rate || null}
+          ${data.commission_rate || null},
+          ${data.avatar_url || null}
         )
         RETURNING 
           id, name, phone, email, role, salary, 
           TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date, 
-          is_active, address, emergency_contact, skills, commission_rate, 
+          is_active, address, emergency_contact, skills, commission_rate, avatar_url,
           created_at, 
           updated_at 
       `
@@ -240,12 +242,13 @@ export async function updateStaff(id: number, data: Partial<Staff>) {
           skills = COALESCE(${data.skills || null}, skills),
           commission_rate = COALESCE(${data.commission_rate}, commission_rate),
           commission_profile_id = ${profileId},
+          avatar_url = COALESCE(${data.avatar_url}, avatar_url),
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ${id} AND tenant_id = ${tenantId}
         RETURNING 
           id, name, phone, email, role, salary, 
           TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date, 
-          is_active, address, emergency_contact, skills, commission_rate, commission_profile_id,
+          is_active, address, emergency_contact, skills, commission_rate, commission_profile_id, avatar_url,
           created_at, 
           updated_at 
       `

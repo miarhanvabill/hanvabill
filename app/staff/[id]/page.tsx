@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { ArrowLeft, Edit, Phone, Mail, MapPin, Clock, Star, Award, TrendingUp } from "lucide-react"
 import Link from "next/link"
 import { getStaffMember, getStaffProfileStats, getStaffTodaysSchedule, type Staff } from "@/app/actions/staff"
@@ -61,9 +62,20 @@ async function StaffDetailsContent({ staffId }: { staffId: string }) {
                 Back to Staff
               </Button>
             </Link>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">{staff.name}</h1>
-              <p className="text-gray-600">{displayPosition}</p>
+            <div className="flex items-center space-x-4">
+              <Avatar className="h-16 w-16">
+                <AvatarImage src={staff.avatar_url || "/placeholder.svg"} alt={staff.name} />
+                <AvatarFallback className="text-xl">
+                  {staff.name
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">{staff.name}</h1>
+                <p className="text-gray-600">{displayPosition}</p>
+              </div>
             </div>
           </div>
           <Link href={`/staff/${staff.id}/edit`}>

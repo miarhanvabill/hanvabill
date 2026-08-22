@@ -54,6 +54,7 @@ export default function CreateStaffPage() {
     specialties: [] as string[], // Maps to 'skills' in DB (TEXT)
     notes: "", // Not in DB, client-side only
     is_active: true,
+    avatar_url: "",
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [customSpecialty, setCustomSpecialty] = useState("")
@@ -150,6 +151,7 @@ export default function CreateStaffPage() {
           is_active: formData.is_active,
           skills: formData.specialties.join(", ") || null, // Map specialties array to skills string
           emergency_contact: null, // Not in form, set to null
+          avatar_url: formData.avatar_url || null,
           // department, date_of_birth, notes are not sent to DB
         }
 
@@ -244,14 +246,26 @@ export default function CreateStaffPage() {
                     />
                     {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
                   </div>
-                  <div>
-                    <Label htmlFor="date_of_birth">Date of Birth</Label>
-                    <Input
-                      id="date_of_birth"
-                      type="date"
-                      value={formData.date_of_birth}
-                      onChange={(e) => handleInputChange("date_of_birth", e.target.value)}
-                    />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="date_of_birth">Date of Birth</Label>
+                      <Input
+                        id="date_of_birth"
+                        type="date"
+                        value={formData.date_of_birth}
+                        onChange={(e) => handleInputChange("date_of_birth", e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="avatar_url">Avatar URL</Label>
+                      <Input
+                        id="avatar_url"
+                        type="url"
+                        value={formData.avatar_url}
+                        onChange={(e) => handleInputChange("avatar_url", e.target.value)}
+                        placeholder="https://example.com/avatar.jpg"
+                      />
+                    </div>
                   </div>
                 </CardContent>
               </Card>

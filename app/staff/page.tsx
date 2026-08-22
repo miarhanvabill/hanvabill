@@ -68,7 +68,7 @@ export default function StaffManagePage() {
       const mappedStaff: StaffDisplayMember[] = staffData.map(s => ({
         ...s,
         id: s.id.toString(), // Ensure ID is string for client-side keys
-        avatar: `/placeholder.svg?height=40&width=40&text=${s.name.charAt(0)}`,
+        avatar: s.avatar_url || `/placeholder.svg?height=40&width=40&text=${s.name.charAt(0)}`,
         workingHours: "9:00 AM - 6:00 PM", // Default or fetch from DB if column exists
         displayStatus: s.is_active === true ? "active" : s.is_active === false ? "inactive" : "on-leave", // Derive status
       }));

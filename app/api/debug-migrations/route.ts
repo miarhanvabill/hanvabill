@@ -70,6 +70,7 @@ export async function GET() {
       
       try {
         await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS commission_profile_id INTEGER REFERENCES commission_profiles(id);`;
+        await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS avatar_url TEXT;`;
       } catch (e) {
         results.push('staff alter error (safe to ignore if exists): ' + String(e));
       }

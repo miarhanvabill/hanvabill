@@ -43,6 +43,7 @@ function EditStaffForm({ staff }: { staff: Staff }) {
     specialties: staff.skills ? staff.skills.split(',').map(s => s.trim()).filter(Boolean) : [], // Map DB 'skills' to form 'specialties' array
     notes: "", // Not in DB, client-side only
     is_active: staff.is_active ?? true,
+    avatar_url: staff.avatar_url || "",
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -118,6 +119,7 @@ function EditStaffForm({ staff }: { staff: Staff }) {
           is_active: formData.is_active,
           skills: Array.isArray(formData.specialties) ? formData.specialties.join(", ") || null : formData.specialties || null, // Map specialties array to skills string
           emergency_contact: null, // Not in form, set to null
+          avatar_url: formData.avatar_url || null,
           // department, date_of_birth, notes are not sent to DB
         }
 
@@ -215,6 +217,16 @@ function EditStaffForm({ staff }: { staff: Staff }) {
                         type="date"
                         value={formData.date_of_birth}
                         onChange={(e) => handleInputChange("date_of_birth", e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="avatar_url">Avatar URL</Label>
+                      <Input
+                        id="avatar_url"
+                        type="url"
+                        value={formData.avatar_url}
+                        onChange={(e) => handleInputChange("avatar_url", e.target.value)}
+                        placeholder="https://example.com/avatar.jpg"
                       />
                     </div>
                   </div>
