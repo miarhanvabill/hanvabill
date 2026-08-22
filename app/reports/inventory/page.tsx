@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { downloadCSV } from "@/lib/utils"
 import { Download, ArrowLeft, AlertTriangle } from "lucide-react"
 import Link from "next/link"
 
@@ -87,10 +88,10 @@ export default function InventoryReportPage() {
                     </div>
                   )}
                 </div>
-                <Button className="gap-2 bg-black text-white hover:bg-gray-800">
-                  <Download className="w-4 h-4" />
-                  Download
-                </Button>
+                <Button className="gap-2 bg-black text-white hover:bg-gray-800" onClick={() => downloadCSV(inventory, 'inventory-report.csv')}>
+                    <Download className="w-4 h-4" />
+                    Download
+                  </Button>
               </div>
             </CardContent>
           </Card>

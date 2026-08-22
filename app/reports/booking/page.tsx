@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { downloadCSV } from "@/lib/utils"
 import { Download, ArrowLeft, Filter } from "lucide-react"
 import Link from "next/link"
 
@@ -90,6 +91,8 @@ export default function BookingReportPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="Today">Today</SelectItem>
+                      <SelectItem value="Yesterday">Yesterday</SelectItem>
                       <SelectItem value="Last 7 Days">Last 7 Days</SelectItem>
                       <SelectItem value="Last 30 Days">Last 30 Days</SelectItem>
                       <SelectItem value="Last 3 Months">Last 3 Months</SelectItem>
@@ -110,7 +113,7 @@ export default function BookingReportPage() {
                     <Filter className="w-4 h-4" />
                     Filters
                   </Button>
-                  <Button className="gap-2 bg-black text-white hover:bg-gray-800">
+                  <Button className="gap-2 bg-black text-white hover:bg-gray-800" onClick={() => downloadCSV(bookings, 'booking-report.csv')}>
                     <Download className="w-4 h-4" />
                     Download
                   </Button>

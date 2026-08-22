@@ -14,6 +14,10 @@ export async function GET(request: Request) {
         case "Today":
           startDate.setHours(0, 0, 0, 0)
           break
+        case "Yesterday":
+          startDate.setDate(startDate.getDate() - 1)
+          startDate.setHours(0, 0, 0, 0)
+          break
         case "This Week":
           startDate.setDate(startDate.getDate() - startDate.getDay())
           break

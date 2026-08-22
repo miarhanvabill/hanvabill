@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { downloadCSV } from "@/lib/utils"
 import { Download, ArrowLeft, Users, TrendingUp, Phone, MessageCircle, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import { useRealTimeSync } from "@/lib/websocket"
@@ -202,6 +203,8 @@ export default function EnquiryReportPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Today">Today</SelectItem>
+                      <SelectItem value="Yesterday">Yesterday</SelectItem>
+                      <SelectItem value="Today">Today</SelectItem>
                       <SelectItem value="This Week">This Week</SelectItem>
                       <SelectItem value="This Month">This Month</SelectItem>
                       <SelectItem value="Last 3 Months">Last 3 Months</SelectItem>
@@ -223,7 +226,7 @@ export default function EnquiryReportPage() {
                     <RefreshCw className="w-4 h-4" />
                     Refresh
                   </Button>
-                  <Button className="gap-2 bg-black text-white hover:bg-gray-800">
+                  <Button className="gap-2 bg-black text-white hover:bg-gray-800" onClick={() => downloadCSV(enquiries, 'enquiry-report.csv')}>
                     <Download className="w-4 h-4" />
                     Export
                   </Button>

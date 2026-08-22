@@ -8,7 +8,14 @@ export async function GET(request: NextRequest) {
       const dateRange = searchParams.get("dateRange") || "Last 7 Days"
 
       // Calculate days
-      const days = dateRange === "Last 7 Days" ? 7 : dateRange === "Last 30 Days" ? 30 : 90
+      let days = 30;
+      if (dateRange === "Today") days = 0;
+      else if (dateRange === "Yesterday") days = 1;
+      else if (dateRange === "Last 7 Days" || dateRange === "This Week") days = 7;
+      else if (dateRange === "Last 30 Days" || dateRange === "This Month") days = 30;
+      else if (dateRange === "Last 90 Days" || dateRange === "Last 3 Months") days = 90;
+      else if (dateRange === "Last 6 Months") days = 180;
+      else if (dateRange === "Last 12 Months" || dateRange === "This Year") days = 365;
       
       const dailyRevenue = await sql`
         SELECT 

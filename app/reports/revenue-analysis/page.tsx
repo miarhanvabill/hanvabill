@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { downloadCSV } from "@/lib/utils"
 import { Download, ArrowLeft, TrendingUp, TrendingDown, IndianRupee, CreditCard } from "lucide-react"
 import Link from "next/link"
 
@@ -152,12 +153,14 @@ export default function RevenueAnalysisPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="Today">Today</SelectItem>
+                      <SelectItem value="Yesterday">Yesterday</SelectItem>
                       <SelectItem value="Last 3 Months">Last 3 Months</SelectItem>
                       <SelectItem value="Last 6 Months">Last 6 Months</SelectItem>
                       <SelectItem value="Last 12 Months">Last 12 Months</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button className="gap-2 bg-black text-white hover:bg-gray-800">
+                  <Button className="gap-2 bg-black text-white hover:bg-gray-800" onClick={() => downloadCSV(revenueData, 'revenue-analysis-report.csv')}>
                     <Download className="w-4 h-4" />
                     Export
                   </Button>
