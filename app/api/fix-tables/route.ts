@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     `;
     results.push("commission_profiles ensured");
 
-    await sql(`ALTER TABLE commission_profiles ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`);
+    await sql([`ALTER TABLE commission_profiles ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`]);
     await sql`CREATE INDEX IF NOT EXISTS idx_commission_profiles_tenant_id ON commission_profiles(tenant_id)`;
 
     await sql`
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
     `;
     results.push("commission_tiers ensured");
     
-    await sql(`ALTER TABLE commission_tiers ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`);
+    await sql([`ALTER TABLE commission_tiers ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`]);
 
     // Try adding commission_profile_id to staff
     try {
@@ -74,7 +74,7 @@ export async function GET(request: Request) {
     `;
     results.push("auto_consumption_rules ensured");
     
-    await sql(`ALTER TABLE auto_consumption_rules ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`);
+    await sql([`ALTER TABLE auto_consumption_rules ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`]);
     await sql`CREATE INDEX IF NOT EXISTS idx_auto_consumption_rules_tenant_id ON auto_consumption_rules(tenant_id)`;
 
     // Auto Consumption Logs
@@ -96,7 +96,7 @@ export async function GET(request: Request) {
     `;
     results.push("auto_consumption_logs ensured");
     
-    await sql(`ALTER TABLE auto_consumption_logs ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`);
+    await sql([`ALTER TABLE auto_consumption_logs ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`]);
 
     // Auto Consumption Stats
     await sql`
@@ -115,7 +115,7 @@ export async function GET(request: Request) {
     `;
     results.push("auto_consumption_stats ensured");
 
-    await sql(`ALTER TABLE auto_consumption_stats ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`);
+    await sql([`ALTER TABLE auto_consumption_stats ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`]);
 
     // Staff Goals
     await sql`
@@ -139,7 +139,7 @@ export async function GET(request: Request) {
     `;
     results.push("staff_goals ensured");
     
-    await sql(`ALTER TABLE staff_goals ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`);
+    await sql([`ALTER TABLE staff_goals ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`]);
     await sql`CREATE INDEX IF NOT EXISTS idx_staff_goals_tenant_id ON staff_goals(tenant_id)`;
 
     // Business Resources
@@ -158,7 +158,7 @@ export async function GET(request: Request) {
     `;
     results.push("business_resources ensured");
     
-    await sql(`ALTER TABLE business_resources ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`);
+    await sql([`ALTER TABLE business_resources ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) DEFAULT ${defaultTenantId}`]);
 
     return NextResponse.json({ success: true, results });
   } catch (error: any) {
