@@ -26,28 +26,28 @@ export async function GET(request: Request) {
       const startIso = startDate.toISOString().split("T")[0]
 
       // Get bookings & revenue data
-      const bookingData = await sql\`
+      const bookingData = await sql`
         SELECT 
           COUNT(*) as total_bookings,
           COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_bookings,
           COUNT(CASE WHEN status = 'cancelled' THEN 1 END) as cancelled_bookings,
           COALESCE(SUM(CASE WHEN status IN ('completed', 'confirmed') THEN total_amount ELSE 0 END), 0) as total_revenue
         FROM bookings 
-        WHERE booking_date >= \${startIso}
-          AND tenant_id = \${tenantId}
-      \`
+        WHERE booking_date >= ${startIso}
+          AND tenant_id = ${tenantId}
+      `
 
       // Get customer data
-      const customerData = await sql\`
+      const customerData = await sql`
         SELECT 
           COUNT(*) as total_customers,
-          COUNT(CASE WHEN created_at >= \${startIso} THEN 1 END) as new_customers
+          COUNT(CASE WHEN created_at >= ${startIso} THEN 1 END) as new_customers
         FROM customers
-        WHERE tenant_id = \${tenantId}
-      \`
+        WHERE tenant_id = ${tenantId}
+      `
 
       // Get inventory data
-      const inventoryData = await sql\`
+      const inventoryData = await sql`
         SELECT 
           COUNT(*) as total_items,
           COUNT(CASE WHEN stock_quantity <= min_stock_level THEN 1 END) as low_stock,
@@ -55,15 +55,15 @@ export async function GET(request: Request) {
           COALESCE(SUM(stock_quantity * COALESCE(price, 0)), 0) as total_value
         FROM products
         WHERE is_active = 'true'
-          AND tenant_id = \${tenantId}
-      \`
+          AND tenant_id = ${tenantId}
+      `
 
       // Get staff salary for expenses
-      const staffData = await sql\`
+      const staffData = await sql`
         SELECT COALESCE(SUM(salary), 0) as total_salary
         FROM staff
-        WHERE tenant_id = \${tenantId}
-      \`.catch(() => [{ total_salary: 0 }]);
+        WHERE tenant_id = ${tenantId}
+      `.catch(() => [{ total_salary: 0 }]);
 
       // Calculations
       const revenue = Number(bookingData[0]?.total_revenue) || 0;
