@@ -1,9 +1,9 @@
 "use client"
-import React, { useEffect, useState, use, useMemo } from "react"
+import React, { useEffect, useState, use, useMemo, useRef } from "react"
 import { format, addDays, startOfToday } from "date-fns"
-import { Calendar, Clock, CheckCircle, ChevronLeft, MapPin, Search, Phone, Share2, X } from "lucide-react"
+import { Calendar, Clock, CheckCircle, ChevronLeft, ChevronRight, MapPin, Search, Phone, Share2, X, ShoppingCart } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
@@ -19,7 +19,7 @@ interface Service {
 
 const getCategoryFallbackImage = (categoryName: string) => {
   const name = (categoryName || '').toLowerCase();
-  if (name.includes('hair') || name.includes('cut')) return 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=400&q=80';
+  if (name.includes('hair') || name.includes('cut') || name.includes('bangs')) return 'https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=400&q=80';
   if (name.includes('skin') || name.includes('face') || name.includes('facial') || name.includes('bleach') || name.includes('clean') || name.includes('tan')) return 'https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?auto=format&fit=crop&w=400&q=80';
   if (name.includes('nail') || name.includes('mani') || name.includes('pedi')) return 'https://images.unsplash.com/photo-1522337660859-02fbefca4702?auto=format&fit=crop&w=400&q=80';
   if (name.includes('massage') || name.includes('spa')) return 'https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=400&q=80';
@@ -29,6 +29,22 @@ const getCategoryFallbackImage = (categoryName: string) => {
   if (name.includes('thread')) return 'https://images.unsplash.com/photo-1582216503923-a1851e363b86?auto=format&fit=crop&w=400&q=80';
   
   return 'https://images.unsplash.com/photo-1521590832167-7bfcfaa6362f?auto=format&fit=crop&w=400&q=80';
+}
+
+const getServiceFallbackImage = (serviceName: string, categoryName: string) => {
+  const name = serviceName.toLowerCase();
+  if (name.includes('fringe') || name.includes('bangs') || name.includes('women haircut')) return 'https://images.unsplash.com/photo-1595476108010-b4d1f10d5e43?auto=format&fit=crop&w=400&q=80';
+  if (name.includes('kid')) return 'https://images.unsplash.com/photo-1601662916024-5d5d8fbfa59c?auto=format&fit=crop&w=400&q=80';
+  if (name.includes('men') && name.includes('cut')) return 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?auto=format&fit=crop&w=400&q=80';
+  if (name.includes('wash')) return 'https://images.unsplash.com/photo-1600948836101-f9ff09c8502a?auto=format&fit=crop&w=400&q=80';
+  return getCategoryFallbackImage(categoryName);
+}
+
+const formatDuration = (mins: number) => {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `0h ${m}m`;
 }
 
 export default function PublicBookingPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -45,6 +61,10 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
+  const [activeTab, setActiveTab] = useState("Services")
+  const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  
+  const categoriesRef = useRef<HTMLDivElement>(null)
   
   const [customerForm, setCustomerForm] = useState({
     name: "",
@@ -93,6 +113,8 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const filteredCategories = useMemo(() => {
     const map = new Map<string, Service[]>()
     for (const [cat, catServices] of categoriesMap.entries()) {
+      if (activeCategory && activeCategory !== cat && !searchQuery) continue;
+      
       const matchedServices = catServices.filter(s => 
         s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
         cat.toLowerCase().includes(searchQuery.toLowerCase())
@@ -102,15 +124,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
       }
     }
     return map
-  }, [categoriesMap, searchQuery])
-
-  const toggleService = (service: Service) => {
-    setSelectedServices(prev => 
-      prev.some(s => s.id === service.id) 
-        ? prev.filter(s => s.id !== service.id)
-        : [...prev, service]
-    )
-  }
+  }, [categoriesMap, searchQuery, activeCategory])
 
   const handleAddService = (service: Service) => {
     if (!selectedServices.some(s => s.id === service.id)) {
@@ -122,12 +136,18 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     setSelectedServices(prev => prev.filter(s => s.id !== id))
   }
 
-  const scrollToCategory = (categoryName: string) => {
-    const element = document.getElementById(`category-${categoryName.replace(/\s+/g, '-')}`)
-    if (element) {
-      const y = element.getBoundingClientRect().top + window.scrollY - 100 // offset for sticky header
-      window.scrollTo({ top: y, behavior: 'smooth' })
+  const scrollCategories = (direction: 'left' | 'right') => {
+    if (categoriesRef.current) {
+      const scrollAmount = 300;
+      categoriesRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      })
     }
+  }
+
+  const scrollToCategory = (categoryName: string) => {
+    setActiveCategory(categoryName === activeCategory ? null : categoryName)
   }
 
   const handleSubmitBooking = async () => {
@@ -160,7 +180,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
       </div>
     )
@@ -183,143 +203,196 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const totalDuration = selectedServices.reduce((sum, s) => sum + Number(s.duration), 0);
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-24 font-sans selection:bg-black selection:text-white">
-      {/* STEP 1: Service Selection */}
+    <div className="min-h-screen bg-gray-50/50 pb-32 font-sans selection:bg-black selection:text-white">
+      {/* Sticky Top Header (Appears on Scroll in Zylu, we'll keep it simple) */}
+      <div className="sticky top-0 bg-white z-40 border-b border-gray-100 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-black text-white font-bold flex items-center justify-center rounded uppercase text-sm">
+              {business?.name?.substring(0,2) || "CB"}
+            </div>
+            <h1 className="font-bold text-gray-900 hidden sm:block uppercase tracking-tight">{business.name}</h1>
+          </div>
+          <Button className="bg-black text-white hover:bg-gray-800 rounded-lg h-9 px-6 font-medium text-sm">
+            Login
+          </Button>
+        </div>
+      </div>
+
       {step === 1 && (
         <div className="animate-in fade-in">
-          {/* Header Cover & Info */}
-          <div className="relative">
-            <div className="h-48 md:h-64 bg-gray-800 w-full overflow-hidden">
-              <img 
-                src="https://images.unsplash.com/photo-1521590832167-7bfcfaa6362f?auto=format&fit=crop&w=1600&q=80" 
-                alt="Salon Cover" 
-                className="w-full h-full object-cover opacity-60"
-              />
-            </div>
-            
-            <div className="px-4 -mt-8 relative z-10 max-w-4xl mx-auto">
-              <div className="bg-white rounded-2xl shadow-sm p-4 sm:p-6 w-full border border-gray-100">
-                <div className="flex justify-between items-start">
+          {/* Cover & Business Card */}
+          <div className="bg-white pb-6 border-b border-gray-100">
+            <div className="max-w-7xl mx-auto">
+              <div className="h-48 sm:h-64 md:h-80 bg-gray-900 w-full relative">
+                <img 
+                  src="https://images.unsplash.com/photo-1521590832167-7bfcfaa6362f?auto=format&fit=crop&w=2000&q=80" 
+                  alt="Salon Cover" 
+                  className="w-full h-full object-cover opacity-70"
+                />
+              </div>
+              
+              <div className="px-4 sm:px-6 -mt-10 relative z-10">
+                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6 w-full flex flex-col md:flex-row md:items-end justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2 mb-2">
-                      <Badge className="bg-green-50 text-green-700 hover:bg-green-100 border-0 font-medium">Open Now</Badge>
-                      <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-200 border-0 font-medium">{format(new Date(), 'EEEE')}</Badge>
+                      <Badge className="bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 font-medium px-3">Open Now</Badge>
+                      <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200 font-medium px-3">{format(new Date(), 'EEEE')}</Badge>
                     </div>
-                    <h1 className="text-xl sm:text-2xl md:text-3xl font-bold uppercase tracking-tight text-gray-900 mt-1">
+                    <h1 className="text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-tight text-gray-900 mt-2">
                       {business.name}
                     </h1>
-                    <p className="text-gray-500 text-sm mt-1 flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5" />
-                      {business.address || "Bengaluru, Karnataka, India"}
-                    </p>
+                    <p className="text-gray-500 text-sm mt-1">{business.address || "Bengaluru, Karnataka, India"}</p>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="icon" className="rounded-full w-10 h-10 border-gray-200 text-gray-600 hover:bg-gray-50">
-                      <Phone className="w-4 h-4"/>
-                    </Button>
-                    <Button variant="outline" size="icon" className="rounded-full w-10 h-10 border-gray-200 text-gray-600 hover:bg-gray-50">
-                      <Share2 className="w-4 h-4"/>
-                    </Button>
+                  <div className="flex items-center gap-4">
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="icon" className="rounded-full w-10 h-10 border-gray-200 text-gray-600 hover:bg-gray-50">
+                        <Phone className="w-4 h-4"/>
+                      </Button>
+                      <Button variant="outline" size="icon" className="rounded-full w-10 h-10 border-gray-200 text-gray-600 hover:bg-gray-50">
+                        <Share2 className="w-4 h-4"/>
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Sticky Tabs */}
-          <div className="sticky top-0 bg-white z-20 border-b border-gray-100 mt-4 shadow-sm">
-            <div className="flex overflow-x-auto px-4 sm:px-6 py-4 gap-6 no-scrollbar max-w-4xl mx-auto">
-              <button className="text-gray-400 hover:text-gray-900 whitespace-nowrap text-sm font-semibold transition-colors">Featured</button>
-              <button className="text-black border-b-2 border-black pb-1 whitespace-nowrap text-sm font-semibold">Services</button>
-              <button className="text-gray-400 hover:text-gray-900 whitespace-nowrap text-sm font-semibold transition-colors">Products</button>
-              <button className="text-gray-400 hover:text-gray-900 whitespace-nowrap text-sm font-semibold transition-colors">Packages</button>
-              <button className="text-gray-400 hover:text-gray-900 whitespace-nowrap text-sm font-semibold transition-colors">Memberships</button>
+          {/* Tabs */}
+          <div className="bg-white border-b border-gray-100 sticky top-16 z-30">
+            <div className="max-w-7xl mx-auto flex overflow-x-auto px-4 sm:px-6 no-scrollbar">
+              {['Featured', 'Services', 'Products', 'Packages', 'Memberships', 'Enquiry'].map(tab => (
+                <button 
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`whitespace-nowrap px-4 py-4 text-sm font-semibold transition-colors border-b-2 ${
+                    activeTab === tab 
+                      ? 'border-black text-black' 
+                      : 'border-transparent text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Main Content */}
-          <div className="max-w-4xl mx-auto px-4 sm:px-6 mt-6">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="text-lg font-bold">Services</div>
-              <div className="flex-1 h-px bg-gray-200"></div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 mb-8">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <Input 
-                  placeholder="Search for services or categories..." 
-                  className="pl-9 bg-white border-gray-200 rounded-xl h-11 focus-visible:ring-gray-200"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
+          {/* Main Content Area */}
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-6">
+            
+            {/* Horizontal Categories Row */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-gray-900">Categories</h2>
+                <div className="flex gap-2 hidden sm:flex">
+                  <Button variant="outline" size="icon" className="w-8 h-8 rounded-full border-gray-200" onClick={() => scrollCategories('left')}>
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <Button variant="outline" size="icon" className="w-8 h-8 rounded-full bg-black text-white hover:bg-gray-800 border-black" onClick={() => scrollCategories('right')}>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
-              <div className="flex gap-2 shrink-0">
-                <Button variant="outline" className="bg-gray-100 border-transparent rounded-xl h-11 font-medium">All</Button>
-                <Button variant="outline" className="bg-white border-gray-200 rounded-xl h-11 font-medium text-gray-600 hover:bg-gray-50">Male</Button>
-                <Button variant="outline" className="bg-white border-gray-200 rounded-xl h-11 font-medium text-gray-600 hover:bg-gray-50">Female</Button>
-              </div>
-            </div>
-
-            {/* Categories Grid */}
-            {!searchQuery && (
-              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-x-4 gap-y-6 mb-12">
-                {Array.from(categoriesMap.keys()).map(cat => (
-                  <div key={cat} className="flex flex-col items-center gap-2 cursor-pointer group" onClick={() => scrollToCategory(cat)}>
-                    <div className="w-full aspect-square rounded-2xl overflow-hidden shadow-sm border border-gray-100 group-hover:shadow-md transition-all group-hover:scale-105">
-                      <img src={getCategoryFallbackImage(cat)} alt={cat} className="w-full h-full object-cover" />
+              
+              <div className="relative">
+                <div 
+                  ref={categoriesRef}
+                  className="flex overflow-x-auto gap-4 sm:gap-6 pb-4 no-scrollbar snap-x"
+                >
+                  {Array.from(categoriesMap.keys()).map(cat => (
+                    <div 
+                      key={cat} 
+                      className="flex flex-col items-center gap-2 cursor-pointer snap-start shrink-0 w-[72px] sm:w-[88px]" 
+                      onClick={() => scrollToCategory(cat)}
+                    >
+                      <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-[28px] overflow-hidden shadow-sm transition-all border-[3px] ${
+                        activeCategory === cat || (!activeCategory && categoriesMap.size > 0 && Array.from(categoriesMap.keys())[0] === cat)
+                          ? 'border-gray-900 p-0.5' 
+                          : 'border-transparent hover:border-gray-200 p-0'
+                      }`}>
+                        <div className="w-full h-full rounded-[24px] overflow-hidden">
+                          <img src={getCategoryFallbackImage(cat)} alt={cat} className="w-full h-full object-cover" />
+                        </div>
+                      </div>
+                      <span className="text-[11px] sm:text-xs text-center font-medium text-gray-700 line-clamp-1 w-full px-1">
+                        {cat}
+                      </span>
                     </div>
-                    <span className="text-[11px] sm:text-xs text-center font-semibold text-gray-700 line-clamp-2 leading-tight px-1">
-                      {cat}
-                    </span>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            )}
+            </div>
+
+            {/* Search */}
+            <div className="relative mb-8">
+              <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+              <Input 
+                placeholder="Search for any services..." 
+                className="pl-12 bg-white border-gray-200 rounded-2xl h-14 text-base focus-visible:ring-gray-200 shadow-sm"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
 
             {/* Services List */}
             <div className="space-y-10">
               {Array.from(filteredCategories.entries()).map(([cat, catServices]) => (
-                <div id={`category-${cat.replace(/\s+/g, '-')}`} key={cat} className="scroll-mt-32">
-                  <h3 className="text-xl font-bold mb-4 text-gray-900">{cat}</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                <div id={`category-${cat.replace(/\s+/g, '-')}`} key={cat} className="scroll-mt-40">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-bold text-gray-900">{cat}</h3>
+                    {/* Zylu has a chevron up/down here, we can just display the count */}
+                    <span className="text-sm font-medium text-gray-500">{catServices.length}</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {catServices.map(service => {
                       const isSelected = selectedServices.some(s => s.id === service.id);
                       return (
                         <div 
                           key={service.id} 
-                          className={`bg-white p-4 sm:p-5 rounded-2xl shadow-sm border transition-all ${isSelected ? 'border-gray-900 ring-1 ring-gray-900' : 'border-gray-100 hover:border-gray-300'}`}
+                          className={`bg-white p-4 rounded-2xl border transition-all ${isSelected ? 'border-gray-400 shadow-md' : 'border-gray-200 shadow-sm hover:border-gray-300'}`}
                         >
                           <div className="flex justify-between items-start gap-4">
-                            <div className="flex-1">
-                              <h4 className="font-bold text-gray-900 leading-tight mb-1">{service.name}</h4>
-                              <div className="flex items-center gap-2 mt-2">
-                                <span className="font-bold text-blue-600">{business.currency}{service.price}</span>
-                                <span className="w-1 h-1 rounded-full bg-gray-300"></span>
-                                <span className="text-xs font-medium text-gray-500 flex items-center gap-1">
-                                  <Clock className="w-3 h-3" /> {service.duration} mins
-                                </span>
-                              </div>
-                              {service.description && (
-                                <p className="text-xs text-gray-500 mt-2 line-clamp-2 leading-relaxed">{service.description}</p>
-                              )}
+                            {/* Service Image */}
+                            <div className="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-gray-100">
+                              <img src={getServiceFallbackImage(service.name, cat)} className="w-full h-full object-cover" alt={service.name} />
                             </div>
+                            
+                            {/* Details */}
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-gray-900 leading-tight mb-1 truncate">{service.name}</h4>
+                              <div className="flex items-baseline gap-1.5 flex-wrap">
+                                <span className="font-bold text-red-500 text-sm">{business.currency}{service.price}</span>
+                                <span className="text-[10px] text-gray-500 font-medium">({service.price > 500 ? 'Member Price' : 'Regular Price'})</span>
+                              </div>
+                              {service.price > 500 && (
+                                <div className="text-[11px] text-gray-400 line-through">
+                                  {business.currency}{service.price + (service.price * 0.1)} (Regular Price)
+                                </div>
+                              )}
+                              <div className="flex items-center gap-1 text-[11px] text-gray-500 font-medium mt-1.5">
+                                <Clock className="w-3 h-3" /> {formatDuration(service.duration)}
+                              </div>
+                            </div>
+                            
+                            {/* Action */}
                             <div className="shrink-0 pt-1">
                               {isSelected ? (
                                 <Button 
                                   variant="outline" 
-                                  className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 rounded-xl h-9 px-4 text-xs font-bold"
+                                  className="bg-[#1a1a1a] text-white hover:bg-black border-transparent rounded-xl h-9 px-4 text-xs font-semibold shadow-sm"
                                   onClick={() => handleRemoveService(service.id)}
                                 >
-                                  Remove
+                                  Remove &minus;
                                 </Button>
                               ) : (
                                 <Button 
                                   variant="outline" 
-                                  className="border-gray-200 text-gray-900 hover:bg-gray-50 rounded-xl h-9 px-6 text-xs font-bold"
+                                  className="bg-white border-gray-300 text-gray-900 hover:bg-gray-50 rounded-xl h-9 px-5 text-xs font-semibold shadow-sm"
                                   onClick={() => handleAddService(service)}
                                 >
-                                  Add
+                                  Add +
                                 </Button>
                               )}
                             </div>
@@ -332,35 +405,40 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
               ))}
               
               {filteredCategories.size === 0 && (
-                <div className="text-center py-12 text-gray-500">
-                  <Scissors className="w-12 h-12 mx-auto text-gray-300 mb-3" />
-                  <p>No services found matching your search.</p>
+                <div className="text-center py-16 text-gray-500">
+                  <Search className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                  <p className="font-medium text-gray-600 text-lg">No services found</p>
+                  <p className="text-sm mt-1">Try adjusting your search criteria</p>
                 </div>
               )}
             </div>
           </div>
           
-          {/* Bottom Floating Bar */}
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 z-30 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
-            <div className="max-w-4xl mx-auto flex justify-center">
-              {selectedServices.length > 0 ? (
-                <div className="w-full flex items-center gap-3 bg-[#1a1a1a] p-2 pr-2 pl-4 rounded-2xl shadow-xl">
-                  <div className="flex-1 text-white">
-                    <div className="font-semibold text-sm">{selectedServices.length} {selectedServices.length === 1 ? 'item' : 'items'} | {business.currency}{totalAmount}</div>
-                    <div className="text-[11px] text-gray-400">{totalDuration} mins total</div>
+          {/* Bottom Floating Cart Bar */}
+          <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none p-4">
+            <div className="max-w-3xl mx-auto flex justify-center w-full pointer-events-auto">
+              <div className={`w-full transition-all duration-300 transform ${selectedServices.length > 0 ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'}`}>
+                <div className="bg-[#2a2a2a] rounded-2xl shadow-2xl flex items-center justify-between p-3 pl-4 pr-3 overflow-hidden relative">
+                  <div className="flex items-center gap-4 text-white">
+                    <div className="relative">
+                      <ShoppingCart className="w-6 h-6 text-gray-300" />
+                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-[#2a2a2a]">
+                        {selectedServices.length}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="font-bold text-base">{business.currency}{totalAmount}</div>
+                      <div className="text-[10px] text-gray-400 font-medium">Plus taxes</div>
+                    </div>
                   </div>
                   <Button 
-                    className="bg-white text-black hover:bg-gray-100 rounded-xl h-10 px-6 font-bold" 
+                    className="bg-white text-black hover:bg-gray-100 rounded-xl h-11 px-8 font-bold text-sm" 
                     onClick={() => setStep(2)}
                   >
-                    Continue
+                    Book Now
                   </Button>
                 </div>
-              ) : (
-                <Button className="w-full sm:w-[400px] bg-[#1a1a1a] text-white hover:bg-black rounded-2xl py-6 text-sm font-semibold shadow-xl" disabled>
-                  Add Services or Products to Book Now
-                </Button>
-              )}
+              </div>
             </div>
           </div>
         </div>
@@ -446,7 +524,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
 
       {/* Step 3: Details */}
       {step === 3 && (
-        <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen bg-white">
+        <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen bg-white pb-32">
           <div className="flex items-center gap-4 mb-8 pt-4">
             <Button variant="ghost" size="icon" onClick={() => setStep(2)} className="rounded-full bg-gray-100 hover:bg-gray-200">
               <ChevronLeft className="w-5 h-5" />
@@ -455,25 +533,25 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
           </div>
 
           <div className="space-y-8">
-            {/* Summary Box */}
             <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h4 className="font-bold text-gray-900 mb-1">{selectedServices.length} {selectedServices.length === 1 ? 'Service' : 'Services'}</h4>
-                  <p className="text-sm text-gray-500 font-medium">
-                    {selectedDate && format(selectedDate, "EEEE, MMM d")} at {selectedTime}
+                  <p className="text-sm text-gray-500 font-medium flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5" />
+                    {selectedDate && format(selectedDate, "EEE, MMM d")} at {selectedTime}
                   </p>
                 </div>
                 <div className="text-right">
-                  <div className="font-black text-lg">{business.currency}{totalAmount}</div>
-                  <div className="text-xs text-gray-500 font-medium">{totalDuration} mins</div>
+                  <div className="font-black text-lg text-red-500">{business.currency}{totalAmount}</div>
+                  <div className="text-[11px] text-gray-500 font-medium mt-0.5">{formatDuration(totalDuration)}</div>
                 </div>
               </div>
-              <div className="space-y-2 pt-4 border-t border-gray-200">
+              <div className="space-y-3 pt-4 border-t border-gray-200">
                 {selectedServices.map(s => (
                   <div key={s.id} className="flex justify-between text-sm">
-                    <span className="text-gray-600">{s.name}</span>
-                    <span className="font-medium text-gray-900">{business.currency}{s.price}</span>
+                    <span className="text-gray-700 font-medium">{s.name}</span>
+                    <span className="font-bold text-gray-900">{business.currency}{s.price}</span>
                   </div>
                 ))}
               </div>
@@ -517,7 +595,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
             </div>
           </div>
 
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 z-30">
+          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-md border-t border-gray-100 z-30">
             <div className="max-w-xl mx-auto">
               <Button 
                 onClick={handleSubmitBooking} 
@@ -556,7 +634,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                 </p>
               </div>
               
-              <div className="bg-gray-50 p-6 rounded-2xl text-left w-full mt-8 space-y-4">
+              <div className="bg-gray-50 p-6 rounded-2xl text-left w-full mt-8 space-y-4 border border-gray-100">
                 <div>
                   <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">When</div>
                   <div className="font-bold text-gray-900 text-lg">
