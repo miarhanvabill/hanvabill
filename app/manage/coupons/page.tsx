@@ -79,67 +79,21 @@ export default function CouponsManagePage() {
         setConnectionStatus("connected")
         setLastFetch(new Date())
       } else {
-        throw new Error("Failed to fetch coupons")
+        throw new Error(data.error || "Failed to fetch coupons")
       }
     } catch (error) {
       console.error("Error fetching coupons:", error)
       setConnectionStatus("disconnected")
-
-      // Fallback to mock data when API fails
-      const mockCoupons: Coupon[] = [
-        {
-          id: 1,
-          code: "WELCOME20",
-          name: "Welcome Offer",
-          description: "20% off on first visit",
-          discount_type: "percentage",
-          discount_value: 20,
-          min_order_amount: 1000,
-          max_discount: 500,
-          valid_from: "2024-01-01",
-          valid_until: "2024-12-31",
-          usage_limit: 100,
-          used_count: 25,
-          is_active: true,
-          created_at: "2024-01-15",
-        },
-        {
-          id: 2,
-          code: "FLAT500",
-          name: "Flat Discount",
-          description: "₹500 off on orders above ₹2000",
-          discount_type: "fixed",
-          discount_value: 500,
-          min_order_amount: 2000,
-          valid_from: "2024-01-01",
-          valid_until: "2024-06-30",
-          usage_limit: 50,
-          used_count: 12,
-          is_active: true,
-          created_at: "2024-01-10",
-        },
-        {
-          id: 3,
-          code: "BEAUTY15",
-          name: "Beauty Special",
-          description: "15% off on beauty services",
-          discount_type: "percentage",
-          discount_value: 15,
-          min_order_amount: 1500,
-          max_discount: 300,
-          valid_from: "2024-02-01",
-          valid_until: "2024-08-31",
-          usage_limit: 200,
-          used_count: 45,
-          is_active: false,
-          created_at: "2024-02-01",
-        },
-      ]
-      setCoupons(mockCoupons)
+      toast({
+        title: "Connection Error",
+        description: "Could not load coupons from server. Please refresh.",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
   }, [])
+
 
   // Online/offline detection
   useEffect(() => {
@@ -318,6 +272,34 @@ export default function CouponsManagePage() {
       toast({
         title: "Error",
         description: error.message || "Failed to delete coupon",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleToggleActive = async (couponId: number, newActive: boolean) => {
+    // Optimistic update
+    setCoupons((prev) => prev.map((c) => (c.id === couponId ? { ...c, is_active: newActive } : c)))
+    try {
+      const response = await fetch("/api/coupons", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: couponId, is_active: newActive }),
+      })
+      const data = await response.json()
+      if (!data.success) {
+        throw new Error(data.error || "Failed to update coupon")
+      }
+      toast({
+        title: "Success",
+        description: `Coupon ${newActive ? "activated" : "deactivated"} successfully!`,
+      })
+    } catch (error: any) {
+      // Revert optimistic update
+      setCoupons((prev) => prev.map((c) => (c.id === couponId ? { ...c, is_active: !newActive } : c)))
+      toast({
+        title: "Error",
+        description: error.message || "Failed to toggle coupon status",
         variant: "destructive",
       })
     }
@@ -652,6 +634,11 @@ export default function CouponsManagePage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Switch
+                        checked={coupon.is_active}
+                        onCheckedChange={(checked) => handleToggleActive(coupon.id, checked)}
+                        aria-label={coupon.is_active ? "Deactivate coupon" : "Activate coupon"}
+                      />
                       <Button variant="ghost" size="sm" onClick={() => handleEditCoupon(coupon)}>
                         <Edit className="w-4 h-4" />
                       </Button>
