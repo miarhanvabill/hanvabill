@@ -224,6 +224,7 @@ export async function updateStaff(id: number, data: Partial<Staff>) {
       }
 
       console.log(`[v0] Attempting to update staff member ID: ${id} with data:`, data)
+      const profileId = (data as any).commission_profile_id ?? null
       const result = await sql`
         UPDATE staff 
         SET 
@@ -238,12 +239,13 @@ export async function updateStaff(id: number, data: Partial<Staff>) {
           emergency_contact = COALESCE(${data.emergency_contact}, emergency_contact),
           skills = COALESCE(${data.skills || null}, skills),
           commission_rate = COALESCE(${data.commission_rate}, commission_rate),
+          commission_profile_id = ${profileId},
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ${id} AND tenant_id = ${tenantId}
         RETURNING 
           id, name, phone, email, role, salary, 
           TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date, 
-          is_active, address, emergency_contact, skills, commission_rate, 
+          is_active, address, emergency_contact, skills, commission_rate, commission_profile_id,
           created_at, 
           updated_at 
       `

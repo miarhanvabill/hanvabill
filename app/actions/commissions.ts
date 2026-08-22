@@ -183,7 +183,7 @@ export async function deleteCommissionProfile(id: string) {
         WHERE commission_profile_id = ${id} AND is_active = true AND tenant_id = ${tenantId}
       `
 
-      const staffCount = Number(staffCheck.rows[0]?.count) || 0
+      const staffCount = Number(staffCheck[0]?.count) || 0
       if (staffCount > 0) {
         return {
           success: false,
