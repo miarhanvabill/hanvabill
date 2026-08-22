@@ -58,21 +58,19 @@ export async function getGoals(): Promise<{ success: boolean; goals: Goal[]; err
         ORDER BY sg.created_at DESC
       `
 
-      console.log("[v0] Raw goals result:", result)
+      console.log("[v0] Raw goals result length:", result?.length)
 
-      if (result && result.rows) {
-        const goals = result.rows.map((row: any) => ({
-          ...row,
-          target_value: Number.parseFloat(row.target_value) || 0,
-          current_value: Number.parseFloat(row.current_value) || 0,
-          reward_amount: Number.parseFloat(row.reward_amount) || 0,
-        }))
+      // Neon returns array directly (not result.rows)
+      const rows = Array.isArray(result) ? result : []
+      const goals = rows.map((row: any) => ({
+        ...row,
+        target_value: Number.parseFloat(row.target_value) || 0,
+        current_value: Number.parseFloat(row.current_value) || 0,
+        reward_amount: Number.parseFloat(row.reward_amount) || 0,
+      }))
 
-        console.log("[v0] Successfully fetched goals:", goals.length)
-        return { success: true, goals }
-      }
-
-      return { success: true, goals: [] }
+      console.log("[v0] Successfully fetched goals:", goals.length)
+      return { success: true, goals }
     } catch (error) {
       console.error("[v0] Error fetching goals:", error)
       return {
@@ -97,6 +95,7 @@ export async function createGoal(goalData: {
     try {
       console.log("[v0] Creating goal:", goalData)
 
+      // Neon returns array directly
       const result = await sql`
         INSERT INTO staff_goals (
           tenant_id, staff_id, goal_type, target_value, current_value, 
@@ -107,8 +106,10 @@ export async function createGoal(goalData: {
         ) RETURNING id
       `
 
-      if (result && result.rows && result.rows.length > 0) {
-        console.log("[v0] Goal created successfully with ID:", result.rows[0].id)
+      const newId = Array.isArray(result) && result.length > 0 ? result[0].id : null
+
+      if (newId) {
+        console.log("[v0] Goal created successfully with ID:", newId)
         revalidatePath("/manage/goals")
 
         // Fetch the created goal with staff info
@@ -132,22 +133,24 @@ export async function createGoal(goalData: {
             sg.updated_at::text
           FROM staff_goals sg
           JOIN staff s ON sg.staff_id = s.id AND s.tenant_id = ${tenantId}
-          WHERE sg.id = ${result.rows[0].id}
+          WHERE sg.id = ${newId}
           AND sg.tenant_id = ${tenantId}
         `
 
-        if (goalResult && goalResult.rows && goalResult.rows.length > 0) {
+        if (Array.isArray(goalResult) && goalResult.length > 0) {
           const goal = {
-            ...goalResult.rows[0],
-            target_value: Number.parseFloat(goalResult.rows[0].target_value) || 0,
-            current_value: Number.parseFloat(goalResult.rows[0].current_value) || 0,
-            reward_amount: Number.parseFloat(goalResult.rows[0].reward_amount) || 0,
+            ...goalResult[0],
+            target_value: Number.parseFloat(goalResult[0].target_value) || 0,
+            current_value: Number.parseFloat(goalResult[0].current_value) || 0,
+            reward_amount: Number.parseFloat(goalResult[0].reward_amount) || 0,
           }
           return { success: true, goal }
         }
+
+        return { success: true }
       }
 
-      return { success: false, error: "Failed to create goal" }
+      return { success: false, error: "Failed to create goal — no ID returned" }
     } catch (error) {
       console.error("[v0] Error creating goal:", error)
       return {
@@ -174,7 +177,7 @@ export async function updateGoal(
     try {
       console.log("[v0] Updating goal:", id, goalData)
 
-      const result = await sql`
+      await sql`
         UPDATE staff_goals 
         SET 
           staff_id = ${goalData.staff_id},
@@ -234,7 +237,7 @@ export async function updateGoalProgress(
     try {
       console.log("[v0] Updating goal progress:", id, currentValue)
 
-      const result = await sql`
+      await sql`
         UPDATE staff_goals 
         SET 
           current_value = ${currentValue},

@@ -606,8 +606,8 @@ export default function StaffRevenueGoalsPage() {
                   </DialogTrigger>
                   <DialogContent className="max-w-2xl">
                     <DialogHeader>
-                      <DialogTitle>Set Revenue Goal</DialogTitle>
-                      <DialogDescription>Create a new revenue target for a staff member</DialogDescription>
+                      <DialogTitle>Set Staff Goal</DialogTitle>
+                      <DialogDescription>Create a new performance goal for a staff member</DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
@@ -643,7 +643,7 @@ export default function StaffRevenueGoalsPage() {
                           </Select>
                         </div>
                         <div>
-                          <Label htmlFor="goal_type">Goal Period</Label>
+                          <Label htmlFor="goal_type">Goal Type</Label>
                           <Select
                             value={formData.goal_type}
                             onValueChange={(value: any) => setFormData({ ...formData, goal_type: value })}
@@ -652,26 +652,44 @@ export default function StaffRevenueGoalsPage() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="revenue">Revenue</SelectItem>
-                              <SelectItem value="monthly">Monthly</SelectItem>
-                              <SelectItem value="quarterly">Quarterly</SelectItem>
-                              <SelectItem value="yearly">Yearly</SelectItem>
+                              <SelectItem value="revenue">Revenue (₹)</SelectItem>
+                              <SelectItem value="services">No. of Services</SelectItem>
+                              <SelectItem value="customers">No. of Customers</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
                       </div>
 
-                      <div>
-                        <Label htmlFor="target_value">Target Value (₹)</Label>
-                        <Input
-                          id="target_value"
-                          type="number"
-                          value={formData.target_value}
-                          onChange={(e) =>
-                            setFormData({ ...formData, target_value: Number.parseFloat(e.target.value) || 0 })
-                          }
-                          placeholder="5000"
-                        />
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="period_type">Period</Label>
+                          <Select
+                            value={formData.period_type}
+                            onValueChange={(value: any) => setFormData({ ...formData, period_type: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="daily">Daily</SelectItem>
+                              <SelectItem value="weekly">Weekly</SelectItem>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                              <SelectItem value="yearly">Yearly</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="target_value">Target Value {formData.goal_type === "revenue" ? "(₹)" : "(count)"}</Label>
+                          <Input
+                            id="target_value"
+                            type="number"
+                            value={formData.target_value}
+                            onChange={(e) =>
+                              setFormData({ ...formData, target_value: Number.parseFloat(e.target.value) || 0 })
+                            }
+                            placeholder={formData.goal_type === "revenue" ? "50000" : "25"}
+                          />
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
@@ -696,7 +714,7 @@ export default function StaffRevenueGoalsPage() {
                       </div>
 
                       <div>
-                        <Label htmlFor="reward_amount">Reward Amount (₹)</Label>
+                        <Label htmlFor="reward_amount">Reward Amount (₹) <span className="text-gray-400 text-xs">optional</span></Label>
                         <Input
                           id="reward_amount"
                           type="number"
@@ -708,21 +726,11 @@ export default function StaffRevenueGoalsPage() {
                         />
                       </div>
 
-                      <div>
-                        <Label htmlFor="description">Description</Label>
-                        <Textarea
-                          id="description"
-                          value={formData.description}
-                          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                          placeholder="Describe this revenue goal..."
-                        />
-                      </div>
-
                       <div className="flex justify-end gap-3 pt-4">
                         <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                           Cancel
                         </Button>
-                        <Button onClick={handleCreateGoal} disabled={staffLoading}>
+                        <Button onClick={handleCreateGoal} disabled={staffLoading || !formData.staff_id || !formData.start_date || !formData.end_date}>
                           Set Goal
                         </Button>
                       </div>
