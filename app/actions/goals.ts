@@ -37,7 +37,40 @@ export async function getGoals(): Promise<{ success: boolean; goals: Goal[]; err
           s.role as staff_role,
           sg.goal_type,
           sg.target_value,
-          sg.current_value,
+          COALESCE(
+            CASE
+              WHEN sg.goal_type = 'revenue' THEN (
+                SELECT COALESCE(SUM(i.amount), 0)
+                FROM invoices i
+                INNER JOIN bookings b ON i.booking_id = b.id
+                WHERE b.staff_id = sg.staff_id
+                  AND i.invoice_date >= sg.start_date
+                  AND i.invoice_date <= sg.end_date
+                  AND i.tenant_id = ${tenantId}
+              )
+              WHEN sg.goal_type = 'services' THEN (
+                SELECT COALESCE(COUNT(bs.id), 0)
+                FROM booking_services bs
+                INNER JOIN bookings b ON bs.booking_id = b.id
+                WHERE b.staff_id = sg.staff_id
+                  AND b.booking_date >= sg.start_date
+                  AND b.booking_date <= sg.end_date
+                  AND b.tenant_id = ${tenantId}
+                  AND b.status != 'cancelled'
+              )
+              WHEN sg.goal_type = 'customers' THEN (
+                SELECT COALESCE(COUNT(DISTINCT b.customer_id), 0)
+                FROM bookings b
+                WHERE b.staff_id = sg.staff_id
+                  AND b.booking_date >= sg.start_date
+                  AND b.booking_date <= sg.end_date
+                  AND b.tenant_id = ${tenantId}
+                  AND b.status != 'cancelled'
+              )
+              ELSE sg.current_value
+            END,
+            sg.current_value
+          ) AS current_value,
           sg.period_type,
           sg.start_date::text,
           sg.end_date::text,
