@@ -20,23 +20,28 @@ export interface TenantUser {
 export async function getTenantUsers(): Promise<TenantUser[]> {
   const action = withTenantAuth(async ({ sql, tenantId }) => {
     return await cacheFetch(`tenant_users:${tenantId}`, async () => {
-      const users = await sql`
-        SELECT 
-          u.id::text,
-          u.tenant_id::text,
-          u.clerk_user_id,
-          u.name,
-          u.email,
-          u.phone,
-          u.role_id::text,
-          u.is_active,
-          u.avatar_url,
-          u.created_at
-        FROM tenant_users u
-        WHERE u.tenant_id = ${tenantId}
-        ORDER BY u.created_at DESC
-      `
-      return users as TenantUser[]
+      try {
+        const users = await sql`
+          SELECT 
+            u.id::text,
+            u.tenant_id::text,
+            u.clerk_user_id,
+            u.name,
+            u.email,
+            u.phone,
+            u.role_id::text,
+            u.is_active,
+            u.avatar_url,
+            u.created_at
+          FROM tenant_users u
+          WHERE u.tenant_id = ${tenantId}
+          ORDER BY u.created_at DESC
+        `
+        return users as TenantUser[]
+      } catch (error: any) {
+        console.error("Error fetching tenant_users (table might not exist):", error.message);
+        return [];
+      }
     })
   });
   return await action();
