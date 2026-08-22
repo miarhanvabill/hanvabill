@@ -20,6 +20,15 @@ import {
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
+import {
   Plus,
   Search,
   Filter,
@@ -95,6 +104,10 @@ export default function LoyaltyTransactionsPage() {
     loadData()
     loadCustomers()
   }, [])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, filterType, filterDateRange])
 
   const loadData = async () => {
     try {
@@ -312,6 +325,13 @@ export default function LoyaltyTransactionsPage() {
 
     return matchesSearch && matchesType && matchesDate
   })
+
+  const ITEMS_PER_PAGE = 10
+  const totalPages = Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE)
+  const paginatedTransactions = filteredTransactions.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  )
 
   return (
     <div className="flex-1 flex flex-col">
@@ -582,7 +602,7 @@ export default function LoyaltyTransactionsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredTransactions.map((transaction) => (
+                    {paginatedTransactions.map((transaction) => (
                       <TableRow key={transaction.id}>
                         <TableCell>
                           <div>
@@ -652,6 +672,40 @@ export default function LoyaltyTransactionsPage() {
                   <Star className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold mb-2">No transactions found</h3>
                   <p className="text-gray-500 mb-4">No loyalty transactions match your current filters.</p>
+                </div>
+              )}
+
+              {totalPages > 1 && !loading && (
+                <div className="mt-4 flex items-center justify-center">
+                  <Pagination>
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            setCurrentPage((p) => Math.max(1, p - 1))
+                          }}
+                          className={currentPage === 1 ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                      <PaginationItem>
+                        <span className="text-sm px-4">
+                          Page {currentPage} of {totalPages}
+                        </span>
+                      </PaginationItem>
+                      <PaginationItem>
+                        <PaginationNext
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            setCurrentPage((p) => Math.min(totalPages, p + 1))
+                          }}
+                          className={currentPage === totalPages ? "pointer-events-none opacity-50" : "cursor-pointer"}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
                 </div>
               )}
             </CardContent>
