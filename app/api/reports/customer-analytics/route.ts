@@ -74,8 +74,7 @@ export async function GET(request: Request) {
           COUNT(*) FILTER (WHERE date_of_birth IS NOT NULL AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_birth::DATE)) >= 46) as age_46_plus,
           COUNT(*) FILTER (WHERE date_of_birth IS NULL OR EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_birth::DATE)) < 18) as age_unknown
         FROM customers
-        WHERE created_at >= ${startIso}
-        AND tenant_id = ${tenantId}
+        WHERE tenant_id = ${tenantId}
       `
 
       // Calculate metrics
