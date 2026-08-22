@@ -177,7 +177,10 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
           `
         }
 
-        // Increment membership usage
+      }
+
+      if (bookingId) {
+        // Increment membership usage for this checkout
         await sql`
           UPDATE customer_memberships
           SET bookings_used = bookings_used + 1, updated_at = NOW()

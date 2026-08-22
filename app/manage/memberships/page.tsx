@@ -83,6 +83,17 @@ export default function MembershipsPage() {
   const [isCreatePlanDialogOpen, setIsCreatePlanDialogOpen] = useState(false)
   const [isEditPlanDialogOpen, setIsEditPlanDialogOpen] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState<MembershipPlan | null>(null)
+  
+  const [isEditMemberDialogOpen, setIsEditMemberDialogOpen] = useState(false)
+  const [selectedMember, setSelectedMember] = useState<CustomerMembership | null>(null)
+  const [memberFormData, setMemberFormData] = useState<{
+    status: "active" | "expired" | "cancelled" | "pending"
+    end_date: string
+  }>({
+    status: "active",
+    end_date: "",
+  })
+
   const [lastUpdated, setLastUpdated] = useState(new Date())
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true)
 
@@ -333,6 +344,57 @@ export default function MembershipsPage() {
       is_active: plan.is_active,
     })
     setIsEditPlanDialogOpen(true)
+  }
+
+  const handleEditMember = (member: CustomerMembership) => {
+    setSelectedMember(member)
+    setMemberFormData({
+      status: member.status,
+      end_date: new Date(member.end_date).toISOString().split("T")[0],
+    })
+    setIsEditMemberDialogOpen(true)
+  }
+
+  const handleUpdateMember = async () => {
+    if (!selectedMember) return
+
+    try {
+      const response = await fetch(`/api/memberships?id=${selectedMember.id}&type=customer`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(memberFormData),
+      })
+
+      if (response.ok) {
+        setIsEditMemberDialogOpen(false)
+        setSelectedMember(null)
+        await loadData() // Reload data from database
+        
+        // Broadcast the change
+        broadcast("membership_updated", {
+          id: selectedMember.id,
+          status: memberFormData.status,
+          updated_at: new Date().toISOString(),
+        })
+
+        toast({
+          title: "Success",
+          description: "Membership updated successfully",
+        })
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to update membership")
+      }
+    } catch (error) {
+      console.error("Error updating membership:", error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update membership",
+        variant: "destructive",
+      })
+    }
   }
 
   const resetPlanForm = () => {
@@ -821,10 +883,10 @@ export default function MembershipsPage() {
 
                         const usageStatus =
                           membership.max_bookings > 0
-                            ? `${membership.bookings_used}/${membership.max_bookings} ${usagePercentage.toFixed(0)}%`
+                            ? `${membership.bookings_used} / ${membership.max_bookings} (${usagePercentage.toFixed(0)}%)`
                             : membership.usage_percentage > 0
-                              ? `${usagePercentage.toFixed(0)}%`
-                              : "work"
+                              ? `${membership.bookings_used} used (${usagePercentage.toFixed(0)}%)`
+                              : `${membership.bookings_used} used`
 
                         return (
                           <TableRow key={membership.id} className="hover:bg-gray-50">
@@ -885,7 +947,7 @@ export default function MembershipsPage() {
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
-                                <Button variant="outline" size="sm">
+                                <Button variant="outline" size="sm" onClick={() => handleEditMember(membership)}>
                                   <Edit className="w-4 h-4" />
                                 </Button>
                                 <Button
@@ -1073,6 +1135,53 @@ export default function MembershipsPage() {
                 Cancel
               </Button>
               <Button onClick={handleUpdatePlan}>Update Plan</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* Edit Member Dialog */}
+      <Dialog open={isEditMemberDialogOpen} onOpenChange={setIsEditMemberDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Member Status</DialogTitle>
+            <DialogDescription>Update the membership status and end date for {selectedMember?.customer_name}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="member_status">Status</Label>
+              <Select 
+                value={memberFormData.status} 
+                onValueChange={(value: "active" | "expired" | "cancelled" | "pending") => 
+                  setMemberFormData({ ...memberFormData, status: value })
+                }
+              >
+                <SelectTrigger id="member_status">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <Label htmlFor="member_end_date">End Date</Label>
+              <Input
+                id="member_end_date"
+                type="date"
+                value={memberFormData.end_date}
+                onChange={(e) => setMemberFormData({ ...memberFormData, end_date: e.target.value })}
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setIsEditMemberDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleUpdateMember}>Update Member</Button>
             </div>
           </div>
         </DialogContent>
