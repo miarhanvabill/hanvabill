@@ -41,20 +41,20 @@ export async function GET() {
           b.id,
           c.full_name as customer_name,
           b.total_amount as total,
-          b.created_at::date as date,
+          TO_CHAR(b.booking_date::TIMESTAMP, 'YYYY-MM-DD') as date,
           b.status,
-          ARRAY_AGG(s.name) as services
+          ARRAY_AGG(s.name) as services,
+          st.name as staff_name
         FROM bookings b
         LEFT JOIN customers c ON b.customer_id = c.id
         LEFT JOIN booking_services bs ON b.id = bs.booking_id
         LEFT JOIN services s ON bs.service_id = s.id
+        LEFT JOIN staff st ON b.staff_id = st.id
         WHERE b.status = 'completed'
           AND b.tenant_id = ${tenantId}
-          AND c.tenant_id = ${tenantId}
-          AND s.tenant_id = ${tenantId}
-        GROUP BY b.id, c.full_name, b.total_amount, b.created_at, b.status
-        ORDER BY b.created_at DESC
-        LIMIT 10
+        GROUP BY b.id, c.full_name, b.total_amount, b.booking_date, b.status, st.name
+        ORDER BY b.booking_date DESC
+        LIMIT 50
       `
 
       const salesData = {
@@ -69,10 +69,11 @@ export async function GET() {
         })),
         recentSales: recentSales.map((sale) => ({
           id: sale.id,
-          customerName: sale.customer_name || "Unknown Customer",
-          services: sale.services || [],
-          total: Number.parseFloat(sale.total || "0"),
-          date: sale.date || new Date().toISOString().split("T")[0],
+          customer_name: sale.customer_name || "Unknown Customer",
+          product_name: sale.services ? sale.services.filter(Boolean).join(", ") : "Unknown",
+          total_revenue: Number.parseFloat(sale.total || "0"),
+          sale_date: sale.date || "Unknown",
+          staff_member: sale.staff_name || "Unassigned",
           status: sale.status || "completed",
         })),
       }

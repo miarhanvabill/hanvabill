@@ -50,14 +50,7 @@ export default function SalesReportPage() {
       })
       if (response.ok) {
         const data = await response.json()
-        setSalesData(
-          (data.recentSales || []).map((sale: any) => ({
-            ...sale,
-            total_revenue: sale.total || sale.total_revenue || 0,
-            product_name: sale.services ? sale.services.join(', ') : (sale.product_name || "Unknown"),
-            customer_name: sale.customerName || sale.customer_name || "Unknown"
-          }))
-        )
+        setSalesData(data.recentSales || [])
         setStats({
           total_sales: data.totalSales || 0,
           total_revenue: data.totalRevenue || 0,

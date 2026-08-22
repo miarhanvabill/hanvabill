@@ -242,10 +242,10 @@ export default function SummaryPage() {
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
-                <TrendingUp className="h-4 w-4 text-green-600" />
+                {summaryData.profit.net < 0 ? <TrendingDown className="h-4 w-4 text-red-600" /> : <TrendingUp className="h-4 w-4 text-green-600" />}
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-600">₹{summaryData.profit.net.toLocaleString()}</div>
+                <div className={`text-2xl font-bold ${summaryData.profit.net < 0 ? "text-red-600" : "text-green-600"}`}>₹{summaryData.profit.net.toLocaleString()}</div>
                 <div className="text-xs text-muted-foreground">{summaryData.profit.margin}% margin</div>
               </CardContent>
             </Card>
@@ -274,7 +274,7 @@ export default function SummaryPage() {
                 <hr />
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium">Net Profit</span>
-                  <span className="font-bold text-green-600">₹{summaryData.profit.net.toLocaleString()}</span>
+                  <span className={`font-bold ${summaryData.profit.net < 0 ? "text-red-600" : "text-green-600"}`}>₹{summaryData.profit.net.toLocaleString()}</span>
                 </div>
               </CardContent>
             </Card>

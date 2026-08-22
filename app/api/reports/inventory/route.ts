@@ -7,36 +7,37 @@ export async function GET() {
       const inventory = await sql`
         SELECT 
           id,
-          item_name,
-          current_stock,
+          name,
+          stock_quantity,
           min_stock_level,
-          unit_price,
+          price,
           supplier,
-          last_restocked,
-          (current_stock * unit_price) as stock_value,
+          updated_at,
+          (stock_quantity * price) as stock_value,
           CASE 
-            WHEN current_stock = 0 THEN 'out_of_stock'
-            WHEN current_stock <= min_stock_level THEN 'low_stock'
+            WHEN stock_quantity = 0 THEN 'out_of_stock'
+            WHEN stock_quantity <= min_stock_level THEN 'low_stock'
             ELSE 'in_stock'
           END as status
-        FROM inventory
+        FROM products
         WHERE tenant_id = ${tenantId}
         ORDER BY 
           CASE 
-            WHEN current_stock = 0 THEN 1
-            WHEN current_stock <= min_stock_level THEN 2
+            WHEN stock_quantity = 0 THEN 1
+            WHEN stock_quantity <= min_stock_level THEN 2
             ELSE 3
           END,
-          item_name
+          name
       `
 
       const formattedInventory = inventory.map((item) => ({
         ...item,
-        current_stock: Number(item.current_stock) || 0,
+        item_name: item.name,
+        current_stock: Number(item.stock_quantity) || 0,
         min_stock_level: Number(item.min_stock_level) || 0,
-        unit_price: Number(item.unit_price) || 0,
+        unit_price: Number(item.price) || 0,
         stock_value: Number(item.stock_value) || 0,
-        last_restocked: item.last_restocked || "Never",
+        last_restocked: item.updated_at ? new Date(item.updated_at).toLocaleDateString() : "Never",
         supplier: item.supplier || "Unknown",
       }))
 
