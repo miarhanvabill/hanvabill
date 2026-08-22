@@ -222,37 +222,19 @@ export async function updateMembershipPlan(
 ): Promise<{ success: boolean; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const updates: string[] = []
-
-      if (data.name !== undefined) {
-        updates.push(`name = ${data.name}`)
-      }
-      if (data.description !== undefined) {
-        updates.push(`description = ${data.description}`)
-      }
-      if (data.price !== undefined) {
-        updates.push(`price = ${data.price}`)
-      }
-      if (data.duration_months !== undefined) {
-        updates.push(`duration_months = ${data.duration_months}`)
-      }
-      if (data.benefits !== undefined) {
-        updates.push(`benefits = ${JSON.stringify(data.benefits)}`)
-      }
-      if (data.discount_percentage !== undefined) {
-        updates.push(`discount_percentage = ${data.discount_percentage}`)
-      }
-      if (data.status !== undefined) {
-        updates.push(`status = ${data.status}`)
-      }
-
-      if (updates.length > 0) {
-        await sql`
-          UPDATE membership_plans 
-          SET ${sql(updates.join(", "))}, updated_at = CURRENT_TIMESTAMP 
-          WHERE id = ${id} AND tenant_id = ${tenantId}
-        `
-      }
+      await sql`
+        UPDATE membership_plans 
+        SET 
+          name = COALESCE(${data.name ?? null}, name),
+          description = COALESCE(${data.description ?? null}, description),
+          price = COALESCE(${data.price ?? null}, price),
+          duration_months = COALESCE(${data.duration_months ?? null}, duration_months),
+          benefits = COALESCE(${data.benefits ? JSON.stringify(data.benefits) : null}, benefits),
+          discount_percentage = COALESCE(${data.discount_percentage ?? null}, discount_percentage),
+          status = COALESCE(${data.status ?? null}, status),
+          updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ${id} AND tenant_id = ${tenantId}
+      `
 
       revalidatePath("/manage/memberships")
       return { success: true }
@@ -459,25 +441,15 @@ export async function updateCustomerMembership(
 ): Promise<{ success: boolean; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const updates: string[] = []
-
-      if (data.status !== undefined) {
-        updates.push(`status = ${data.status}`)
-      }
-      if (data.bookings_used !== undefined) {
-        updates.push(`bookings_used = ${data.bookings_used}`)
-      }
-      if (data.end_date !== undefined) {
-        updates.push(`end_date = ${data.end_date}`)
-      }
-
-      if (updates.length > 0) {
-        await sql`
-          UPDATE customer_memberships 
-          SET ${sql(updates.join(", "))}, updated_at = CURRENT_TIMESTAMP 
-          WHERE id = ${id} AND tenant_id = ${tenantId}
-        `
-      }
+      await sql`
+        UPDATE customer_memberships 
+        SET 
+          status = COALESCE(${data.status ?? null}, status),
+          bookings_used = COALESCE(${data.bookings_used ?? null}, bookings_used),
+          end_date = COALESCE(${data.end_date ?? null}, end_date),
+          updated_at = CURRENT_TIMESTAMP 
+        WHERE id = ${id} AND tenant_id = ${tenantId}
+      `
 
       revalidatePath("/manage/memberships")
       return { success: true }
@@ -552,6 +524,45 @@ export async function verifyMembershipData(): Promise<{
         issues: ["Failed to verify membership data"],
         stats: { totalMemberships: 0, activeMemberships: 0, expiredMemberships: 0, orphanedMemberships: 0 },
       }
+    }
+  })
+}
+export async function getActiveCustomerMembership(customerId: number): Promise<any | null> {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const result = await sql`
+        SELECT 
+          cm.id,
+          cm.customer_id,
+          cm.membership_plan_id as plan_id,
+          mp.name as plan_name,
+          mp.discount_percentage,
+          mp.benefits,
+          cm.start_date,
+          cm.end_date,
+          cm.status,
+          cm.bookings_used
+        FROM customer_memberships cm
+        JOIN membership_plans mp ON cm.membership_plan_id = mp.id AND mp.tenant_id = ${tenantId}
+        WHERE cm.customer_id = ${customerId} 
+        AND cm.tenant_id = ${tenantId}
+        AND cm.status = 'active'
+        AND cm.end_date > CURRENT_DATE
+        ORDER BY cm.created_at DESC
+        LIMIT 1
+      `
+      const rows = result.rows || result
+      if (!rows || rows.length === 0) return null
+      
+      const row = rows[0]
+      return {
+        ...row,
+        discount_percentage: Number(row.discount_percentage) || 0,
+        benefits: typeof row.benefits === 'string' ? JSON.parse(row.benefits) : row.benefits
+      }
+    } catch (error) {
+      console.error("Error fetching active customer membership:", error)
+      return null
     }
   })
 }

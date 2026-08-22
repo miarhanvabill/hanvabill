@@ -17,6 +17,7 @@ import GiftCardRedeemer from "@/components/gift-card-redeemer"
 import { calculateTier, type CustomerLoyalty as UiCustomerLoyalty } from "@/lib/loyalty"
 import { formatCurrency } from "@/lib/currency"
 import { getBusinessSettings } from "@/app/actions/settings"
+import { getActiveCustomerMembership } from "@/app/actions/memberships"
 
 interface Customer {
   id: number
@@ -88,6 +89,7 @@ interface LoyaltySettingsUI {
 function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId = null }: CheckoutScreenProps) {
   const [paymentMethod, setPaymentMethod] = useState<string>("cash")
   const [discountPercent, setDiscountPercent] = useState<number>(0)
+  const [activeMembership, setActiveMembership] = useState<any>(null)
   const [notes, setNotes] = useState<string>("")
   const [isProcessing, setIsProcessing] = useState(false)
   const [appliedCoupon, setAppliedCoupon] = useState<UICoupon | null>(null)
@@ -205,7 +207,14 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
 
   useEffect(() => {
     refreshLoyalty()
-  }, [refreshLoyalty])
+    // Fetch membership
+    getActiveCustomerMembership(customer.id).then((mem) => {
+      if (mem) {
+        setActiveMembership(mem)
+        setDiscountPercent(mem.discount_percentage || 0)
+      }
+    }).catch(console.error)
+  }, [refreshLoyalty, customer.id])
 
   // Totals
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
@@ -386,7 +395,15 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
               <User className="w-4 h-4" />
               <span className="font-medium">Customer</span>
             </div>
-            <p className="font-semibold">{customer.name}</p>
+            <p className="font-semibold flex items-center gap-2">
+              {customer.name}
+              {activeMembership && (
+                <Badge className="bg-gold-100 text-gold-800 border-gold-300 hover:bg-gold-200">
+                  <Star className="w-3 h-3 mr-1" />
+                  {activeMembership.plan_name} Active
+                </Badge>
+              )}
+            </p>
             <p className="text-sm text-muted-foreground">{customer.phone}</p>
             {customer.email && <p className="text-sm text-muted-foreground">{customer.email}</p>}
           </div>

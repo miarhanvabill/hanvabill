@@ -176,6 +176,16 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
             VALUES (${bookingId}, ${item.id}, ${item.quantity}, ${item.price}, ${tenantId})
           `
         }
+
+        // Increment membership usage
+        await sql`
+          UPDATE customer_memberships
+          SET bookings_used = bookings_used + 1, updated_at = NOW()
+          WHERE customer_id = ${customerId}
+          AND tenant_id = ${tenantId}
+          AND status = 'active'
+          AND end_date > CURRENT_DATE
+        `
       }
 
       const membershipItems = input.items.filter((item) => item.type === "membership")

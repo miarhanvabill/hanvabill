@@ -703,7 +703,7 @@ export default function MembershipsPage() {
                               </Badge>
                             </div>
                             <div className="text-right">
-                              <div className="text-2xl font-bold text-green-600">${plan.price}</div>
+                              <div className="text-2xl font-bold text-green-600">₹{plan.price}</div>
                               <div className="text-sm text-gray-500">/{plan.duration_months} months</div>
                             </div>
                           </div>
