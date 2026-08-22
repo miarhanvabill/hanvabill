@@ -220,14 +220,16 @@ export default function ProductStockPage() {
 
   const handleStockAdjustment = async (productId: number, adjustment: number) => {
     try {
-      const response = await fetch("/api/inventory/adjust", {
+      const response = await fetch("/api/reports/product-stock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ productId, adjustment, reason: "Manual adjustment" }),
       })
 
       if (response.ok) {
-        broadcast("stock_adjustment", { productId, adjustment })
+        const result = await response.json();
+        const productName = products.find(p => p.id === productId)?.name || "Product";
+        broadcast("stock_adjustment", { productId, adjustment, productName })
         toast({
           title: "Success",
           description: "Stock adjusted successfully",
