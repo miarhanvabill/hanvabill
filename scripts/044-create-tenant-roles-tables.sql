@@ -1,7 +1,7 @@
 -- Create tenant_roles table
 CREATE TABLE IF NOT EXISTS tenant_roles (
     id SERIAL PRIMARY KEY,
-    tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    tenant_id TEXT NOT NULL,
     name VARCHAR(255) NOT NULL,
     description TEXT,
     is_system BOOLEAN DEFAULT FALSE,
