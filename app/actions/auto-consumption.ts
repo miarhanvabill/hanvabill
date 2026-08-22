@@ -413,7 +413,7 @@ export const getAvailableServices = withTenantAuth(
       const services = await sql`
       SELECT id, name 
       FROM services 
-      WHERE is_active = true AND tenant_id = ${tenantId}
+      WHERE (is_active = true OR is_active IS NULL) AND tenant_id = ${tenantId}
       ORDER BY name
     `
 
@@ -434,7 +434,7 @@ export const getAvailableProducts = withTenantAuth(
       const products = await sql`
       SELECT id, name, unit
       FROM products 
-      WHERE is_active = true AND tenant_id = ${tenantId}
+      WHERE (is_active = true OR is_active IS NULL) AND tenant_id = ${tenantId}
       ORDER BY name
     `
 

@@ -478,7 +478,7 @@ export default function AutoConsumptionPage() {
 
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Est. Cost</span>
-                    <span className="font-medium">${rule.estimatedCost.toFixed(2)}</span>
+                    <span className="font-medium">₹{rule.estimatedCost.toFixed(2)}</span>
                   </div>
 
                   {rule.lastTriggered && (
@@ -999,7 +999,7 @@ function RuleDetailsModal({
             </div>
             <div>
               <Label>Estimated Cost</Label>
-              <p className="font-medium">${rule.estimatedCost.toFixed(2)}</p>
+              <p className="font-medium">₹{rule.estimatedCost.toFixed(2)}</p>
             </div>
           </div>
 
