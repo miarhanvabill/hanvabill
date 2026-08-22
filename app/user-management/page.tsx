@@ -33,6 +33,14 @@ import {
   HeadphonesIcon,
 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
+import {
+  getTenantUsers,
+  createTenantUser,
+  updateTenantUser,
+  deleteTenantUser,
+  toggleTenantUserStatus,
+  type TenantUser,
+} from "@/app/actions/tenant-users"
 
 interface User {
   id: string
@@ -555,134 +563,59 @@ export default function UserManagementPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null)
 
+  const loadData = async () => {
+    try {
+      setLoading(true)
+      const tenantUsers = await getTenantUsers()
+      
+      const mappedUsers: User[] = tenantUsers.map((tu) => ({
+        id: tu.id,
+        name: tu.name,
+        email: tu.email || "",
+        phone: tu.phone || "",
+        role: tu.role_id || "customer_service",
+        permissions: [],
+        isActive: tu.is_active,
+        createdAt: tu.created_at,
+        avatar: tu.avatar_url || undefined,
+      }))
+      
+      const mockRoles: Role[] = [
+        {
+          id: "admin",
+          name: "Administrator",
+          description: "Full system access with all permissions",
+          permissions: PERMISSION_CATEGORIES.flatMap((cat) => cat.permissions.map((p) => p.id)),
+          isSystem: true,
+          userCount: mappedUsers.filter((u) => u.role === "admin").length,
+          color: "bg-red-100 text-red-800",
+          icon: "Crown",
+        },
+        ...ROLE_TEMPLATES.map((template) => ({
+          ...template,
+          isSystem: false,
+          userCount: mappedUsers.filter((u) => u.role === template.id).length,
+          createdAt: "2024-01-01",
+          createdBy: "Admin User",
+        })),
+      ]
+      
+      setUsers(mappedUsers)
+      setRoles(mockRoles)
+    } catch (error) {
+      console.error("Failed to load users:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load users.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
-    // Mock data for users
-    const mockUsers: User[] = [
-      {
-        id: "1",
-        name: "Admin User",
-        email: "admin@salon.com",
-        phone: "+91 98765 43210",
-        role: "admin",
-        permissions: PERMISSION_CATEGORIES.flatMap((cat) => cat.permissions.map((p) => p.id)),
-        isActive: true,
-        lastLogin: "2024-01-25T10:30:00Z",
-        createdAt: "2024-01-01",
-        department: "Management",
-        employeeId: "EMP001",
-      },
-      {
-        id: "2",
-        name: "Sarah Manager",
-        email: "sarah@salon.com",
-        phone: "+91 98765 43211",
-        role: "senior_manager",
-        permissions: [
-          "dashboard.view",
-          "dashboard.analytics",
-          "customers.view",
-          "customers.create",
-          "customers.edit",
-          "customers.export",
-          "bookings.view",
-          "bookings.create",
-          "bookings.edit",
-          "bookings.reschedule",
-          "sales.view",
-          "sales.create",
-          "sales.discount",
-          "sales.reports",
-          "inventory.view",
-          "inventory.manage",
-          "staff.view",
-          "staff.schedules",
-          "reports.view",
-          "reports.advanced",
-          "reports.export",
-        ],
-        isActive: true,
-        lastLogin: "2024-01-24T16:45:00Z",
-        createdAt: "2024-01-05",
-        department: "Operations",
-        employeeId: "EMP002",
-        customRole: true,
-      },
-      {
-        id: "3",
-        name: "John Stylist",
-        email: "john@salon.com",
-        phone: "+91 98765 43212",
-        role: "senior_stylist",
-        permissions: [
-          "dashboard.view",
-          "customers.view",
-          "customers.create",
-          "customers.edit",
-          "bookings.view",
-          "bookings.create",
-          "bookings.edit",
-          "bookings.reschedule",
-          "sales.view",
-          "sales.create",
-          "inventory.view",
-          "staff.view",
-        ],
-        isActive: true,
-        lastLogin: "2024-01-25T09:15:00Z",
-        createdAt: "2024-01-10",
-        department: "Services",
-        employeeId: "EMP003",
-        customRole: true,
-      },
-      {
-        id: "4",
-        name: "Emma Receptionist",
-        email: "emma@salon.com",
-        phone: "+91 98765 43213",
-        role: "customer_service",
-        permissions: [
-          "dashboard.view",
-          "customers.view",
-          "customers.create",
-          "customers.edit",
-          "bookings.view",
-          "bookings.create",
-          "bookings.edit",
-          "bookings.reschedule",
-          "sales.view",
-        ],
-        isActive: false,
-        lastLogin: "2024-01-20T14:20:00Z",
-        createdAt: "2024-01-15",
-        department: "Front Desk",
-        employeeId: "EMP004",
-        customRole: true,
-      },
-    ]
-
-    const mockRoles: Role[] = [
-      {
-        id: "admin",
-        name: "Administrator",
-        description: "Full system access with all permissions",
-        permissions: PERMISSION_CATEGORIES.flatMap((cat) => cat.permissions.map((p) => p.id)),
-        isSystem: true,
-        userCount: 1,
-        color: "bg-red-100 text-red-800",
-        icon: "Crown",
-      },
-      ...ROLE_TEMPLATES.map((template) => ({
-        ...template,
-        isSystem: false,
-        userCount: mockUsers.filter((u) => u.role === template.id).length,
-        createdAt: "2024-01-01",
-        createdBy: "Admin User",
-      })),
-    ]
-
-    setUsers(mockUsers)
-    setRoles(mockRoles)
-    setLoading(false)
+    loadData()
   }, [])
 
   const handleCreateUser = () => {
@@ -710,49 +643,89 @@ export default function UserManagementPage() {
     setShowUserDialog(true)
   }
 
-  const handleSaveUser = () => {
+  const handleSaveUser = async () => {
     if (selectedUser) {
-      if (users.find((u) => u.id === selectedUser.id)) {
-        // Update existing user
-        const updatedUsers = users.map((user) => (user.id === selectedUser.id ? selectedUser : user))
-        setUsers(updatedUsers)
+      try {
+        if (users.find((u) => u.id === selectedUser.id)) {
+          // Update existing user
+          await updateTenantUser(selectedUser.id, {
+            name: selectedUser.name,
+            email: selectedUser.email,
+            phone: selectedUser.phone,
+            role_id: selectedUser.role,
+            is_active: selectedUser.isActive
+          })
+          toast({
+            title: "User Updated",
+            description: `${selectedUser.name} has been updated successfully.`,
+          })
+        } else {
+          // Add new user
+          await createTenantUser({
+            name: selectedUser.name,
+            email: selectedUser.email,
+            phone: selectedUser.phone,
+            role_id: selectedUser.role,
+          })
+          toast({
+            title: "User Created",
+            description: `${selectedUser.name} has been added to the system.`,
+          })
+        }
+        setShowUserDialog(false)
+        loadData()
+      } catch (error) {
+        console.error("Failed to save user:", error)
         toast({
-          title: "User Updated",
-          description: `${selectedUser.name} has been updated successfully.`,
-        })
-      } else {
-        // Add new user
-        setUsers([...users, selectedUser])
-        toast({
-          title: "User Created",
-          description: `${selectedUser.name} has been added to the system.`,
+          title: "Error",
+          description: "Failed to save user.",
+          variant: "destructive",
         })
       }
-      setShowUserDialog(false)
     }
   }
 
-  const handleDeleteUser = (userId: string) => {
+  const handleDeleteUser = async (userId: string) => {
     const user = users.find((u) => u.id === userId)
-    setUsers(users.filter((user) => user.id !== userId))
-    if (selectedUser?.id === userId) {
-      setSelectedUser(null)
+    try {
+      await deleteTenantUser(userId)
+      if (selectedUser?.id === userId) {
+        setSelectedUser(null)
+      }
+      toast({
+        title: "User Deleted",
+        description: `${user?.name} has been removed from the system.`,
+      })
+      loadData()
+    } catch (error) {
+      console.error("Failed to delete user:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete user.",
+        variant: "destructive",
+      })
     }
-    toast({
-      title: "User Deleted",
-      description: `${user?.name} has been removed from the system.`,
-      variant: "destructive",
-    })
   }
 
-  const handleToggleUserStatus = (userId: string) => {
-    const updatedUsers = users.map((user) => (user.id === userId ? { ...user, isActive: !user.isActive } : user))
-    setUsers(updatedUsers)
-    const user = updatedUsers.find((u) => u.id === userId)
-    toast({
-      title: user?.isActive ? "User Activated" : "User Deactivated",
-      description: `${user?.name} is now ${user?.isActive ? "active" : "inactive"}.`,
-    })
+  const handleToggleUserStatus = async (userId: string) => {
+    const user = users.find((u) => u.id === userId)
+    if (!user) return
+    
+    try {
+      await toggleTenantUserStatus(userId, user.isActive)
+      toast({
+        title: !user.isActive ? "User Activated" : "User Deactivated",
+        description: `${user.name} is now ${!user.isActive ? "active" : "inactive"}.`,
+      })
+      loadData()
+    } catch (error) {
+      console.error("Failed to toggle user status:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update user status.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleCreateRole = () => {
