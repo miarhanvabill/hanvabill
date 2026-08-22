@@ -16,6 +16,8 @@ import {
   CreditCard,
   Gift,
   TrendingUp,
+  Crown,
+  Award,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -30,6 +32,7 @@ interface CustomerProfileDisplayProps {
   customer: Customer
   bookings: Booking[]
   invoices: Invoice[]
+  activeMembership?: any
 }
 
 const getStatusColor = (status: string) => {
@@ -45,7 +48,7 @@ const getStatusColor = (status: string) => {
   }
 }
 
-export function CustomerProfileDisplay({ customer, bookings, invoices }: CustomerProfileDisplayProps) {
+export function CustomerProfileDisplay({ customer, bookings, invoices, activeMembership }: CustomerProfileDisplayProps) {
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString()
 
   const totalSpent = bookings.reduce(
@@ -86,66 +89,126 @@ export function CustomerProfileDisplay({ customer, bookings, invoices }: Custome
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-7xl mx-auto space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <Card className="lg:col-span-1">
-              <CardHeader className="text-center">
-                <Avatar className="h-24 w-24 mx-auto mb-4">
-                  <AvatarImage
-                    src={`https://api.dicebear.com/7.x/initials/svg?seed=${customer.full_name || "Unknown"}`}
-                    alt={customer.full_name || "Customer Avatar"}
-                  />
-                  <AvatarFallback className="text-2xl">
-                    {customer.full_name
-                      .split(" ")
-                      .map((n) => n[0])
-                      .join("")}
-                  </AvatarFallback>
-                </Avatar>
-                <CardTitle className="text-xl">{customer.full_name}</CardTitle>
-                <Badge className={getStatusColor("active")}>Active</Badge>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-2 text-sm">
-                    <Mail className="h-4 w-4 text-gray-400" />
-                    <span>{customer.email || "Not provided"}</span>
+            <div className="lg:col-span-1 space-y-6">
+              <Card>
+                <CardHeader className="text-center">
+                  <Avatar className="h-24 w-24 mx-auto mb-4">
+                    <AvatarImage
+                      src={`https://api.dicebear.com/7.x/initials/svg?seed=${customer.full_name || "Unknown"}`}
+                      alt={customer.full_name || "Customer Avatar"}
+                    />
+                    <AvatarFallback className="text-2xl">
+                      {customer.full_name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <CardTitle className="text-xl">{customer.full_name}</CardTitle>
+                  <Badge className={getStatusColor("active")}>Active</Badge>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-2 text-sm">
+                      <Mail className="h-4 w-4 text-gray-400" />
+                      <span>{customer.email || "Not provided"}</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm">
+                      <Phone className="h-4 w-4 text-gray-400" />
+                      <span>{customer.phone_number}</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm">
+                      <MapPin className="h-4 w-4 text-gray-400" />
+                      <span>{customer.address || "Not provided"}</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm">
+                      <Calendar className="h-4 w-4 text-gray-400" />
+                      <span>Born: {customer.date_of_birth ? formatDate(customer.date_of_birth) : "Not provided"}</span>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm">
+                      <User className="h-4 w-4 text-gray-400" />
+                      <span>Joined: {formatDate(customer.created_at)}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2 text-sm">
-                    <Phone className="h-4 w-4 text-gray-400" />
-                    <span>{customer.phone_number}</span>
+                  <div className="pt-4 border-t">
+                    <h4 className="font-medium mb-2">Preferred Services</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {preferredServices.length > 0 ? (
+                        preferredServices.map((service, index) => (
+                          <Badge key={index} variant="outline" className="text-xs">
+                            {service}
+                          </Badge>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-600">No preferred services yet.</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2 text-sm">
-                    <MapPin className="h-4 w-4 text-gray-400" />
-                    <span>{customer.address || "Not provided"}</span>
+                  <div className="pt-4 border-t">
+                    <h4 className="font-medium mb-2">Notes</h4>
+                    <p className="text-sm text-gray-600">{customer.notes || "No notes"}</p>
                   </div>
-                  <div className="flex items-center space-x-2 text-sm">
-                    <Calendar className="h-4 w-4 text-gray-400" />
-                    <span>Born: {customer.date_of_birth ? formatDate(customer.date_of_birth) : "Not provided"}</span>
-                  </div>
-                  <div className="flex items-center space-x-2 text-sm">
-                    <User className="h-4 w-4 text-gray-400" />
-                    <span>Joined: {formatDate(customer.created_at)}</span>
-                  </div>
-                </div>
-                <div className="pt-4 border-t">
-                  <h4 className="font-medium mb-2">Preferred Services</h4>
-                  <div className="flex flex-wrap gap-1">
-                    {preferredServices.length > 0 ? (
-                      preferredServices.map((service, index) => (
-                        <Badge key={index} variant="outline" className="text-xs">
-                          {service}
-                        </Badge>
-                      ))
-                    ) : (
-                      <p className="text-sm text-gray-600">No preferred services yet.</p>
-                    )}
-                  </div>
-                </div>
-                <div className="pt-4 border-t">
-                  <h4 className="font-medium mb-2">Notes</h4>
-                  <p className="text-sm text-gray-600">{customer.notes || "No notes"}</p>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+
+              {activeMembership ? (
+                <Card className="border-amber-200 bg-amber-50/50">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center text-amber-700">
+                      <Crown className="h-5 w-5 mr-2" />
+                      Active Membership
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div>
+                        <div className="font-semibold text-lg text-amber-900">{activeMembership.plan_name}</div>
+                        <div className="text-sm text-amber-700/80 mt-1">
+                          Valid until: {formatDate(activeMembership.end_date)}
+                        </div>
+                        {(() => {
+                          const daysRemaining = Math.ceil(
+                            (new Date(activeMembership.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+                          );
+                          return (
+                            <div className="text-xs font-medium text-amber-600 mt-0.5">
+                              {daysRemaining > 0 ? `Expires in ${daysRemaining} days` : "Expired"}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                      
+                      <div className="flex flex-col gap-2 pt-3 border-t border-amber-200">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-amber-700/80">Usage</span>
+                          <span className="font-medium text-amber-900">{activeMembership.bookings_used} times</span>
+                        </div>
+                        {activeMembership.discount_percentage > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-amber-700/80">Discount</span>
+                            <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100">
+                              {activeMembership.discount_percentage}% Off
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card className="bg-gray-50 border-dashed border-2">
+                  <CardContent className="pt-6 flex flex-col items-center justify-center text-center">
+                    <div className="bg-white p-3 rounded-full mb-3 shadow-sm">
+                      <Award className="h-6 w-6 text-gray-400" />
+                    </div>
+                    <p className="text-sm text-gray-600 font-medium">No active membership</p>
+                    <Button variant="link" className="text-xs text-blue-600 h-auto p-0 mt-1" asChild>
+                      <Link href="/manage/memberships">View Plans</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
 
             <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card className="shadow-sm">

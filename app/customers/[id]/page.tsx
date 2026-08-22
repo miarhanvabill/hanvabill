@@ -3,6 +3,7 @@ import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import { getCustomer } from "@/app/actions/customers"
 import { getBookingsByCustomerId, getInvoicesByCustomerId } from "@/app/actions/bookings"
+import { getActiveCustomerMembership } from "@/app/actions/memberships"
 import { CustomerProfileDisplay } from "@/components/customer-profile-display"
 
 async function CustomerDetailsContent({ id }: { id: string }) {
@@ -13,13 +14,14 @@ async function CustomerDetailsContent({ id }: { id: string }) {
       notFound()
     }
 
-    // Fetch bookings and invoices in parallel for better performance
-    const [bookings, invoices] = await Promise.all([
+    // Fetch bookings, invoices, and active membership in parallel for better performance
+    const [bookings, invoices, activeMembership] = await Promise.all([
       getBookingsByCustomerId(id),
-      getInvoicesByCustomerId(id)
+      getInvoicesByCustomerId(id),
+      getActiveCustomerMembership(Number(id))
     ])
 
-    return <CustomerProfileDisplay customer={customer} bookings={bookings} invoices={invoices} />
+    return <CustomerProfileDisplay customer={customer} bookings={bookings} invoices={invoices} activeMembership={activeMembership} />
   } catch (error) {
     console.error("Error loading customer details:", error)
     notFound()
