@@ -29,6 +29,8 @@ export default function DailyRevenuePage() {
       if (response.ok) {
         const data = await response.json()
         setRevenueData(data)
+      } else {
+        throw new Error("API returned status " + response.status)
       }
     } catch (error) {
       console.error("Error fetching revenue data:", error)

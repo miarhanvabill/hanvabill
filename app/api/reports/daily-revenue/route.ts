@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
       
       const dailyRevenue = await sql`
         SELECT 
-          TO_CHAR(booking_date, 'YYYY-MM-DD') as date,
+          TO_CHAR(booking_date::TIMESTAMP, 'YYYY-MM-DD') as date,
           COUNT(id) as bookingCount,
           COALESCE(SUM(total_amount), 0) as revenue,
           0 as tips,
@@ -21,9 +21,9 @@ export async function GET(request: NextRequest) {
         FROM bookings
         WHERE tenant_id = ${tenantId}
           AND status = 'completed'
-          AND booking_date >= CURRENT_DATE - INTERVAL '${days} days'
-        GROUP BY booking_date
-        ORDER BY booking_date DESC
+          AND booking_date::TIMESTAMP >= CURRENT_DATE - INTERVAL '1 day' * ${days}
+        GROUP BY TO_CHAR(booking_date::TIMESTAMP, 'YYYY-MM-DD')
+        ORDER BY date DESC
       `
       
       const response = dailyRevenue.map(row => ({
