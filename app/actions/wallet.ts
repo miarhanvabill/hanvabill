@@ -110,13 +110,19 @@ export async function addWalletPoints(
 ): Promise<{ success: boolean; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      const settingsResult = await sql`
+        SELECT points_validity_days FROM loyalty_settings
+        WHERE tenant_id = ${tenantId} LIMIT 1
+      `
+      const validityDays = settingsResult.length > 0 ? settingsResult[0].points_validity_days : 45
+
       await sql`
         INSERT INTO loyalty_transactions (
           customer_id, points, transaction_type, amount, description, 
-          created_at, type, tenant_id
+          created_at, expires_at, type, tenant_id
         ) VALUES (
           ${Number(customerId)}, ${points}, 'earned', 0, ${description}, 
-          NOW(), ${type}, ${tenantId}
+          NOW(), NOW() + (${validityDays}::text || ' days')::interval, ${type}, ${tenantId}
         )
       `
 

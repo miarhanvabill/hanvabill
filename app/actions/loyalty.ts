@@ -305,14 +305,35 @@ export async function getCustomerLoyalty(id: string | number, tenantId?: string)
     const result = await sql`
       SELECT
         ${customerId}::bigint as customer_id,
-        GREATEST(
-          COALESCE(SUM(CASE WHEN transaction_type = 'earned' THEN points ELSE 0 END), 0)
-          - COALESCE(SUM(CASE WHEN transaction_type = 'redeemed' THEN points ELSE 0 END), 0)
-        , 0) AS current_points,
-        COALESCE(SUM(CASE WHEN transaction_type = 'earned' THEN amount ELSE 0 END), 0) AS lifetime_spending
-      FROM loyalty_transactions
-      WHERE customer_id = ${customerId}
-      AND tenant_id = ${resolvedTenantId}
+        (
+          WITH earned AS (
+            SELECT points, expires_at,
+                   SUM(points) OVER (ORDER BY created_at ASC) as cumulative_earned
+            FROM loyalty_transactions
+            WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId} AND transaction_type = 'earned'
+          ),
+          redeemed AS (
+            SELECT COALESCE(SUM(points), 0) as total_redeemed
+            FROM loyalty_transactions
+            WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId} AND transaction_type = 'redeemed'
+          )
+          SELECT COALESCE(SUM(
+            CASE 
+              WHEN cumulative_earned <= (SELECT total_redeemed FROM redeemed) THEN 0
+              WHEN cumulative_earned - points < (SELECT total_redeemed FROM redeemed) THEN 
+                   CASE WHEN expires_at < NOW() THEN 0 
+                        ELSE cumulative_earned - (SELECT total_redeemed FROM redeemed) 
+                   END
+              ELSE CASE WHEN expires_at < NOW() THEN 0 ELSE points END
+            END
+          ), 0)
+          FROM earned
+        ) AS current_points,
+        (
+          SELECT COALESCE(SUM(amount), 0)
+          FROM loyalty_transactions
+          WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId} AND transaction_type = 'earned'
+        ) AS lifetime_spending
     `
     
     if (!result || result.length === 0) {
@@ -334,15 +355,28 @@ export async function getCustomerLoyalty(id: string | number, tenantId?: string)
 export async function getExpiringSoon(customerId: number, days = 7, tenantId?: string) {
   return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
     const result = await sql`
-      SELECT COALESCE(SUM(points), 0) AS expiring
-      FROM loyalty_transactions
-      WHERE customer_id = ${customerId}
-        AND tenant_id = ${resolvedTenantId}
-        AND transaction_type = 'earned'
-        AND expires_at IS NOT NULL
-        AND expires_at != ''
-        AND expires_at::timestamp > NOW()
-        AND expires_at::timestamp <= NOW() + (${days}::text || ' days')::interval
+      WITH earned AS (
+        SELECT points, expires_at,
+               SUM(points) OVER (ORDER BY created_at ASC) as cumulative_earned
+        FROM loyalty_transactions
+        WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId} AND transaction_type = 'earned'
+      ),
+      redeemed AS (
+        SELECT COALESCE(SUM(points), 0) as total_redeemed
+        FROM loyalty_transactions
+        WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId} AND transaction_type = 'redeemed'
+      )
+      SELECT COALESCE(SUM(
+        CASE 
+          WHEN cumulative_earned <= (SELECT total_redeemed FROM redeemed) THEN 0
+          WHEN cumulative_earned - points < (SELECT total_redeemed FROM redeemed) THEN 
+               CASE WHEN expires_at > NOW() AND expires_at <= NOW() + (${days}::text || ' days')::interval THEN cumulative_earned - (SELECT total_redeemed FROM redeemed)
+                    ELSE 0 
+               END
+          ELSE CASE WHEN expires_at > NOW() AND expires_at <= NOW() + (${days}::text || ' days')::interval THEN points ELSE 0 END
+        END
+      ), 0) AS expiring
+      FROM earned
     `
     return Number(result[0]?.expiring || 0)
   }, tenantId)
@@ -402,9 +436,15 @@ export async function enrollCustomerInLoyalty(customerId: number, welcomeBonus =
       AND tenant_id = ${resolvedTenantId}
     `
     if (welcomeBonus > 0) {
+      const settingsResult = await sql`
+        SELECT points_validity_days FROM loyalty_settings
+        WHERE tenant_id = ${resolvedTenantId} LIMIT 1
+      `
+      const validityDays = settingsResult.length > 0 ? settingsResult[0].points_validity_days : 45
+      
       await sql`
-        INSERT INTO loyalty_transactions (tenant_id, customer_id, points, transaction_type, amount, description, created_at, type)
-        VALUES (${resolvedTenantId}, ${customerId}, ${welcomeBonus}, 'earned', 0, 'Welcome bonus', NOW(), 'earned')
+        INSERT INTO loyalty_transactions (tenant_id, customer_id, points, transaction_type, amount, description, created_at, expires_at, type)
+        VALUES (${resolvedTenantId}, ${customerId}, ${welcomeBonus}, 'earned', 0, 'Welcome bonus', NOW(), NOW() + (${validityDays}::text || ' days')::interval, 'earned')
       `
     }
     return { success: true }
@@ -432,10 +472,25 @@ export async function updateLoyaltyPoints(
   return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
     await ensureLoyaltySettingsSchema(sql, resolvedTenantId)
     const amount = type === "redeemed" ? points : 0 // For redeemed points, amount often equals points spent
-    await sql`
-      INSERT INTO loyalty_transactions (tenant_id, customer_id, points, transaction_type, amount, description, created_at)
-      VALUES (${resolvedTenantId}, ${customerId}, ${points}, ${type}, ${amount}, ${description}, NOW())
-    `
+    
+    if (type === "earned") {
+      const settingsResult = await sql`
+        SELECT points_validity_days FROM loyalty_settings
+        WHERE tenant_id = ${resolvedTenantId} LIMIT 1
+      `
+      const validityDays = settingsResult.length > 0 ? settingsResult[0].points_validity_days : 45
+      
+      await sql`
+        INSERT INTO loyalty_transactions (tenant_id, customer_id, points, transaction_type, amount, description, created_at, expires_at)
+        VALUES (${resolvedTenantId}, ${customerId}, ${points}, ${type}, ${amount}, ${description}, NOW(), NOW() + (${validityDays}::text || ' days')::interval)
+      `
+    } else {
+      await sql`
+        INSERT INTO loyalty_transactions (tenant_id, customer_id, points, transaction_type, amount, description, created_at)
+        VALUES (${resolvedTenantId}, ${customerId}, ${points}, ${type}, ${amount}, ${description}, NOW())
+      `
+    }
+    
     return { success: true }
   }, tenantId)
 }

@@ -262,8 +262,14 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
         `
       }
 
-      // Process points earning (with 45-day expiry) with tenant_id
+      // Process points earning (with dynamic expiry) with tenant_id
       if (pointsEarned > 0) {
+        const settingsResult = await sql`
+          SELECT points_validity_days FROM loyalty_settings
+          WHERE tenant_id = ${tenantId} LIMIT 1
+        `
+        const validityDays = settingsResult.length > 0 ? settingsResult[0].points_validity_days : 45
+
         await sql`
           INSERT INTO loyalty_transactions (
             customer_id, points, amount, transaction_type, type, description, invoice_id, expires_at, tenant_id, created_at
@@ -275,7 +281,7 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
             'earned',
             ${"Points earned from invoice " + invoiceNumber},
             ${invoice.id},
-            NOW() + INTERVAL '45 days',
+            NOW() + (${validityDays}::text || ' days')::interval,
             ${tenantId},
             NOW()
           )
