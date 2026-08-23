@@ -29,8 +29,11 @@ export default async function BillingPage() {
   let history = []
   
   try {
-    subscription = await getSubscription()
-    history = await getBillingHistory()
+    const rawSub = await getSubscription()
+    subscription = rawSub ? JSON.parse(JSON.stringify(rawSub)) : null
+    
+    const rawHistory = await getBillingHistory()
+    history = rawHistory ? JSON.parse(JSON.stringify(rawHistory)) : []
   } catch (err) {
     console.error("Error fetching billing details", err)
     // Error boundary will catch if we re-throw, but let's just pass null/[] if the tables aren't created yet for the mock env.

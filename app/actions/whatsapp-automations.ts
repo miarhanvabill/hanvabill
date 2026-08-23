@@ -153,8 +153,9 @@ export async function getWhatsAppAutomationRules(): Promise<AutomationRule[]> {
   })
 }
 
-// Alias for getWhatsAppAutomationRules
-export const getAutomationRules = getWhatsAppAutomationRules
+export async function getAutomationRules() {
+  return await getWhatsAppAutomationRules()
+}
 
 /**
  * Update an existing WhatsApp automation rule
@@ -285,8 +286,9 @@ export async function toggleWhatsAppAutomationRule(
   })
 }
 
-// Alias for toggleAutomationRule
-export const toggleAutomationRule = toggleWhatsAppAutomationRule
+export async function toggleAutomationRule(id: number, enabled: boolean) {
+  return await toggleWhatsAppAutomationRule(id, enabled)
+}
 
 /**
  * Send a sample/test automation message to a given phone number
@@ -370,8 +372,9 @@ export async function sendTestAutomationMessage(
   })
 }
 
-// Alias for testSendAutomationTemplate
-export const testSendAutomationTemplate = sendTestAutomationMessage
+export async function testSendAutomationTemplate(id: number, phone: string) {
+  return await sendTestAutomationMessage(id, phone)
+}
 
 /**
  * Manually run the pending scheduled automations (24h/2h reminders, birthdays, winbacks) for current tenant
