@@ -13,19 +13,19 @@ import { useToast } from "@/components/ui/use-toast"
 const PLANS = [
   {
     name: "Free",
-    price: "$0",
+    price: "₹0",
     description: "Perfect for getting started",
     features: ["Up to 50 appointments/mo", "Basic reporting", "Email support"],
   },
   {
     name: "Pro",
-    price: "$49",
+    price: "₹49",
     description: "Best for growing salons",
     features: ["Unlimited appointments", "Advanced analytics", "Priority support", "SMS reminders"],
   },
   {
     name: "Enterprise",
-    price: "$149",
+    price: "₹149",
     description: "For large or multi-location salons",
     features: ["Everything in Pro", "Multi-location support", "Dedicated account manager", "Custom integrations"],
   }
@@ -177,7 +177,7 @@ export function BillingClient({
                           {new Date(invoice.created_at).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
-                          ${Number(invoice.amount).toFixed(2)} {invoice.currency.toUpperCase()}
+                          ₹${Number(invoice.amount).toFixed(2)} {invoice.currency.toUpperCase()}
                         </TableCell>
                         <TableCell>
                           <Badge variant={invoice.status === 'paid' ? 'default' : 'secondary'}>
