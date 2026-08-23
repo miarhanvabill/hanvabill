@@ -28,7 +28,7 @@ export interface WalletTransaction {
 export async function getCustomerWallets(): Promise<CustomerWallet[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const { rows } = await sql`
+      const rows = await sql`
         SELECT 
           c.id,
           c.full_name as name,
@@ -67,7 +67,7 @@ export async function getCustomerWallets(): Promise<CustomerWallet[]> {
 export async function getWalletTransactions(): Promise<WalletTransaction[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const { rows } = await sql`
+      const rows = await sql`
         SELECT 
           lt.id,
           lt.customer_id,
