@@ -84,20 +84,40 @@ const EVENT_METADATA: Record<string, { category: string; description: string; al
   },
 }
 
-function enrichRule(r: any): AutomationRule {
+function enrichRule(r: any): any {
   const meta = EVENT_METADATA[r.event_type] || {
     category: "General",
     description: "Automated WhatsApp trigger",
     allowed_variables: ["customer_name", "business_name"],
   }
+  const templateText = r.template_text || r.template || ""
+  const delayMin = Number(r.delay_minutes || 0)
+  
+  const niceName = r.event_type
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (l: string) => l.toUpperCase())
+
   return {
     ...r,
-    id: Number(r.id),
-    delay_minutes: Number(r.delay_minutes || 0),
+    id: String(r.id),
+    numericId: Number(r.id),
+    name: niceName,
+    event_type: r.event_type,
+    triggerEvent: r.event_type,
+    template: templateText,
+    template_text: templateText,
+    enabled: Boolean(r.is_enabled),
     is_enabled: Boolean(r.is_enabled),
+    delay_minutes: delayMin,
+    timingDelay: delayMin > 0 ? `${delayMin} min delay` : "Instant trigger",
     category: meta.category,
     description: meta.description,
     allowed_variables: meta.allowed_variables,
+    availableVariables: (meta.allowed_variables || []).map((v: string) => ({
+      tag: `{{${v}}}`,
+      label: v.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase()),
+      sample: v === "customer_name" ? "Priya Sharma" : v === "total_amount" ? "₹2,499" : "Sample",
+    })),
   }
 }
 
@@ -140,24 +160,28 @@ export const getAutomationRules = getWhatsAppAutomationRules
  * Update an existing WhatsApp automation rule
  */
 export async function updateWhatsAppAutomationRule(
-  ruleId: number,
+  ruleId: number | string,
   data: {
+    template?: string
     template_text?: string
     is_enabled?: boolean
+    enabled?: boolean
     delay_minutes?: number
+    timingDelay?: string
     send_time?: string
   },
 ): Promise<{ success: boolean; message: string; rule?: AutomationRule }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      if (!ruleId || isNaN(ruleId)) {
+      const numId = Number(ruleId)
+      if (!numId || isNaN(numId)) {
         return { success: false, message: "Invalid rule ID" }
       }
 
       const existing = await sql`
         SELECT id, template_text, is_enabled, delay_minutes, send_time
         FROM whatsapp_automation_rules
-        WHERE id = ${ruleId} AND tenant_id = ${tenantId}
+        WHERE id = ${numId} AND tenant_id = ${tenantId}
         LIMIT 1
       `
 
@@ -166,9 +190,19 @@ export async function updateWhatsAppAutomationRule(
       }
 
       const current = existing[0]
-      const updatedTemplate = data.template_text !== undefined ? data.template_text : current.template_text
-      const updatedEnabled = data.is_enabled !== undefined ? data.is_enabled : current.is_enabled
-      const updatedDelay = data.delay_minutes !== undefined ? Number(data.delay_minutes) : current.delay_minutes
+      const updatedTemplate = data.template_text !== undefined 
+        ? data.template_text 
+        : data.template !== undefined 
+        ? data.template 
+        : current.template_text
+      const updatedEnabled = data.is_enabled !== undefined 
+        ? data.is_enabled 
+        : data.enabled !== undefined 
+        ? data.enabled 
+        : current.is_enabled
+      const updatedDelay = data.delay_minutes !== undefined 
+        ? Number(data.delay_minutes) 
+        : current.delay_minutes
       const updatedSendTime = data.send_time !== undefined ? data.send_time : current.send_time
 
       const [updatedRule] = await sql`
@@ -179,7 +213,7 @@ export async function updateWhatsAppAutomationRule(
           delay_minutes = ${updatedDelay},
           send_time = ${updatedSendTime},
           updated_at = NOW()
-        WHERE id = ${ruleId} AND tenant_id = ${tenantId}
+        WHERE id = ${numId} AND tenant_id = ${tenantId}
         RETURNING *
       `
 
@@ -203,13 +237,8 @@ export async function updateWhatsAppAutomationRule(
 
 // Alias for saveAutomationRule
 export async function saveAutomationRule(
-  ruleId: number,
-  data: {
-    template_text?: string
-    is_enabled?: boolean
-    delay_minutes?: number
-    send_time?: string
-  },
+  ruleId: number | string,
+  data: any,
 ) {
   return updateWhatsAppAutomationRule(ruleId, data)
 }
@@ -218,19 +247,20 @@ export async function saveAutomationRule(
  * Toggle the enabled state of a WhatsApp automation rule
  */
 export async function toggleWhatsAppAutomationRule(
-  ruleId: number,
+  ruleId: number | string,
   isEnabled: boolean,
 ): Promise<{ success: boolean; message: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      if (!ruleId || isNaN(ruleId)) {
+      const numId = Number(ruleId)
+      if (!numId || isNaN(numId)) {
         return { success: false, message: "Invalid rule ID" }
       }
 
       const result = await sql`
         UPDATE whatsapp_automation_rules
         SET is_enabled = ${isEnabled}, updated_at = NOW()
-        WHERE id = ${ruleId} AND tenant_id = ${tenantId}
+        WHERE id = ${numId} AND tenant_id = ${tenantId}
         RETURNING id
       `
 

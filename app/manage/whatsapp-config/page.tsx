@@ -342,20 +342,25 @@ export default function WhatsAppConfigPage() {
   }
 
   // Render preview of template replacing variables with samples
-  const renderPreviewText = (rawTemplate: string, customVars?: Array<{ tag: string; sample: string }>) => {
-    let text = rawTemplate
+  const renderPreviewText = (rawTemplate?: string, customVars?: Array<{ tag: string; sample: string }>) => {
+    let text = String(rawTemplate || "")
+    if (!text) return "No message template specified."
+
     const defaultReplacements: Record<string, string> = {
       "{{customer_name}}": "Priya Sharma",
       "{{salon_name}}": gatewayData.salonName || "Hanva Luxury Salon",
+      "{{business_name}}": gatewayData.salonName || "Hanva Luxury Salon",
+      "{{service_name}}": "Keratin Hair Spa & Blowdry",
       "{{service_names}}": "Keratin Hair Spa & Blowdry",
       "{{booking_date}}": "24 Aug 2026",
       "{{booking_time}}": "04:30 PM",
       "{{staff_name}}": "Sarah Johnson",
-      "{{total_amount}}": "₹2,499",
+      "{{total_amount}}": "2,499",
       "{{booking_id}}": "BKG-9021",
       "{{invoice_no}}": "INV-2026-0812",
       "{{invoice_url}}": "https://biz.hanva.in/inv/x8k2p9",
       "{{payment_method}}": "UPI / Google Pay",
+      "{{gmb_url}}": "https://g.page/r/hanva-salon/review",
       "{{review_url}}": "https://g.page/r/hanva-salon/review",
       "{{discount_percent}}": "25",
       "{{coupon_code}}": "BDAY25",
@@ -363,6 +368,7 @@ export default function WhatsAppConfigPage() {
       "{{booking_url}}": "https://biz.hanva.in/book",
       "{{days_since_visit}}": "45",
       "{{special_offer}}": "Flat ₹500 OFF + Free Hair Spa",
+      "{{points}}": "850",
       "{{points_earned}}": "150",
       "{{points_balance}}": "850",
       "{{cash_equivalent}}": "425",
@@ -372,14 +378,18 @@ export default function WhatsAppConfigPage() {
       "{{salon_address}}": "100ft Road, Indiranagar",
     }
 
-    if (customVars) {
+    if (customVars && Array.isArray(customVars)) {
       customVars.forEach((v) => {
-        defaultReplacements[v.tag] = v.sample
+        if (v && v.tag && v.sample) {
+          defaultReplacements[v.tag] = v.sample
+        }
       })
     }
 
     Object.entries(defaultReplacements).forEach(([tag, val]) => {
-      text = text.split(tag).join(val)
+      if (tag && val !== undefined) {
+        text = text.split(tag).join(String(val))
+      }
     })
 
     return text
@@ -876,7 +886,7 @@ export default function WhatsAppConfigPage() {
                     {/* Compact Message Preview Box */}
                     <div className="bg-[#eef8ef] p-3 rounded-lg border border-[#cbebc9] text-[12px] text-slate-800 font-sans leading-relaxed relative">
                       <p className="line-clamp-3">
-                        {renderPreviewText(rule.template)}
+                        {renderPreviewText(rule.template || (rule as any).template_text || "")}
                       </p>
                       <div className="flex items-center justify-end gap-1 mt-1 text-[10px] text-slate-500">
                         <span>12:45 PM</span>
