@@ -36,6 +36,15 @@ export interface ResourceBooking {
 
 export async function getAllResources(): Promise<Resource[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
+    // Auto-migrate missing columns so this works before migration 046 is applied
+    try {
+      await sql`ALTER TABLE business_resources ADD COLUMN IF NOT EXISTS tenant_id INTEGER DEFAULT 1`
+      await sql`UPDATE business_resources SET tenant_id = 1 WHERE tenant_id IS NULL`
+      await sql`ALTER TABLE business_resources ADD COLUMN IF NOT EXISTS location VARCHAR(255) DEFAULT 'Main Floor'`
+    } catch (migrationError) {
+      console.log("[v0] business_resources migration check:", migrationError)
+    }
+
     try {
       console.log("[v0] Fetching all resources from database for tenant:", tenantId)
       const result = await sql`
@@ -43,16 +52,17 @@ export async function getAllResources(): Promise<Resource[]> {
           id::text,
           name,
           type,
-          description,
-          capacity,
-          is_bookable,
-          hourly_rate,
+          COALESCE(description, '') as description,
+          COALESCE(location, 'Main Floor') as location,
+          COALESCE(capacity, 1) as capacity,
+          COALESCE(is_bookable, false) as is_bookable,
+          COALESCE(hourly_rate, 0) as hourly_rate,
           maintenance_schedule,
           is_active as is_available,
           created_at,
           updated_at
         FROM business_resources 
-        WHERE is_active = true AND tenant_id = ${tenantId}
+        WHERE tenant_id = ${tenantId}
         ORDER BY created_at DESC
       `
 
@@ -68,18 +78,18 @@ export async function getAllResources(): Promise<Resource[]> {
         name: row.name,
         type: row.type,
         description: row.description || "",
-        location: "Main Floor", // Default location since not in schema
-        capacity: row.capacity || 1,
-        is_available: row.is_available,
-        is_bookable: row.is_bookable,
+        location: row.location || "Main Floor",
+        capacity: Number(row.capacity) || 1,
+        is_available: Boolean(row.is_available),
+        is_bookable: Boolean(row.is_bookable),
         hourly_rate: Number.parseFloat(row.hourly_rate || "0"),
         maintenance_schedule: row.maintenance_schedule,
-        assigned_staff: [], // Will be populated from separate query if needed
+        assigned_staff: [],
         created_at: row.created_at,
         updated_at: row.updated_at,
       }))
 
-      console.log("[v0] Processed resources:", resources)
+      console.log("[v0] Processed resources:", resources.length)
       return resources
     } catch (error) {
       console.error("[v0] Error fetching resources:", error)
@@ -96,19 +106,20 @@ export async function createResource(
       console.log("[v0] Creating resource for tenant:", tenantId, data)
       const result = await sql`
         INSERT INTO business_resources (
-          tenant_id, name, type, description, capacity, is_bookable, hourly_rate, maintenance_schedule, is_active
+          tenant_id, name, type, description, location, capacity, is_bookable, hourly_rate, maintenance_schedule, is_active
         ) VALUES (
           ${tenantId},
           ${data.name}, 
           ${data.type}, 
           ${data.description}, 
+          ${data.location || 'Main Floor'},
           ${data.capacity}, 
           ${data.is_bookable}, 
           ${data.hourly_rate}, 
           ${data.maintenance_schedule || null}, 
           ${data.is_available}
         )
-        RETURNING id::text, name, type, description, capacity, is_bookable, hourly_rate, maintenance_schedule, is_active as is_available, created_at, updated_at
+        RETURNING id::text, name, type, COALESCE(description,'') as description, COALESCE(location,'Main Floor') as location, capacity, is_bookable, hourly_rate, maintenance_schedule, is_active as is_available, created_at, updated_at
       `
 
       if (!result || !Array.isArray(result) || result.length === 0) {
@@ -122,10 +133,10 @@ export async function createResource(
         name: row.name,
         type: row.type,
         description: row.description || "",
-        location: "Main Floor",
-        capacity: row.capacity || 1,
-        is_available: row.is_available,
-        is_bookable: row.is_bookable,
+        location: row.location || "Main Floor",
+        capacity: Number(row.capacity) || 1,
+        is_available: Boolean(row.is_available),
+        is_bookable: Boolean(row.is_bookable),
         hourly_rate: Number.parseFloat(row.hourly_rate || "0"),
         maintenance_schedule: row.maintenance_schedule,
         assigned_staff: [],
@@ -149,6 +160,7 @@ export async function updateResource(id: string, data: Partial<Resource>): Promi
           name = COALESCE(${data.name}, name),
           type = COALESCE(${data.type}, type),
           description = COALESCE(${data.description}, description),
+          location = COALESCE(${data.location}, location),
           capacity = COALESCE(${data.capacity}, capacity),
           is_bookable = COALESCE(${data.is_bookable}, is_bookable),
           hourly_rate = COALESCE(${data.hourly_rate}, hourly_rate),
@@ -156,7 +168,7 @@ export async function updateResource(id: string, data: Partial<Resource>): Promi
           is_active = COALESCE(${data.is_available}, is_active),
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ${id} AND tenant_id = ${tenantId}
-        RETURNING id::text, name, type, description, capacity, is_bookable, hourly_rate, maintenance_schedule, is_active as is_available, created_at, updated_at
+        RETURNING id::text, name, type, COALESCE(description,'') as description, COALESCE(location,'Main Floor') as location, capacity, is_bookable, hourly_rate, maintenance_schedule, is_active as is_available, created_at, updated_at
       `
 
       if (!result || !Array.isArray(result) || result.length === 0) {
@@ -170,10 +182,10 @@ export async function updateResource(id: string, data: Partial<Resource>): Promi
         name: row.name,
         type: row.type,
         description: row.description || "",
-        location: "Main Floor",
-        capacity: row.capacity || 1,
-        is_available: row.is_available,
-        is_bookable: row.is_bookable,
+        location: row.location || "Main Floor",
+        capacity: Number(row.capacity) || 1,
+        is_available: Boolean(row.is_available),
+        is_bookable: Boolean(row.is_bookable),
         hourly_rate: Number.parseFloat(row.hourly_rate || "0"),
         maintenance_schedule: row.maintenance_schedule,
         assigned_staff: [],

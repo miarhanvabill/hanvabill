@@ -99,6 +99,8 @@ export default function ResourceAvailabilityPage() {
     is_bookable: false,
     hourly_rate: 0,
     maintenance_schedule: "",
+    last_maintenance: "",
+    maintenance_due: "",
   })
 
   useEffect(() => {
@@ -271,6 +273,8 @@ export default function ResourceAvailabilityPage() {
       is_bookable: resource.is_bookable,
       hourly_rate: resource.hourly_rate,
       maintenance_schedule: resource.maintenance_schedule || "",
+      last_maintenance: resource.last_maintenance || "",
+      maintenance_due: resource.maintenance_due || "",
     })
     setIsEditResourceDialogOpen(true)
   }
@@ -286,6 +290,8 @@ export default function ResourceAvailabilityPage() {
       is_bookable: false,
       hourly_rate: 0,
       maintenance_schedule: "",
+      last_maintenance: "",
+      maintenance_due: "",
     })
   }
 
