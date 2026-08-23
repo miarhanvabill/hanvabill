@@ -927,13 +927,13 @@ export default function WhatsAppConfigPage() {
                   <span className="text-xs font-medium text-slate-500">Messages Sent Today</span>
                   <div className="flex items-baseline justify-between">
                     <h3 className="text-2xl font-black text-slate-900">
-                      {analytics?.totalSentToday ?? 14}
+                      {analytics?.totalSentToday ?? 0}
                     </h3>
                     <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
-                      +18% vs avg
+                      Live
                     </Badge>
                   </div>
-                  <p className="text-[11px] text-slate-400">Total All Time: {analytics?.totalSentAllTime ?? 148}</p>
+                  <p className="text-[11px] text-slate-400">Total All Time: {analytics?.totalSentAllTime ?? 0}</p>
                 </CardContent>
               </Card>
 
@@ -942,12 +942,12 @@ export default function WhatsAppConfigPage() {
                   <span className="text-xs font-medium text-slate-500">Delivery Rate</span>
                   <div className="flex items-baseline justify-between">
                     <h3 className="text-2xl font-black text-emerald-600">
-                      {analytics?.deliveryRate ?? 98}%
+                      {analytics?.deliveryRate ?? 0}%
                     </h3>
                     <CheckCheck className="w-5 h-5 text-emerald-600" />
                   </div>
                   <p className="text-[11px] text-slate-400">
-                    {analytics?.deliveredCount ?? 142} delivered / {analytics?.failedCount ?? 2} failed
+                    {analytics?.deliveredCount ?? 0} delivered / {analytics?.failedCount ?? 0} failed
                   </p>
                 </CardContent>
               </Card>
@@ -957,11 +957,11 @@ export default function WhatsAppConfigPage() {
                   <span className="text-xs font-medium text-slate-500">Read / Open Rate</span>
                   <div className="flex items-baseline justify-between">
                     <h3 className="text-2xl font-black text-blue-600">
-                      {analytics?.readRate ?? 86}%
+                      {analytics?.readRate ?? 0}%
                     </h3>
                     <CheckCheck className="w-5 h-5 text-blue-500" />
                   </div>
-                  <p className="text-[11px] text-slate-400">{analytics?.readCount ?? 119} marked read</p>
+                  <p className="text-[11px] text-slate-400">{analytics?.readCount ?? 0} marked read</p>
                 </CardContent>
               </Card>
 
@@ -970,7 +970,7 @@ export default function WhatsAppConfigPage() {
                   <span className="text-xs font-medium text-slate-500">Click-Through Rate</span>
                   <div className="flex items-baseline justify-between">
                     <h3 className="text-2xl font-black text-purple-600">
-                      {analytics?.clickRate ?? 28}%
+                      {analytics?.clickRate ?? 0}%
                     </h3>
                     <TrendingUp className="w-5 h-5 text-purple-500" />
                   </div>

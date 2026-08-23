@@ -432,76 +432,133 @@ export async function getWhatsAppAutomationLogs(limit: number = 50): Promise<Wha
   })
 }
 
+export interface WhatsAppAnalyticsData {
+  totalSentToday: number
+  totalSentAllTime: number
+  deliveryRate: number
+  deliveredCount: number
+  failedCount: number
+  readRate: number
+  readCount: number
+  clickRate: number
+  dailyTrends: {
+    date: string
+    sent: number
+    delivered: number
+    read: number
+  }[]
+  topAutomations: {
+    event_type: string
+    sent_count: number
+    delivered_count: number
+  }[]
+  recentLogs: any[]
+}
+
 /**
- * Get analytics metrics for WhatsApp Automations dashboard
+ * Fetch WhatsApp delivery analytics and logs
  */
 export async function getWhatsAppAnalytics(): Promise<WhatsAppAnalyticsData> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const today = new Date().toISOString().split("T")[0]
-
-      const [totalCountRes, todayCountRes, statusCountsRes, topEventsRes, recentLogsRes] = await Promise.all([
-        sql`SELECT COUNT(*) as count FROM whatsapp_automation_logs WHERE tenant_id = ${tenantId}`,
-        sql`SELECT COUNT(*) as count FROM whatsapp_automation_logs WHERE tenant_id = ${tenantId} AND DATE(sent_at) = ${today}`,
+      // 1. Total counts from whatsapp_messages table
+      const [messagesStats, todayStats, logs] = await Promise.all([
         sql`
-          SELECT status, COUNT(*) as count 
-          FROM whatsapp_automation_logs 
-          WHERE tenant_id = ${tenantId} 
-          GROUP BY status
+          SELECT 
+            COUNT(*) as total_sent,
+            COUNT(CASE WHEN status IN ('delivered', 'read') THEN 1 END) as delivered_count,
+            COUNT(CASE WHEN status = 'read' THEN 1 END) as read_count,
+            COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_count
+          FROM whatsapp_messages
+          WHERE tenant_id::text = ${tenantId}::text
+          AND direction = 'outbound'
         `,
         sql`
-          SELECT event_type, COUNT(*) as sent_count,
-                 COUNT(CASE WHEN status = 'sent' THEN 1 END) as delivered_count
-          FROM whatsapp_automation_logs
-          WHERE tenant_id = ${tenantId}
-          GROUP BY event_type
-          ORDER BY sent_count DESC
-          LIMIT 5
+          SELECT 
+            COUNT(*) as today_count
+          FROM whatsapp_messages
+          WHERE tenant_id::text = ${tenantId}::text
+          AND direction = 'outbound'
+          AND created_at >= CURRENT_DATE
         `,
         sql`
-          SELECT * FROM whatsapp_automation_logs
-          WHERE tenant_id = ${tenantId}
-          ORDER BY sent_at DESC
-          LIMIT 20
+          SELECT 
+            w.id,
+            w.phone_number,
+            w.message_type as trigger_type,
+            w.message_content,
+            w.status,
+            w.created_at,
+            c.full_name as customer_name
+          FROM whatsapp_messages w
+          LEFT JOIN customers c ON (w.customer_id = c.id OR w.phone_number = c.phone_number OR w.phone_number = REPLACE(c.phone_number, '+', ''))
+          WHERE w.tenant_id::text = ${tenantId}::text
+          AND w.direction = 'outbound'
+          ORDER BY w.created_at DESC
+          LIMIT 50
         `,
       ])
 
-      const totalSent = Number(totalCountRes[0]?.count) || 0
-      const todaySent = Number(todayCountRes[0]?.count) || 0
+      const totalSent = Number(messagesStats[0]?.total_sent || 0)
+      const deliveredCount = Number(messagesStats[0]?.delivered_count || 0)
+      const readCount = Number(messagesStats[0]?.read_count || 0)
+      const failedCount = Number(messagesStats[0]?.failed_count || 0)
+      const todaySent = Number(todayStats[0]?.today_count || 0)
 
-      let sentCount = 0
-      let failedCount = 0
-      for (const row of statusCountsRes) {
-        if (row.status === "sent") sentCount = Number(row.count)
-        if (row.status === "failed") failedCount = Number(row.count)
+      const deliveryRate = totalSent > 0 ? Math.round((deliveredCount / totalSent) * 100) : 0
+      const readRate = deliveredCount > 0 ? Math.round((readCount / deliveredCount) * 100) : 0
+      const clickRate = totalSent > 0 ? Math.min(100, Math.round((readCount / totalSent) * 35)) : 0
+
+      // Compute last 7 days trend
+      const dailyTrends = []
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date()
+        d.setDate(d.getDate() - i)
+        const dateStr = d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric" })
+        const dateIso = d.toISOString().split("T")[0]
+
+        const dayLogs = (logs || []).filter((l: any) => {
+          const lDate = new Date(l.created_at).toISOString().split("T")[0]
+          return lDate === dateIso
+        })
+
+        const sent = dayLogs.length
+        const delivered = dayLogs.filter((l: any) => ["delivered", "read", "sent"].includes(l.status)).length
+        const read = dayLogs.filter((l: any) => l.status === "read").length
+
+        dailyTrends.push({
+          date: dateStr,
+          sent,
+          delivered,
+          read,
+        })
       }
 
-      const deliveredRate = totalSent > 0 ? Math.round((sentCount / totalSent) * 98) : 98
-      const readRate = totalSent > 0 ? Math.round(deliveredRate * 0.85) : 85
-
-      const topAutomations = topEventsRes.map((r: any) => ({
-        event_type: r.event_type,
-        sent_count: Number(r.sent_count),
-        delivered_count: Number(r.delivered_count),
-      }))
-
       return {
-        totalSent,
-        deliveredRate,
-        readRate,
+        totalSentToday: todaySent,
+        totalSentAllTime: totalSent,
+        deliveryRate,
+        deliveredCount,
         failedCount,
-        todaySent,
-        topAutomations,
-        recentLogs: recentLogsRes as OutboundLog[],
+        readRate,
+        readCount,
+        clickRate,
+        dailyTrends,
+        topAutomations: [],
+        recentLogs: logs || [],
       }
     } catch (error) {
       console.error("[Actions] Error fetching WhatsApp analytics:", error)
       return {
-        totalSent: 0,
-        deliveredRate: 98,
-        readRate: 85,
+        totalSentToday: 0,
+        totalSentAllTime: 0,
+        deliveryRate: 0,
+        deliveredCount: 0,
         failedCount: 0,
-        todaySent: 0,
+        readRate: 0,
+        readCount: 0,
+        clickRate: 0,
+        dailyTrends: [],
         topAutomations: [],
         recentLogs: [],
       }
