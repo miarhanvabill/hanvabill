@@ -177,7 +177,7 @@ export function BillingClient({
                           {new Date(invoice.created_at).toLocaleDateString()}
                         </TableCell>
                         <TableCell>
-                          ₹${Number(invoice.amount).toFixed(2)} {invoice.currency.toUpperCase()}
+                          ₹{Number(invoice.amount).toFixed(2)} {invoice.currency.toUpperCase()}
                         </TableCell>
                         <TableCell>
                           <Badge variant={invoice.status === 'paid' ? 'default' : 'secondary'}>

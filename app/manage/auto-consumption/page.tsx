@@ -358,7 +358,7 @@ export default function AutoConsumptionPage() {
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">₹${stats.totalCost.toFixed(2)}</div>
+              <div className="text-2xl font-bold">₹{stats.totalCost.toFixed(2)}</div>
               <p className="text-xs text-muted-foreground">Product consumption value</p>
             </CardContent>
           </Card>
@@ -561,7 +561,7 @@ export default function AutoConsumptionPage() {
                         <div className="font-medium">
                           {log.amount} {log.unit}
                         </div>
-                        <div className="text-sm text-muted-foreground">₹${log.cost.toFixed(2)}</div>
+                        <div className="text-sm text-muted-foreground">₹{log.cost.toFixed(2)}</div>
                       </div>
                     </div>
                   ))
@@ -593,7 +593,7 @@ export default function AutoConsumptionPage() {
                           <div className="text-sm text-muted-foreground">{product.totalAmount} units consumed</div>
                         </div>
                         <div className="text-right">
-                          <div className="font-medium">₹${product.totalCost.toFixed(2)}</div>
+                          <div className="font-medium">₹{product.totalCost.toFixed(2)}</div>
                         </div>
                       </div>
                     ))
@@ -627,7 +627,7 @@ export default function AutoConsumptionPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Total Cost</span>
-                    <span className="font-medium">₹${(stats?.totalCost || 0).toFixed(2)}</span>
+                    <span className="font-medium">₹{(stats?.totalCost || 0).toFixed(2)}</span>
                   </div>
                 </div>
               </CardContent>

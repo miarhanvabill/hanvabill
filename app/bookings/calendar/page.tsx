@@ -89,7 +89,7 @@ const BookingCard = memo(
               {showDate && `${booking.booking_date} `}
               {formatTime(booking.booking_time || "00:00")}
             </div>
-            {booking.total_amount && <div className="text-sm font-medium text-green-600">₹${booking.total_amount}</div>}
+            {booking.total_amount && <div className="text-sm font-medium text-green-600">₹{booking.total_amount}</div>}
           </div>
         </CardContent>
       </Card>
