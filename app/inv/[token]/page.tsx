@@ -104,7 +104,8 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
         <ReviewWidget 
           tenantId={inv.tenant_id} 
           bookingId={inv.booking_id} 
-          gmbUrl={bizProfile.googleMyBusinessUrl} 
+          gmbUrl={bizProfile.googleMyBusinessUrl}
+          businessName={bizProfile.salonName || "our salon"}
         />
       </div>
     </div>
