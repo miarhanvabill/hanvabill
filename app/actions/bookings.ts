@@ -449,6 +449,47 @@ export async function createBooking(formData: FormData) {
         }
       }
 
+      // Trigger WhatsApp booking confirmation automation
+      try {
+        const [customerRow] = await sql`
+          SELECT full_name, phone_number FROM customers WHERE id = ${finalCustomerId} AND tenant_id = ${tenantId} LIMIT 1
+        `
+        const [staffRow] = finalStaffId
+          ? await sql`SELECT name FROM staff WHERE id = ${finalStaffId} AND tenant_id = ${tenantId} LIMIT 1`
+          : [null]
+
+        const serviceNamesList = await sql`
+          SELECT s.name FROM booking_services bs
+          JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
+          WHERE bs.booking_id = ${bookingId} AND bs.tenant_id = ${tenantId}
+        `
+        const serviceNamesStr = serviceNamesList.map((s: any) => s.name).join(", ")
+
+        if (customerRow?.phone_number) {
+          import("@/lib/whatsapp-automations").then(({ triggerWhatsAppAutomation }) => {
+            triggerWhatsAppAutomation({
+              tenantId: tenantId.toString(),
+              eventType: "booking_created",
+              recipientPhone: customerRow.phone_number,
+              customerId: finalCustomerId,
+              referenceId: `booking:${bookingId}:created`,
+              variables: {
+                customer_name: customerRow.full_name,
+                booking_number: bookingNumber,
+                booking_date: bookingDate.toString(),
+                booking_time: bookingTime.toString(),
+                service_name: serviceNamesStr || "Scheduled Salon Services",
+                staff_name: staffRow?.name || "our stylist team",
+                total_amount: totalAmountNum,
+              },
+              sql,
+            }).catch((err) => console.error("Failed to trigger WhatsApp booking automation:", err))
+          }).catch((err) => console.error("Failed to import whatsapp-automations:", err))
+        }
+      } catch (waErr) {
+        console.error("Error preparing WhatsApp booking automation:", waErr)
+      }
+
       await invalidateBookingCache(bookingId, finalCustomerId, finalStaffId)
 
       revalidatePath("/")
@@ -649,6 +690,29 @@ export async function updateBookingStatus(bookingId: number, status: string) {
 
       const booking = result[0]
       await invalidateBookingCache(bookingId, Number(booking.customer_id), Number(booking.staff_id))
+
+      // Trigger review_request WhatsApp automation when appointment is completed
+      if (status === "completed" && booking.customer_id) {
+        sql`
+          SELECT full_name, phone_number FROM customers WHERE id = ${booking.customer_id} AND tenant_id = ${tenantId} LIMIT 1
+        `.then((custRows: any) => {
+          if (custRows.length > 0 && custRows[0].phone_number) {
+            import("@/lib/whatsapp-automations").then(({ triggerWhatsAppAutomation }) => {
+              triggerWhatsAppAutomation({
+                tenantId: tenantId.toString(),
+                eventType: "review_request",
+                recipientPhone: custRows[0].phone_number,
+                customerId: Number(booking.customer_id),
+                referenceId: `booking:${bookingId}:review`,
+                variables: {
+                  customer_name: custRows[0].full_name,
+                },
+                sql,
+              }).catch((err) => console.error("Failed to send review request WhatsApp automation:", err))
+            }).catch(() => {})
+          }
+        }).catch((err: any) => console.error("Error fetching customer for review request:", err))
+      }
 
       revalidatePath("/")
       revalidatePath("/bookings")

@@ -56,7 +56,7 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
     try {
       // Verify customer exists and belongs to tenant
       const [customer] = await sql`
-        SELECT id FROM customers WHERE id = ${customerId} AND tenant_id = ${tenantId}
+        SELECT id, full_name, phone_number, email FROM customers WHERE id = ${customerId} AND tenant_id = ${tenantId}
       `
       
       if (!customer) {
@@ -313,30 +313,53 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
       }
 
 
-      let autoInvoiceEnabled = false;
-      try {
-        const waRow = await sql`
-          SELECT setting_value 
-          FROM store_settings 
-          WHERE tenant_id = ${tenantId.toString()} AND setting_key = 'whatsapp.autoInvoice'
-          LIMIT 1
-        `;
-        if (waRow.length > 0 && waRow.length !== undefined) {
-          autoInvoiceEnabled = waRow[0].setting_value === 'true';
-        } else if (waRow.rows && waRow.rows.length > 0) {
-          autoInvoiceEnabled = waRow.rows[0].setting_value === 'true';
-        }
-      } catch(e) {}
+      // Trigger WhatsApp Automations (Invoice Receipt & Loyalty Alert)
+      if (customer?.phone_number) {
+        // Run asynchronously so it doesn't block the checkout response
+        import("@/lib/whatsapp-automations").then(({ triggerWhatsAppAutomation }) => {
+          // 1. Send Invoice Receipt
+          triggerWhatsAppAutomation({
+            tenantId: tenantId.toString(),
+            eventType: "invoice_receipt",
+            recipientPhone: customer.phone_number,
+            customerId: customerId,
+            referenceId: `invoice:${invoice.id}`,
+            variables: {
+              customer_name: customer.full_name,
+              booking_number: invoiceNumber,
+              total_amount: total,
+              invoice_url: `https://biz.hanva.in/inv/${share_token}`,
+              points: pointsEarned,
+              coupon_code: input.coupon_code || "",
+            },
+            sql,
+          }).catch((err) => console.error("Failed to send WhatsApp invoice automation:", err))
 
-      if (autoInvoiceEnabled && customer.phone_number) {
-        // We do this asynchronously so it doesn't block the checkout response
-        const { sendWhatsAppInvoice } = await import('@/lib/whatsapp');
-        sendWhatsAppInvoice(tenantId.toString(), customer.phone_number, {
-           bookingNumber: invoiceNumber,
-           customerName: customer.name,
-           amount: total,
-           shareToken: share_token
-        }).catch(err => console.error("Failed to send WhatsApp invoice:", err));
+          // 2. Send Loyalty Update if points were earned or redeemed
+          if (pointsEarned > 0 || pointsRedeemed > 0) {
+            sql`
+              SELECT COALESCE(SUM(CASE WHEN transaction_type = 'earned' THEN points ELSE -points END), 0) as balance
+              FROM loyalty_transactions
+              WHERE customer_id = ${customerId} AND tenant_id = ${tenantId}
+            `.then((balRes: any) => {
+              const balance = balRes[0]?.balance || pointsEarned
+              triggerWhatsAppAutomation({
+                tenantId: tenantId.toString(),
+                eventType: "loyalty_update",
+                recipientPhone: customer.phone_number,
+                customerId: customerId,
+                referenceId: `loyalty:${invoice.id}`,
+                variables: {
+                  customer_name: customer.full_name,
+                  points: balance,
+                  points_earned: pointsEarned,
+                  points_redeemed: pointsRedeemed,
+                },
+                sql,
+              }).catch((err: any) => console.error("Failed to send WhatsApp loyalty automation:", err))
+            }).catch(() => {})
+          }
+        }).catch((err) => console.error("Failed to import whatsapp-automations:", err))
       }
 
       return {
