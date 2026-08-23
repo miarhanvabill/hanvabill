@@ -31,7 +31,17 @@ import {
   AlertCircle,
   Zap,
 } from "lucide-react"
-import { getLoyaltyDashboardStats } from "@/app/actions/loyalty"
+import { getLoyaltyDashboardStats, adjustLoyaltyPoints, getLoyaltySettings } from "@/app/actions/loyalty"
+import { getCustomers } from "@/app/actions/customers"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -267,6 +277,18 @@ export default function LoyaltyTransactionsPage() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
+  // Adjust Points State
+  const [isAdjustOpen, setIsAdjustOpen] = useState(false)
+  const [adjustSubmitting, setAdjustSubmitting] = useState(false)
+  const [customers, setCustomers] = useState<any[]>([])
+  const [settings, setSettings] = useState<any>(null)
+  const [adjustData, setAdjustData] = useState({
+    customerId: "",
+    points: "",
+    type: "bonus" as "earned" | "redeemed" | "bonus" | "refund",
+    description: "",
+  })
+
   // Filters
   const [search, setSearch] = useState("")
   const [filterType, setFilterType] = useState("all")
@@ -349,9 +371,20 @@ export default function LoyaltyTransactionsPage() {
     }
   }, [])
 
+  const loadData = useCallback(async () => {
+    try {
+      const [cust, setts] = await Promise.all([getCustomers(), getLoyaltySettings()])
+      setCustomers(cust)
+      setSettings(setts)
+    } catch (e) {
+      console.error(e)
+    }
+  }, [])
+
   // ── Initial load ───────────────────────────────────────────────────────
   useEffect(() => {
     loadStats()
+    loadData()
     loadTransactions(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -368,6 +401,30 @@ export default function LoyaltyTransactionsPage() {
     loadTransactions(currentPage)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage])
+
+  const handleAdjustSubmit = async () => {
+    if (!adjustData.customerId || !adjustData.points) {
+      toast({ title: "Validation Error", description: "Customer and Points are required", variant: "destructive" })
+      return
+    }
+    try {
+      setAdjustSubmitting(true)
+      await adjustLoyaltyPoints(
+        Number(adjustData.customerId),
+        Number(adjustData.points),
+        adjustData.type,
+        adjustData.description || "Manual adjustment"
+      )
+      toast({ title: "Success", description: "Points adjusted successfully." })
+      setIsAdjustOpen(false)
+      setAdjustData({ customerId: "", points: "", type: "bonus", description: "" })
+      handleRefresh()
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message || "Failed to adjust points", variant: "destructive" })
+    } finally {
+      setAdjustSubmitting(false)
+    }
+  }
 
   // Client-side search on fetched page
   const visible = search.trim()
@@ -419,12 +476,22 @@ export default function LoyaltyTransactionsPage() {
 
   return (
     <div className="flex-1 flex flex-col bg-gray-50 min-h-screen">
-      <PageHeader
-        title="Loyalty Transactions"
-        subtitle="Track every point earned, redeemed, and expiring across all customers"
-      />
+      <div className="px-6 pt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <PageHeader
+          title="Loyalty Transactions"
+          subtitle={
+            settings
+              ? `Track points. Current Value: 1 Point = ₹${settings.points_per_rupee || 1}`
+              : "Track every point earned, redeemed, and expiring across all customers"
+          }
+        />
+        <Button onClick={() => setIsAdjustOpen(true)} className="bg-violet-600 hover:bg-violet-700 text-white shadow-sm">
+          <Zap className="w-4 h-4 mr-2" />
+          Adjust Points
+        </Button>
+      </div>
 
-      <main className="flex-1 p-6">
+      <main className="flex-1 px-6 pb-6 pt-2">
         <div className="max-w-7xl mx-auto space-y-6">
 
           {/* Summary Cards */}
@@ -769,6 +836,84 @@ export default function LoyaltyTransactionsPage() {
           </div>
         </div>
       </main>
+
+      {/* Adjust Points Modal */}
+      <Dialog open={isAdjustOpen} onOpenChange={setIsAdjustOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Adjust Loyalty Points</DialogTitle>
+            <DialogDescription>
+              Manually add or deduct points for a customer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-gray-700">Customer</label>
+              <Select
+                value={adjustData.customerId}
+                onValueChange={(val) => setAdjustData({ ...adjustData, customerId: val })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a customer..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {customers.map((c: any) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.full_name} {c.email ? `(${c.email})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-gray-700">Adjustment Type</label>
+              <Select
+                value={adjustData.type}
+                onValueChange={(val: any) => setAdjustData({ ...adjustData, type: val })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bonus">Bonus (Add Points)</SelectItem>
+                  <SelectItem value="refund">Refund (Add Points)</SelectItem>
+                  <SelectItem value="redeemed">Deduct (Remove Points)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-gray-700">Points Amount</label>
+              <Input
+                type="number"
+                placeholder="e.g. 500"
+                min="1"
+                value={adjustData.points}
+                onChange={(e) => setAdjustData({ ...adjustData, points: e.target.value })}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-gray-700">Description / Reason</label>
+              <Textarea
+                placeholder="e.g. Compensation for bad experience"
+                rows={3}
+                value={adjustData.description}
+                onChange={(e) => setAdjustData({ ...adjustData, description: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAdjustOpen(false)} disabled={adjustSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleAdjustSubmit} disabled={adjustSubmitting} className="bg-violet-600 hover:bg-violet-700 text-white">
+              {adjustSubmitting ? "Adjusting..." : "Confirm Adjustment"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

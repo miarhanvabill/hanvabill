@@ -540,3 +540,35 @@ export async function updateLoyaltyPoints(
     return { success: true }
   }, tenantId)
 }
+
+export async function adjustLoyaltyPoints(
+  customerId: number,
+  points: number,
+  type: "earned" | "redeemed" | "bonus" | "refund",
+  description: string,
+  tenantId?: string
+) {
+  return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
+    await ensureLoyaltySettingsSchema(sql, resolvedTenantId)
+    
+    if (["earned", "bonus", "refund"].includes(type)) {
+      const settingsResult = await sql`
+        SELECT points_validity_days FROM loyalty_settings
+        WHERE tenant_id = ${resolvedTenantId} LIMIT 1
+      `
+      const validityDays = settingsResult.length > 0 ? settingsResult[0].points_validity_days : 45
+      
+      await sql`
+        INSERT INTO loyalty_transactions (tenant_id, customer_id, points, transaction_type, amount, description, created_at, expires_at)
+        VALUES (${resolvedTenantId}, ${customerId}, ${points}, ${type}, 0, ${description}, NOW(), NOW() + (${validityDays}::text || ' days')::interval)
+      `
+    } else {
+      await sql`
+        INSERT INTO loyalty_transactions (tenant_id, customer_id, points, transaction_type, amount, description, created_at)
+        VALUES (${resolvedTenantId}, ${customerId}, ${points}, ${type}, 0, ${description}, NOW())
+      `
+    }
+    
+    return { success: true }
+  }, tenantId)
+}
