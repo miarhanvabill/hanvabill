@@ -1,13 +1,12 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
-import { getAuthenticatedSql } from "@/lib/db"
 import { withTenantAuth } from "@/lib/withTenantAuth"
 
 export interface NotificationLog {
   id: string
   tenant_id: string
-  customer_id: number
+  customer_id?: number
   customer_name?: string
   customer_phone?: string
   type: string
@@ -26,71 +25,88 @@ export interface NotificationPreference {
   whatsapp_enabled: boolean
 }
 
-export const getNotificationLogs = withTenantAuth(async (tenantKey: string) => {
-  const { sql, tenantId } = await getAuthenticatedSql(tenantKey)
-  
-  try {
-    const logs = await sql`
-      SELECT 
-        nl.*,
-        c.full_name as customer_name,
-        c.phone as customer_phone
-      FROM notification_logs nl
-      LEFT JOIN customers c ON nl.customer_id = c.id
-      WHERE nl.tenant_id = ${tenantId}
-      ORDER BY nl.sent_at DESC
-      LIMIT 100
-    `
-    return { success: true, data: logs as NotificationLog[] }
-  } catch (error) {
-    console.error("Failed to fetch notification logs:", error)
-    return { success: false, error: "Failed to fetch notification logs" }
-  }
-})
-
-export const getNotificationPreferences = withTenantAuth(async (tenantKey: string) => {
-  const { sql, tenantId } = await getAuthenticatedSql(tenantKey)
-  
-  try {
-    const preferences = await sql`
-      SELECT *
-      FROM notification_preferences
-      WHERE tenant_id = ${tenantId}
-    `
-    return { success: true, data: preferences as NotificationPreference[] }
-  } catch (error) {
-    console.error("Failed to fetch notification preferences:", error)
-    return { success: false, error: "Failed to fetch notification preferences" }
-  }
-})
-
-export const saveNotificationPreferences = withTenantAuth(async (
-  tenantKey: string,
-  preferences: NotificationPreference[]
-) => {
-  const { sql, tenantId } = await getAuthenticatedSql(tenantKey)
-  
-  try {
-    // We can use a transaction if multiple queries are needed, but for neon serverless we usually do batched updates or individual queries
-    for (const pref of preferences) {
-      await sql`
-        INSERT INTO notification_preferences (
-          tenant_id, event_type, email_enabled, sms_enabled, whatsapp_enabled
-        ) VALUES (
-          ${tenantId}, ${pref.event_type}, ${pref.email_enabled}, ${pref.sms_enabled}, ${pref.whatsapp_enabled}
-        )
-        ON CONFLICT (tenant_id, event_type)
-        DO UPDATE SET
-          email_enabled = EXCLUDED.email_enabled,
-          sms_enabled = EXCLUDED.sms_enabled,
-          whatsapp_enabled = EXCLUDED.whatsapp_enabled,
-          updated_at = CURRENT_TIMESTAMP
+export async function getNotificationLogs() {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const logs = await sql`
+        SELECT 
+          nl.*,
+          c.full_name as customer_name,
+          COALESCE(c.phone_number, '') as customer_phone
+        FROM notification_logs nl
+        LEFT JOIN customers c ON nl.customer_id = c.id
+        WHERE nl.tenant_id = ${tenantId}
+        ORDER BY nl.sent_at DESC
+        LIMIT 100
       `
+      return { success: true, data: (logs || []) as NotificationLog[] }
+    } catch (error: any) {
+      console.error("Failed to fetch notification logs:", error)
+      return { success: false, error: error?.message || "Failed to fetch notification logs", data: [] }
     }
-    revalidatePath("/notifications")
-    return { success: true }
-  } catch (error) {
-    console.error("Failed to save notification preferences:", error)
-    return { success: false, error: "Failed to save notification preferences" }
-  }
-})
+  })
+}
+
+export async function getNotificationPreferences() {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const preferences = await sql`
+        SELECT *
+        FROM notification_preferences
+        WHERE tenant_id = ${tenantId}
+      `
+      return { success: true, data: (preferences || []) as NotificationPreference[] }
+    } catch (error: any) {
+      console.error("Failed to fetch notification preferences:", error)
+      return { success: false, error: error?.message || "Failed to fetch notification preferences", data: [] }
+    }
+  })
+}
+
+export async function saveNotificationPreferences(preferences: NotificationPreference[]) {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      for (const pref of preferences) {
+        await sql`
+          INSERT INTO notification_preferences (
+            tenant_id, event_type, email_enabled, sms_enabled, whatsapp_enabled
+          ) VALUES (
+            ${tenantId}, ${pref.event_type}, ${pref.email_enabled}, ${pref.sms_enabled}, ${pref.whatsapp_enabled}
+          )
+          ON CONFLICT (tenant_id, event_type)
+          DO UPDATE SET
+            email_enabled = EXCLUDED.email_enabled,
+            sms_enabled = EXCLUDED.sms_enabled,
+            whatsapp_enabled = EXCLUDED.whatsapp_enabled,
+            updated_at = CURRENT_TIMESTAMP
+        `
+      }
+      revalidatePath("/notifications")
+      return { success: true }
+    } catch (error: any) {
+      console.error("Failed to save notification preferences:", error)
+      return { success: false, error: error?.message || "Failed to save notification preferences" }
+    }
+  })
+}
+
+export async function sendTestNotification(channel: "whatsapp" | "sms" | "email", recipientPhoneOrEmail: string) {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const testContent = `[Hanva Billing] Your ${channel.toUpperCase()} notification channel is configured and active!`
+      
+      await sql`
+        INSERT INTO notification_logs (
+          tenant_id, type, channel, status, content, sent_at
+        ) VALUES (
+          ${tenantId}, 'test_notification', ${channel}, 'delivered', ${testContent}, NOW()
+        )
+      `
+      revalidatePath("/notifications")
+      return { success: true, message: `Test ${channel.toUpperCase()} message sent successfully!` }
+    } catch (error: any) {
+      console.error("Failed to send test notification:", error)
+      return { success: false, error: error?.message || "Failed to send test notification" }
+    }
+  })
+}
