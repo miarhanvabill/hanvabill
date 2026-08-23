@@ -191,6 +191,17 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
         `
       }
 
+      // Increment coupon usage if a valid coupon code was provided
+      if (input.coupon_code) {
+        await sql`
+          UPDATE coupons
+          SET used_count = COALESCE(used_count, 0) + 1,
+              updated_at = NOW()
+          WHERE UPPER(code) = UPPER(${input.coupon_code})
+          AND tenant_id = ${tenantId}
+        `
+      }
+
       const membershipItems = input.items.filter((item) => item.type === "membership")
       for (const membershipItem of membershipItems) {
         // Verify membership plan exists within tenant
