@@ -1,6 +1,6 @@
 // lib/whatsapp-automations.ts
 import { sql as defaultSql } from "@/lib/db"
-import { sendViaFonadaOldApi } from "@/lib/whatsapp"
+import { sendViaHanvaOldApi } from "@/lib/whatsapp"
 
 export type WhatsAppEventType =
   | "booking_created"
@@ -423,8 +423,8 @@ export async function triggerWhatsAppAutomation(
 
     console.log(`[WhatsApp Automations] Sending ${canonicalEvent} message to ${recipientPhone} for tenant ${tenantId}`)
 
-    // Send via Fonada API
-    const sendResult = await sendViaFonadaOldApi(waConfig, recipientPhone, messageContent)
+    // Send via Hanva API
+    const sendResult = await sendViaHanvaOldApi(waConfig, recipientPhone, messageContent)
 
     // Resolve customer ID if not provided
     let finalCustomerId = customerId

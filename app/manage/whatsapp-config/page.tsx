@@ -147,7 +147,7 @@ export default function WhatsAppConfigPage() {
           setConnectionStatus({
             tested: true,
             connected: true,
-            message: "Fonada WABA Gateway configured and active",
+            message: "Hanva WABA Gateway configured and active",
           })
         }
       }
@@ -451,7 +451,7 @@ export default function WhatsAppConfigPage() {
       <div className="flex-1 flex flex-col min-h-screen bg-slate-50">
         <PageHeader
           title="WhatsApp Automation Control Center"
-          subtitle="Configure Fonada WABA Gateway, dynamic triggers, and delivery intelligence"
+          subtitle="Configure Hanva WABA Gateway, dynamic triggers, and delivery intelligence"
         />
         <main className="flex-1 p-8 flex items-center justify-center">
           <div className="flex flex-col items-center gap-3">
@@ -477,7 +477,7 @@ export default function WhatsAppConfigPage() {
             <div className="flex items-center gap-2">
               <span className="bg-emerald-500/30 text-emerald-200 text-xs px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1 border border-emerald-400/30">
                 <Radio className="w-3 h-3 animate-pulse text-emerald-300" />
-                Fonada WABA Integration
+                Hanva WABA Integration
               </span>
               <span className="text-xs text-emerald-100/80">WhatsApp Cloud API v20</span>
             </div>
@@ -567,10 +567,10 @@ export default function WhatsAppConfigPage() {
                       <div className="space-y-1">
                         <CardTitle className="text-lg flex items-center gap-2 text-slate-900">
                           <Lock className="w-5 h-5 text-emerald-600" />
-                          Fonada WABA Account Credentials
+                          Hanva WABA Account Credentials
                         </CardTitle>
                         <CardDescription>
-                          Connect your official WhatsApp Business API account provided by Fonada.
+                          Connect your official WhatsApp Business API account provided by Hanva.
                         </CardDescription>
                       </div>
                       <div className="flex items-center gap-2">
@@ -590,7 +590,7 @@ export default function WhatsAppConfigPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="userid" className="text-xs font-semibold text-slate-700">
-                          Fonada User ID / Username <span className="text-rose-500">*</span>
+                          Hanva User ID / Username <span className="text-rose-500">*</span>
                         </Label>
                         <div className="relative">
                           <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -664,14 +664,14 @@ export default function WhatsAppConfigPage() {
                       <div className="flex items-center justify-between">
                         <Label className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
                           <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600" />
-                          Fonada Inbound Webhook & DLR URL
+                          Hanva Inbound Webhook & DLR URL
                         </Label>
                         <Badge variant="outline" className="text-[10px] bg-white border-slate-300">
                           Auto-configured
                         </Badge>
                       </div>
                       <p className="text-xs text-slate-500">
-                        Paste this URL into your Fonada WABA Webhook settings to receive incoming customer messages and live delivery status updates (DLR).
+                        Paste this URL into your Hanva WABA Webhook settings to receive incoming customer messages and live delivery status updates (DLR).
                       </p>
                       <div className="flex items-center gap-2 pt-1">
                         <code className="flex-1 bg-white px-3 py-2 rounded-lg border border-slate-200 font-mono text-xs text-slate-700 select-all overflow-x-auto">
@@ -730,7 +730,7 @@ export default function WhatsAppConfigPage() {
                         <Zap className="w-4 h-4" />
                       </div>
                       <div className="space-y-0.5 min-w-0">
-                        <h4 className="text-xs font-bold text-emerald-900">Fonada WABA Server</h4>
+                        <h4 className="text-xs font-bold text-emerald-900">Hanva WABA Server</h4>
                         <p className="text-xs text-emerald-700 truncate">
                           {gatewayData.wabaNumber ? `Endpoint: +${gatewayData.wabaNumber}` : "No number configured"}
                         </p>
@@ -746,7 +746,7 @@ export default function WhatsAppConfigPage() {
                     <div className="space-y-2 text-xs text-slate-600">
                       <div className="flex justify-between py-1 border-b border-slate-100">
                         <span>API Provider</span>
-                        <span className="font-semibold text-slate-900">Fonada WABA API</span>
+                        <span className="font-semibold text-slate-900">Hanva WABA API</span>
                       </div>
                       <div className="flex justify-between py-1 border-b border-slate-100">
                         <span>Message Format</span>
@@ -1354,7 +1354,7 @@ export default function WhatsAppConfigPage() {
               Send Live Test WhatsApp
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Dispatches an immediate message through your configured Fonada WABA gateway to your mobile phone.
+              Dispatches an immediate message through your configured Hanva WABA gateway to your mobile phone.
             </DialogDescription>
           </DialogHeader>
 
@@ -1384,7 +1384,7 @@ export default function WhatsAppConfigPage() {
                 Sender: {gatewayData.salonName}
               </div>
               <p className="text-emerald-700 text-[11px]">
-                The message will be transmitted directly via Fonada WABA API and logged in your Outbound Analytics table.
+                The message will be transmitted directly via Hanva WABA API and logged in your Outbound Analytics table.
               </p>
             </div>
           </div>

@@ -9,7 +9,7 @@ export interface WhatsAppInvoiceData {
   shareToken?: string; // The token for the public invoice view
 }
 
-export async function sendViaFonadaOldApi(creds: any, phone: string, text: string) {
+export async function sendViaHanvaOldApi(creds: any, phone: string, text: string) {
   const apiUrl = "https://waba.fonada.com/api/SendMsgOld";
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
@@ -31,7 +31,7 @@ export async function sendViaFonadaOldApi(creds: any, phone: string, text: strin
   const data = await res.json();
 
   if (data.status === "error" || data.error) {
-    throw new Error(data.message || data.error || "Fonada API Error");
+    throw new Error(data.message || data.error || "Hanva API Error");
   }
   return { safePhone, msgId: data.msgId || null };
 }
@@ -57,9 +57,9 @@ export async function sendWhatsAppInvoice(tenantId: string, phone: string, data:
     const invoiceUrl = `https://biz.hanva.in/inv/${data.shareToken || data.bookingNumber}`;
     const textMessage = `Hello ${data.customerName}! ✨\n\nThank you for visiting ${salonName}! Your invoice for Booking #${data.bookingNumber} amounting to ${currency}${data.amount} is ready.\n\nYou can view and download your digital receipt here:\n${invoiceUrl}\n\nWe look forward to seeing you again soon!`;
 
-    console.log(`[WhatsApp Service] Sending Invoice to ${phone} via Fonada`);
+    console.log(`[WhatsApp Service] Sending Invoice to ${phone} via Hanva`);
     
-    const { safePhone, msgId } = await sendViaFonadaOldApi(config, phone, textMessage);
+    const { safePhone, msgId } = await sendViaHanvaOldApi(config, phone, textMessage);
 
     // Save to db
     try {
@@ -101,7 +101,7 @@ export async function sendWhatsAppText(tenantId: string, customerPhone: string, 
       throw new Error("WhatsApp Integration is disabled. Please configure credentials in WhatsApp Settings.");
     }
 
-    const { safePhone, msgId } = await sendViaFonadaOldApi(config, customerPhone, text);
+    const { safePhone, msgId } = await sendViaHanvaOldApi(config, customerPhone, text);
 
     // Save to db
     try {

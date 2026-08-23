@@ -311,7 +311,7 @@ export default function WhatsAppPage() {
           <div>
             <h1 className="text-base font-bold text-slate-900 leading-none">WhatsApp Live Chat Hub</h1>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Official Fonada WABA 2-Way Customer Messaging
+              Official Hanva WABA 2-Way Customer Messaging
             </p>
           </div>
         </div>
@@ -491,7 +491,7 @@ export default function WhatsAppPage() {
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
                     </div>
                     <p className="text-[11px] text-emerald-100/90 font-mono truncate">
-                      {selectedPhone} • Online via Fonada WABA
+                      {selectedPhone} • Online via Hanva WABA
                     </p>
                   </div>
                 </div>

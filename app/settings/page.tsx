@@ -2112,7 +2112,7 @@ export default function SettingsPage() {
                 <div className="space-y-6 pt-4 animate-in fade-in slide-in-from-top-4 duration-300">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <Label>WhatsApp Fonada User ID</Label>
+                      <Label>WhatsApp Hanva User ID</Label>
                       <Input 
                         placeholder="Paste your API token"
                         value={settings.whatsapp?.userid || ""}
@@ -2126,7 +2126,7 @@ export default function SettingsPage() {
                       <p className="text-xs text-gray-500">Obtained from your WhatsApp provider dashboard.</p>
                     </div>
                     <div className="space-y-2">
-                      <Label>Fonada WABA Number</Label>
+                      <Label>Hanva WABA Number</Label>
                       <Input 
                         placeholder="e.g. 1029384756"
                         value={settings.whatsapp?.wabaNumber || ""}

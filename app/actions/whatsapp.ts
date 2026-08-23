@@ -1,6 +1,6 @@
 "use server"
 
-import { sendWhatsAppText, sendViaFonadaOldApi } from "@/lib/whatsapp"
+import { sendWhatsAppText, sendViaHanvaOldApi } from "@/lib/whatsapp"
 import { withTenantAuth } from "@/lib/withTenantAuth"
 import { getBusinessSettings } from "@/app/actions/settings"
 import { revalidatePath } from "next/cache"
@@ -307,8 +307,8 @@ export async function testWhatsAppConnection(creds?: {
       return {
         success: true,
         status: "connected",
-        message: "Fonada WABA Gateway is operational and ready to send.",
-        gateway: "Fonada WhatsApp Cloud API",
+        message: "Hanva WABA Gateway is operational and ready to send.",
+        gateway: "Hanva WhatsApp Cloud API",
         wabaNumber: cleanWaba,
       }
     } catch (error: any) {

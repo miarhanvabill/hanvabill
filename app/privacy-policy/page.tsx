@@ -59,7 +59,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-xl font-semibold text-gray-900 mb-3">5. Third-Party Services</h2>
             <p>
-              We may employ third-party companies to facilitate our Service, such as authentication providers (e.g., Clerk) and messaging APIs (e.g., Fonada/WhatsApp). These third parties have access to your Personal Data only to perform these tasks on our behalf and are obligated not to disclose or use it for any other purpose.
+              We may employ third-party companies to facilitate our Service, such as authentication providers (e.g., Clerk) and messaging APIs (e.g., Hanva/WhatsApp). These third parties have access to your Personal Data only to perform these tasks on our behalf and are obligated not to disclose or use it for any other purpose.
             </p>
           </section>
 
