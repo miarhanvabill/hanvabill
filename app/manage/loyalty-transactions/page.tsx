@@ -347,6 +347,9 @@ export default function LoyaltyTransactionsPage() {
 
         setTransactions(mapped)
         setTotalRows(data.total || 0)
+        if (data.stats) {
+          setStats(data.stats)
+        }
       } catch (e: any) {
         toast({
           title: "Error loading transactions",

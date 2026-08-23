@@ -4,6 +4,7 @@ import {
   getCustomerLoyalty,
   getLoyaltySettings,
   getLoyaltyTransactions,
+  getLoyaltyDashboardStats,
   getExpiringSoon,
   enrollCustomerInLoyalty,
   unenrollCustomerInLoyalty,
@@ -22,15 +23,18 @@ export async function GET(request: NextRequest) {
         const limit = p.get("limit") ? Number(p.get("limit")) : 50
         const offset = p.get("offset") ? Number(p.get("offset")) : 0
 
-        const { rows, total } = await getLoyaltyTransactions({ 
-          customer_id: customerId, 
-          type, 
-          from, 
-          to, 
-          limit, 
-          offset 
-        }, tenantId)
-        return NextResponse.json({ success: true, rows, total })
+        const [{ rows, total }, stats] = await Promise.all([
+          getLoyaltyTransactions({ 
+            customer_id: customerId, 
+            type, 
+            from, 
+            to, 
+            limit, 
+            offset 
+          }, tenantId),
+          getLoyaltyDashboardStats(tenantId)
+        ])
+        return NextResponse.json({ success: true, rows, total, stats })
       }
 
       const idParam = p.get("id")
