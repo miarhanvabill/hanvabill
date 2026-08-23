@@ -295,6 +295,51 @@ export async function getLoyaltyStats(tenantId?: string): Promise<LoyaltyStats> 
     }
   }, tenantId)
 }
+export interface LoyaltyDashboardStats {
+  total_points_issued: number
+  total_points_redeemed: number
+  active_loyalty_members: number
+  points_expiring_this_week: number
+}
+export async function getLoyaltyDashboardStats(tenantId?: string): Promise<LoyaltyDashboardStats> {
+  return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
+    await ensureLoyaltySettingsSchema(sql, resolvedTenantId)
+    const [issued, redeemed, active, expiring] = await Promise.all([
+      sql`
+        SELECT COALESCE(SUM(points), 0)::bigint AS s
+        FROM loyalty_transactions
+        WHERE transaction_type = 'earned'
+        AND tenant_id = ${resolvedTenantId}
+      `,
+      sql`
+        SELECT COALESCE(SUM(points), 0)::bigint AS s
+        FROM loyalty_transactions
+        WHERE transaction_type = 'redeemed'
+        AND tenant_id = ${resolvedTenantId}
+      `,
+      sql`
+        SELECT COUNT(DISTINCT customer_id)::int AS c
+        FROM loyalty_transactions
+        WHERE tenant_id = ${resolvedTenantId}
+      `,
+      sql`
+        SELECT COALESCE(SUM(points), 0)::bigint AS s
+        FROM loyalty_transactions
+        WHERE transaction_type = 'earned'
+          AND tenant_id = ${resolvedTenantId}
+          AND expires_at IS NOT NULL
+          AND expires_at > NOW()
+          AND expires_at <= NOW() + INTERVAL '7 days'
+      `,
+    ])
+    return {
+      total_points_issued: Number(issued[0]?.s || 0),
+      total_points_redeemed: Number(redeemed[0]?.s || 0),
+      active_loyalty_members: Number(active[0]?.c || 0),
+      points_expiring_this_week: Number(expiring[0]?.s || 0),
+    }
+  }, tenantId)
+}
 export async function getCustomerLoyalty(id: string | number, tenantId?: string) {
   return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
     await ensureLoyaltySettingsSchema(sql, resolvedTenantId)
