@@ -10,6 +10,9 @@ export interface CashRegister {
   opening_balance: number
   current_balance: number
   status: string
+  current_shift_id?: number | null
+  opened_at?: string | null
+  expected_balance?: number | null
   created_at: string
   updated_at: string
 }
@@ -17,6 +20,7 @@ export interface CashRegister {
 export interface CashTransaction {
   id: number
   register_id: number
+  shift_id?: number | null
   register_name?: string
   type: "cash_in" | "cash_out"
   amount: number
@@ -28,85 +32,16 @@ export interface CashTransaction {
 
 export async function getCashRegisters() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
-    // Return sample data when database is not available (fallback-first approach)
-    const fallbackData = {
-      registers: [
-        {
-          id: 1,
-          name: "Main Counter",
-          location: "Front Desk",
-          opening_balance: 50000.0,
-          current_balance: 125000.0,
-          status: "active",
-          created_at: format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx"),
-          updated_at: format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx"),
-        },
-        {
-          id: 2,
-          name: "Service Counter",
-          location: "Service Area",
-          opening_balance: 20000.0,
-          current_balance: 37500.0,
-          status: "active",
-          created_at: format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx"),
-          updated_at: format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx"),
-        },
-      ] as CashRegister[],
-      transactions: [
-        {
-          id: 1,
-          register_id: 1,
-          register_name: "Main Counter",
-          type: "cash_in" as const,
-          amount: 5000.0,
-          description: "Hair cut service",
-          category: "sales",
-          reference: "#13642260",
-          created_at: format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx"),
-        },
-        {
-          id: 2,
-          register_id: 1,
-          register_name: "Main Counter",
-          type: "cash_out" as const,
-          amount: 1500.0,
-          description: "Office supplies",
-          category: "expense",
-          reference: "EXP001",
-          created_at: format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx"),
-        },
-        {
-          id: 3,
-          register_id: 2,
-          register_name: "Service Counter",
-          type: "cash_in" as const,
-          amount: 3000.0,
-          description: "Massage service",
-          category: "sales",
-          reference: "#13642261",
-          created_at: format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx"),
-        },
-      ] as CashTransaction[],
-    }
-
     try {
       console.log("[v0] Fetching cash registers from database for tenant:", tenantId)
-      
-      // Auto-migrate missing columns
-      try {
-        await sql`ALTER TABLE cash_registers ADD COLUMN IF NOT EXISTS tenant_id INTEGER DEFAULT 1`;
-        await sql`UPDATE cash_registers SET tenant_id = ${tenantId} WHERE tenant_id IS NULL`;
-        await sql`ALTER TABLE cash_transactions ADD COLUMN IF NOT EXISTS tenant_id INTEGER DEFAULT 1`;
-        await sql`UPDATE cash_transactions SET tenant_id = ${tenantId} WHERE tenant_id IS NULL`;
-      } catch (migrationError) {
-        console.log("[v0] Migration check error:", migrationError)
-      }
 
       // Fetch registers with tenant_id filter
       const registersResult = await sql`
-        SELECT * FROM cash_registers 
-        WHERE tenant_id = ${tenantId} 
-        ORDER BY name
+        SELECT cr.*, rs.opened_at, rs.expected_balance, rs.notes
+        FROM cash_registers cr
+        LEFT JOIN register_shifts rs ON cr.current_shift_id = rs.id
+        WHERE cr.tenant_id = ${tenantId} 
+        ORDER BY cr.name
       `
 
       // Fetch transactions with proper tenant filtering on both tables
@@ -122,50 +57,33 @@ export async function getCashRegisters() {
         LIMIT 100
       `
 
-      console.log("[v0] Raw registers result:", registersResult)
-      console.log("[v0] Raw transactions result:", transactionsResult)
-
-      // Handle different result formats from Neon
       const registers = Array.isArray(registersResult) ? registersResult : registersResult.rows || []
       const transactions = Array.isArray(transactionsResult) ? transactionsResult : transactionsResult.rows || []
-
-      console.log("[v0] Processed registers:", registers.length)
-      console.log("[v0] Processed transactions:", transactions.length)
-
-      // If no data found in database, insert a default cash register
-      if (registers.length === 0) {
-        console.log("[v0] No registers found in database, inserting default register for tenant:", tenantId)
-        const defaultRegister = await sql`
-          INSERT INTO cash_registers (name, location, opening_balance, current_balance, status, tenant_id)
-          VALUES ('Main Counter', 'Front Desk', 0, 0, 'active', ${tenantId})
-          RETURNING *
-        `
-        const newReg = Array.isArray(defaultRegister) ? defaultRegister[0] : (defaultRegister.rows?.[0] || defaultRegister)
-        if (newReg) {
-          registers.push(newReg)
-        }
-      }
 
       return {
         registers: registers.map((register) => ({
           ...register,
           id: Number(register.id),
+          current_shift_id: register.current_shift_id ? Number(register.current_shift_id) : null,
           opening_balance: Number.parseFloat(register.opening_balance?.toString() || "0"),
           current_balance: Number.parseFloat(register.current_balance?.toString() || "0"),
+          expected_balance: register.expected_balance ? Number.parseFloat(register.expected_balance.toString()) : null,
           created_at: register.created_at ? format(new Date(register.created_at), "yyyy-MM-dd'T'HH:mm:ssxxx") : format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx"),
           updated_at: register.updated_at ? format(new Date(register.updated_at), "yyyy-MM-dd'T'HH:mm:ssxxx") : format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx"),
+          opened_at: register.opened_at ? format(new Date(register.opened_at), "yyyy-MM-dd'T'HH:mm:ssxxx") : null,
         })) as CashRegister[],
         transactions: transactions.map((transaction) => ({
           ...transaction,
           id: Number(transaction.id),
           register_id: Number(transaction.register_id),
+          shift_id: transaction.shift_id ? Number(transaction.shift_id) : null,
           amount: Number.parseFloat(transaction.amount?.toString() || "0"),
           created_at: transaction.created_at ? format(new Date(transaction.created_at), "yyyy-MM-dd'T'HH:mm:ssxxx") : format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx"),
         })) as CashTransaction[],
       }
     } catch (error) {
       console.error("[v0] Error fetching cash registers:", error)
-      return fallbackData
+      throw new Error("Failed to fetch cash registers")
     }
   })
 }
@@ -182,31 +100,32 @@ export async function createCashTransaction(data: {
     try {
       console.log("[v0] Creating cash transaction for tenant:", tenantId, "Data:", data)
 
-      // First verify the register belongs to this tenant
+      // First verify the register belongs to this tenant and get shift
       const registerCheck = await sql`
-        SELECT id FROM cash_registers 
+        SELECT id, current_shift_id FROM cash_registers 
         WHERE id = ${data.registerId} AND tenant_id = ${tenantId}
       `
 
       if (!registerCheck || registerCheck.length === 0) {
-        console.error("[v0] Register not found or access denied for tenant:", tenantId)
         return { 
           success: false, 
           message: "Cash register not found or access denied" 
         }
       }
 
-      // Insert transaction with tenant_id
+      const current_shift_id = registerCheck[0].current_shift_id || registerCheck.rows?.[0]?.current_shift_id || null;
+
+      // Insert transaction with tenant_id and shift_id
       const transactionResult = await sql`
         INSERT INTO cash_transactions 
-          (register_id, type, amount, description, category, reference, tenant_id, created_at)
+          (register_id, type, amount, description, category, reference, tenant_id, shift_id, created_at)
         VALUES 
           (${data.registerId}, ${data.type}, ${data.amount}, ${data.description || null}, 
-           ${data.category}, ${data.reference || null}, ${tenantId}, CURRENT_TIMESTAMP)
+           ${data.category}, ${data.reference || null}, ${tenantId}, ${current_shift_id}, CURRENT_TIMESTAMP)
         RETURNING id
       `
 
-      // Update register balance with tenant filtering
+      // Update register balance
       const balanceChange = data.type === "cash_in" ? data.amount : -data.amount
       const updateResult = await sql`
         UPDATE cash_registers 
@@ -215,16 +134,22 @@ export async function createCashTransaction(data: {
         WHERE id = ${data.registerId} AND tenant_id = ${tenantId}
         RETURNING current_balance
       `
-
-      console.log("[v0] Transaction created successfully. ID:", transactionResult[0]?.id)
-      console.log("[v0] New register balance:", updateResult[0]?.current_balance)
+      
+      if (current_shift_id) {
+         // Also update expected_balance in shift
+         await sql`
+           UPDATE register_shifts
+           SET expected_balance = expected_balance + ${balanceChange}
+           WHERE id = ${current_shift_id} AND tenant_id = ${tenantId}
+         `
+      }
 
       revalidatePath("/cash-registers")
       return { 
         success: true, 
         message: "Transaction recorded successfully!",
-        transactionId: transactionResult[0]?.id,
-        newBalance: updateResult[0]?.current_balance
+        transactionId: transactionResult[0]?.id || transactionResult.rows?.[0]?.id,
+        newBalance: updateResult[0]?.current_balance || updateResult.rows?.[0]?.current_balance
       }
     } catch (error) {
       console.error("[v0] Error creating cash transaction:", error)
@@ -291,4 +216,81 @@ export async function getRegisterTransactions(registerId: number) {
       return []
     }
   })
+}
+
+export async function openRegister(registerId: number, openingBalance: number, notes?: string) {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const registerCheck = await sql`
+        SELECT id, current_shift_id FROM cash_registers 
+        WHERE id = ${registerId} AND tenant_id = ${tenantId}
+      `
+      
+      const reg = Array.isArray(registerCheck) ? registerCheck[0] : registerCheck.rows?.[0];
+      if (!reg) return { success: false, message: "Register not found" }
+      if (reg.current_shift_id) return { success: false, message: "Register is already open" }
+
+      const shiftResult = await sql`
+        INSERT INTO register_shifts (register_id, tenant_id, opening_balance, expected_balance, notes)
+        VALUES (${registerId}, ${tenantId}, ${openingBalance}, ${openingBalance}, ${notes || null})
+        RETURNING id
+      `
+      const shiftId = Array.isArray(shiftResult) ? shiftResult[0]?.id : shiftResult.rows?.[0]?.id;
+
+      await sql`
+        UPDATE cash_registers 
+        SET current_shift_id = ${shiftId}, current_balance = ${openingBalance}, opening_balance = ${openingBalance}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${registerId} AND tenant_id = ${tenantId}
+      `
+      
+      revalidatePath("/cash-registers")
+      return { success: true, message: "Register opened successfully" }
+    } catch (e) {
+      console.error(e)
+      throw new Error("Failed to open register")
+    }
+  })
+}
+
+export async function closeRegister(registerId: number, actualBalance: number, notes?: string) {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const registerCheck = await sql`
+        SELECT id, current_shift_id, current_balance FROM cash_registers 
+        WHERE id = ${registerId} AND tenant_id = ${tenantId}
+      `
+      const reg = Array.isArray(registerCheck) ? registerCheck[0] : registerCheck.rows?.[0];
+      if (!reg) return { success: false, message: "Register not found" }
+      if (!reg.current_shift_id) return { success: false, message: "Register is not open" }
+      
+      const expectedBalance = Number(reg.current_balance)
+      const discrepancy = actualBalance - expectedBalance
+
+      await sql`
+        UPDATE register_shifts
+        SET closed_at = CURRENT_TIMESTAMP, actual_balance = ${actualBalance}, discrepancy = ${discrepancy}, notes = COALESCE(notes || '\n', '') || ${notes || ''}
+        WHERE id = ${reg.current_shift_id} AND tenant_id = ${tenantId}
+      `
+
+      await sql`
+        UPDATE cash_registers 
+        SET current_shift_id = NULL, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${registerId} AND tenant_id = ${tenantId}
+      `
+
+      revalidatePath("/cash-registers")
+      return { success: true, message: "Register closed successfully" }
+    } catch (e) {
+      console.error(e)
+      throw new Error("Failed to close register")
+    }
+  })
+}
+
+export async function payIn(registerId: number, amount: number, description: string, category: string, reference?: string) {
+  return createCashTransaction({ registerId, type: "cash_in", amount, description, category, reference })
+}
+
+export async function payOut(registerId: number, amount: number, description: string, category: string, reference?: string) {
+  return createCashTransaction({ registerId, type: "cash_out", amount, description, category, reference })
 }
