@@ -127,6 +127,14 @@ const reports = [
     category: "Staff Performance",
   },
   {
+    title: "Staff Commissions",
+    description: "Calculate and track commission payouts based on daily, weekly, or monthly sales.",
+    icon: Users,
+    href: "/reports/staff-commission",
+    color: "bg-cyan-50 text-cyan-600",
+    category: "Staff Performance",
+  },
+  {
     title: "Customer Analytics",
     description: "Detailed customer insights including demographics, visit frequency, and spending patterns.",
     icon: Users,
