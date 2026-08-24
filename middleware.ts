@@ -23,6 +23,11 @@ const isPublicRoute = createRouteMatcher([
   "/debug",
   "/api/debug-migrations",
   "/inv/(.*)",
+  "/login",
+  "/api/webhooks(.*)",
+  "/api/public/(.*)",
+  "/api/debug-schema",
+  "/test-forms(.*)",
 ]);
 
 const clerkMw = clerkMiddleware(async (auth, req) => {
