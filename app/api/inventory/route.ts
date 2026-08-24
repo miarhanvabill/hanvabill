@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const body = await request.json()
-      const { item_name, category, quantity, unit_price, supplier, description, min_stock_level } = body
+      const { item_name, category, quantity, unit_price, supplier, description, min_stock_level, image_url } = body
 
       if (!item_name || !category || quantity === undefined || !unit_price) {
         return NextResponse.json(
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
       const result = await sql`
         INSERT INTO inventory (
           tenant_id, item_name, category, quantity, unit_price, supplier, 
-          description, min_stock_level, created_at, updated_at
+          description, min_stock_level, image_url, created_at, updated_at
         ) VALUES (
           ${tenantId},
           ${item_name},
@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
           ${supplier || null},
           ${description || null},
           ${min_stock_level || 0},
+          ${image_url || null},
           NOW(),
           NOW()
         )

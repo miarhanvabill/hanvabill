@@ -167,6 +167,7 @@ export async function createInventoryItem(formData: FormData) {
       const expiryDate = formData.get("expiryDate") as string
       const location = formData.get("location") as string
       const description = formData.get("description") as string
+      const image_url = formData.get("image_url") as string
 
       // Validate required fields
       if (!name || !category || !quantity || !unit || !costPrice || !sellingPrice) {
@@ -193,12 +194,12 @@ export async function createInventoryItem(formData: FormData) {
         INSERT INTO inventory (
           tenant_id, name, category, brand, sku, quantity, unit, 
           cost_price, selling_price, supplier, reorder_level, 
-          expiry_date, location, description, status
+          expiry_date, location, description, status, image_url
         ) VALUES (
           ${tenantId}, ${name}, ${category}, ${brand || null}, ${sku || null}, 
           ${quantityNum}, ${unit}, ${costPriceNum}, ${sellingPriceNum}, 
           ${supplier || null}, ${reorderLevelNum}, ${expiryDate || null}, 
-          ${location || null}, ${description || null}, ${status}
+          ${location || null}, ${description || null}, ${status}, ${image_url || null}
         )
         RETURNING *
       `
@@ -234,6 +235,7 @@ export async function updateInventoryItem(id: number, formData: FormData) {
       const expiryDate = formData.get("expiryDate") as string
       const location = formData.get("location") as string
       const description = formData.get("description") as string
+      const image_url = formData.get("image_url") as string
 
       const quantityNum = Number.parseInt(quantity)
       const reorderLevelNum = Number.parseInt(reorderLevel || "0")
@@ -262,6 +264,7 @@ export async function updateInventoryItem(id: number, formData: FormData) {
           location = ${location || null}, 
           description = ${description || null}, 
           status = ${status}, 
+          image_url = ${image_url || null},
           updated_at = NOW()
         WHERE id = ${id} AND tenant_id = ${tenantId}
         RETURNING *

@@ -97,6 +97,7 @@ export default function ServicesPage() {
     category: "",
     description: "",
     code: "",
+    image_url: "",
     isActive: true,
   })
 
@@ -161,6 +162,7 @@ export default function ServicesPage() {
       category: "",
       description: "",
       code: "",
+      image_url: "",
       isActive: true,
     })
     setEditingService(null)
@@ -183,6 +185,7 @@ export default function ServicesPage() {
     form.append("category", formData.category)
     form.append("description", formData.description)
     form.append("code", formData.code || `SRV${Date.now()}`)
+    form.append("image_url", formData.image_url)
     form.append("isActive", formData.isActive.toString())
 
     const result = await createService(form)
@@ -213,6 +216,7 @@ export default function ServicesPage() {
       category: service.category,
       description: service.description || "",
       code: service.code || "",
+      image_url: service.image_url || "",
       isActive: service.is_active,
     })
     setIsAddDialogOpen(true)
@@ -227,6 +231,7 @@ export default function ServicesPage() {
     form.append("duration", formData.duration)
     form.append("category", formData.category)
     form.append("description", formData.description)
+    form.append("image_url", formData.image_url)
     form.append("isActive", formData.isActive.toString())
 
     const result = await updateService(editingService.id, form)
@@ -423,6 +428,15 @@ export default function ServicesPage() {
                       />
                     </div>
                     <div>
+                      <Label htmlFor="image_url">Image URL</Label>
+                      <Input
+                        id="image_url"
+                        placeholder="https://example.com/image.jpg"
+                        value={formData.image_url}
+                        onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                      />
+                    </div>
+                    <div>
                       <Label htmlFor="description">Description</Label>
                       <Textarea
                         id="description"
@@ -595,12 +609,18 @@ export default function ServicesPage() {
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center space-x-3">
-                                                <div className={`p-2 rounded-lg ${getSmartIcon(service.name).color}`}>
-                          {(() => {
-                            const SmartIcon = getSmartIcon(service.name).icon;
-                            return <SmartIcon className="h-5 w-5 text-white" />;
-                          })()}
-                        </div>
+                        {service.image_url ? (
+                          <div className="h-10 w-10 overflow-hidden rounded-lg bg-gray-100 flex-shrink-0">
+                            <img src={service.image_url} alt={service.name} className="h-full w-full object-cover" />
+                          </div>
+                        ) : (
+                          <div className={`p-2 rounded-lg ${getSmartIcon(service.name).color}`}>
+                            {(() => {
+                              const SmartIcon = getSmartIcon(service.name).icon;
+                              return <SmartIcon className="h-5 w-5 text-white" />;
+                            })()}
+                          </div>
+                        )}
                         <div>
                           <CardTitle className="text-lg font-semibold">{service.name}</CardTitle>
                           <Badge variant={service.is_active ? "default" : "secondary"}>

@@ -37,6 +37,7 @@ interface InventoryItem {
   unit_price: number
   supplier?: string
   description?: string
+  image_url?: string
   min_stock_level: number
   created_at: string
   updated_at?: string
@@ -71,6 +72,7 @@ export default function InventoryPage() {
     supplier: "",
     min_stock_level: "",
     description: "",
+    image_url: "",
   })
   const [addLoading, setAddLoading] = useState(false)
 
@@ -164,6 +166,7 @@ export default function InventoryPage() {
           supplier: addFormData.supplier?.trim() || null,
           min_stock_level: minStockLevel,
           description: addFormData.description?.trim() || null,
+          image_url: addFormData.image_url?.trim() || null,
         }),
       })
 
@@ -186,6 +189,7 @@ export default function InventoryPage() {
           supplier: "",
           min_stock_level: "",
           description: "",
+          image_url: "",
         })
 
         setIsAddDialogOpen(false)
@@ -262,6 +266,7 @@ export default function InventoryPage() {
           supplier: addFormData.supplier?.trim() || null,
           min_stock_level: minStockLevel,
           description: addFormData.description?.trim() || null,
+          image_url: addFormData.image_url?.trim() || null,
         }),
       })
 
@@ -357,8 +362,9 @@ export default function InventoryPage() {
       unit_price: "",
       supplier: "",
       min_stock_level: "",
-      description: "",
-    })
+          description: "",
+          image_url: "",
+        })
     setEditingItem(null)
   }
 
@@ -613,6 +619,15 @@ export default function InventoryPage() {
                         onChange={(e) => handleAddFormChange("min_stock_level", e.target.value)}
                       />
                     </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="image_url">Image URL</Label>
+                    <Input
+                      id="image_url"
+                      placeholder="https://example.com/image.jpg"
+                      value={addFormData.image_url}
+                      onChange={(e) => handleAddFormChange("image_url", e.target.value)}
+                    />
                   </div>
                   <div>
                     <Label htmlFor="description">Description</Label>
@@ -957,6 +972,15 @@ export default function InventoryPage() {
                     onChange={(e) => handleAddFormChange("min_stock_level", e.target.value)}
                   />
                 </div>
+              </div>
+              <div>
+                <Label htmlFor="image_url">Image URL</Label>
+                <Input
+                  id="image_url"
+                  placeholder="https://example.com/image.jpg"
+                  value={addFormData.image_url}
+                  onChange={(e) => handleAddFormChange("image_url", e.target.value)}
+                />
               </div>
               <div>
                 <Label htmlFor="description">Description</Label>

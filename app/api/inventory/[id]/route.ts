@@ -5,7 +5,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   try {
     const id = Number.parseInt(params.id)
     const body = await request.json()
-    const { item_name, category, brand, sku, quantity, unit_price, supplier, min_stock_level, description } = body
+    const { item_name, category, brand, sku, quantity, unit_price, supplier, min_stock_level, description, image_url } = body
 
     if (!item_name || !category || quantity === undefined || !unit_price) {
       return NextResponse.json(
@@ -26,6 +26,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
           supplier = ${supplier || null},
           min_stock_level = ${min_stock_level || 0},
           description = ${description || null},
+          image_url = ${image_url || null},
           updated_at = NOW()
         WHERE id = ${id} AND tenant_id = ${tenantId}
         RETURNING *
