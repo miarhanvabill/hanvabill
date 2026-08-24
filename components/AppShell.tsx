@@ -8,7 +8,7 @@ import { ErrorBoundary } from "@/components/error-boundary"
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   // Hide sidebar/header on public invoice and auth pages
-  const isPublic = pathname?.startsWith('/inv/') || pathname?.startsWith('/sign-in') || pathname?.startsWith('/sign-up') || pathname?.startsWith('/terms-of-service') || pathname?.startsWith('/privacy-policy') || pathname?.startsWith('/unauthorized-sign-in') || pathname?.startsWith('/book');
+  const isPublic = pathname?.startsWith('/inv/') || pathname?.startsWith('/sign-in') || pathname?.startsWith('/sign-up') || pathname?.startsWith('/terms-of-service') || pathname?.startsWith('/privacy-policy') || pathname?.startsWith('/unauthorized-sign-in') || pathname?.startsWith('/book/');
   
   if (isPublic) {
     return (
