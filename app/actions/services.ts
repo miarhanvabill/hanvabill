@@ -15,12 +15,22 @@ export interface Service {
   description?: string
   is_active: boolean
   code?: string
+  image_url?: string
   created_at?: string
 }
 
 export async function getServices(): Promise<Service[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      // One-off schema change
+      await sql`ALTER TABLE services ADD COLUMN IF NOT EXISTS image_url TEXT;`
+      await sql`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS image_url TEXT;`
+      try {
+        await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS image_url TEXT;`
+      } catch (e) {
+        // Ignore if inventory_items doesn't exist
+      }
+
       const result = await sql`
         SELECT 
           id,
@@ -31,6 +41,7 @@ export async function getServices(): Promise<Service[]> {
           description,
           is_active,
           code,
+          image_url,
           created_at
         FROM services 
         WHERE tenant_id = ${tenantId}
@@ -61,6 +72,7 @@ export async function getServicesByCategory(category?: string): Promise<Service[
           description,
           is_active,
           code,
+          image_url,
           created_at
         FROM services 
         WHERE category = ${category} 
@@ -85,6 +97,7 @@ export async function createService(formData: FormData) {
       const category = formData.get("category") as string
       const description = formData.get("description") as string
       const is_active = formData.get("isActive") === "true"
+      const image_url = formData.get("image_url") as string
       const code = (formData.get("code") as string) || `SRV${Date.now()}`
 
       if (!name || !price || !duration_minutes || !category) {
@@ -95,8 +108,8 @@ export async function createService(formData: FormData) {
       }
 
       const result = await sql`
-        INSERT INTO services (tenant_id, name, price, duration_minutes, category, description, is_active, code)
-        VALUES (${tenantId}, ${name}, ${price}, ${duration_minutes}, ${category}, ${description}, ${is_active}, ${code})
+        INSERT INTO services (tenant_id, name, price, duration_minutes, category, description, is_active, code, image_url)
+        VALUES (${tenantId}, ${name}, ${price}, ${duration_minutes}, ${category}, ${description}, ${is_active}, ${code}, ${image_url || null})
         RETURNING *
       `
 
@@ -127,6 +140,7 @@ export async function updateService(id: number, formData: FormData) {
       const category = formData.get("category") as string
       const description = formData.get("description") as string
       const is_active = formData.get("isActive") === "true"
+      const image_url = formData.get("image_url") as string
 
       if (!name || !price || !duration_minutes || !category) {
         return {
@@ -143,7 +157,8 @@ export async function updateService(id: number, formData: FormData) {
           duration_minutes = ${duration_minutes},
           category = ${category},
           description = ${description},
-          is_active = ${is_active}
+          is_active = ${is_active},
+          image_url = ${image_url || null}
         WHERE id = ${id} AND tenant_id = ${tenantId}
         RETURNING *
       `

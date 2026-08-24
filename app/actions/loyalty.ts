@@ -306,12 +306,12 @@ export async function getLoyaltyDashboardStats(tenantId?: string): Promise<Loyal
     try {
       const stats = await sql`
         SELECT
-          COALESCE(SUM(CASE WHEN LOWER(COALESCE(transaction_type, type, 'earned')) IN ('earned', 'bonus', 'refund') THEN ABS(COALESCE(points, 0)) ELSE 0 END), 0) AS total_points_issued,
-          COALESCE(SUM(CASE WHEN LOWER(COALESCE(transaction_type, type, '')) = 'redeemed' THEN ABS(COALESCE(points, 0)) ELSE 0 END), 0) AS total_points_redeemed,
+          COALESCE(SUM(CASE WHEN transaction_type = 'earned' OR points > 0 THEN ABS(points) ELSE 0 END), 0) AS total_points_issued,
+          COALESCE(SUM(CASE WHEN transaction_type = 'redeemed' OR points < 0 THEN ABS(points) ELSE 0 END), 0) AS total_points_redeemed,
           COUNT(DISTINCT customer_id) AS active_loyalty_members,
-          COALESCE(SUM(CASE WHEN LOWER(COALESCE(transaction_type, type, 'earned')) IN ('earned', 'bonus') AND expires_at IS NOT NULL AND expires_at > NOW() AND expires_at <= NOW() + INTERVAL '7 days' THEN ABS(COALESCE(points, 0)) ELSE 0 END), 0) AS points_expiring_this_week
+          COALESCE(SUM(CASE WHEN (transaction_type = 'earned' OR points > 0) AND expires_at IS NOT NULL AND expires_at > NOW() AND expires_at <= NOW() + INTERVAL '7 days' THEN ABS(points) ELSE 0 END), 0) AS points_expiring_this_week
         FROM loyalty_transactions
-        WHERE tenant_id::text = ${resolvedTenantId}::text
+        WHERE tenant_id = ${resolvedTenantId}
       `
       return {
         total_points_issued: Number(stats[0]?.total_points_issued || 0),

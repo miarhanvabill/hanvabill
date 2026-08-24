@@ -18,6 +18,7 @@ export interface InventoryItem {
   location?: string
   description?: string
   status: string
+  image_url?: string
   created_at: string
   updated_at?: string
   tenant_id: string
@@ -138,6 +139,7 @@ export async function getInventory(): Promise<InventoryItem[]> {
         location: row.location,
         description: row.description,
         status: row.status,
+        image_url: row.image_url,
         created_at: row.created_at,
         updated_at: row.updated_at,
         tenant_id: row.tenant_id,
