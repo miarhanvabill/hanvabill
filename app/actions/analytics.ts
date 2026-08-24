@@ -275,12 +275,15 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
 
       const demoResult = await sql`
         SELECT
-          COUNT(*) FILTER (WHERE gender='male') AS male,
-          COUNT(*) FILTER (WHERE gender='female') AS female,
-          COUNT(*) FILTER (WHERE gender NOT IN ('male','female') OR gender IS NULL) AS others
-        FROM customers
-        WHERE tenant_id = ${tenantId}
-          AND created_at >= ${startIso}
+          COUNT(DISTINCT b.customer_id) FILTER (WHERE c.gender='male') AS male,
+          COUNT(DISTINCT b.customer_id) FILTER (WHERE c.gender='female') AS female,
+          -- For others, include walk-ins (where customer_id is null) or gender is not male/female
+          COUNT(DISTINCT b.id) FILTER (WHERE b.customer_id IS NULL) + COUNT(DISTINCT b.customer_id) FILTER (WHERE c.gender NOT IN ('male','female') OR c.gender IS NULL) AS others
+        FROM bookings b
+        LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+        WHERE b.tenant_id = ${tenantId}
+          AND b.booking_date >= ${startIso}
+          AND b.status = 'completed'
       `
       const demo = demoResult[0] || { male: 0, female: 0, others: 0 }
       const customerDemographics = {
@@ -358,7 +361,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
       const utilResult = await sql`
         SELECT st.name,
                ROUND(
-                 (SUM(s.duration_minutes) / 60 /
+                 (COALESCE(SUM(s.duration_minutes), 0)::numeric / 60.0 /
                   (${days} * 8)) * 100,
                  2
                ) AS utilization
