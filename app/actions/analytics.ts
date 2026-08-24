@@ -158,7 +158,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         SELECT COUNT(*) AS count
         FROM customers
         WHERE tenant_id = ${tenantId}
-          AND created_at BETWEEN ${startIso} AND ${endDate.toISOString()}
+          AND created_at >= ${startIso} AND created_at <= ${endIso}::date + interval '1 day' - interval '1 second'
       `
       const currCust = currCustResult[0] || { count: 0 }
 
@@ -181,7 +181,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         SELECT COUNT(*) AS count
         FROM bookings
         WHERE tenant_id = ${tenantId}
-          AND booking_date BETWEEN ${startIso} AND ${endDate.toISOString()}
+          AND booking_date BETWEEN ${startIso} AND ${endIso}
           AND status='completed'
       `
       const currBook = currBookResult[0] || { count: 0 }
