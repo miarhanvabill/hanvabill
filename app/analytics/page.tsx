@@ -28,7 +28,7 @@ import {
 } from "lucide-react"
 import { useState, useEffect, useCallback, useRef } from "react"
 import type { AnalyticsData } from "@/app/actions/analytics"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell } from "recharts"
 
 interface ConnectionStatus {
   isOnline: boolean
@@ -243,6 +243,8 @@ export default function AnalyticsPage() {
                       <SelectValue placeholder="Select date range" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="yesterday">Yesterday</SelectItem>
                       <SelectItem value="7">Last 7 days</SelectItem>
                       <SelectItem value="30">Last 30 days</SelectItem>
                       <SelectItem value="90">Last 90 days</SelectItem>
@@ -479,23 +481,50 @@ export default function AnalyticsPage() {
                   <CardContent>
                     <div className="space-y-4">
                       {(analytics?.revenueByCategory || []).length > 0 ? (
-                        analytics.revenueByCategory.map((cat, idx) => (
-                          <div key={cat.name} className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <span
-                                className="w-4 h-4 rounded-full"
-                                style={{
-                                  backgroundColor: ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"][idx % 5],
-                                }}
-                              ></span>
-                              <span className="text-sm font-medium">{cat.name}</span>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-semibold">₹{cat.revenue.toLocaleString()}</div>
-                              <div className="text-sm text-gray-500">{cat.percentage.toFixed(1)}%</div>
-                            </div>
+                        <>
+                          <div className="h-[200px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <RechartsPieChart>
+                                <Pie
+                                  data={analytics.revenueByCategory}
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={60}
+                                  outerRadius={80}
+                                  paddingAngle={5}
+                                  dataKey="revenue"
+                                  nameKey="name"
+                                >
+                                  {analytics.revenueByCategory.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"][index % 5]} />
+                                  ))}
+                                </Pie>
+                                <RechartsTooltip 
+                                  formatter={(value: number) => `₹${value.toLocaleString()}`}
+                                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                />
+                              </RechartsPieChart>
+                            </ResponsiveContainer>
                           </div>
-                        ))
+                          <div className="grid grid-cols-2 gap-2 pt-2">
+                            {analytics.revenueByCategory.map((cat, idx) => (
+                              <div key={cat.name} className="flex items-center justify-between text-xs">
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                    style={{
+                                      backgroundColor: ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6"][idx % 5],
+                                    }}
+                                  ></span>
+                                  <span className="font-medium truncate" title={cat.name}>{cat.name}</span>
+                                </div>
+                                <div className="text-gray-500 font-medium pl-2">
+                                  {cat.percentage.toFixed(0)}%
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
                       ) : (
                         <div className="text-center py-8 text-gray-500">
                           <PieChart className="w-8 h-8 mx-auto opacity-50 mb-2" />

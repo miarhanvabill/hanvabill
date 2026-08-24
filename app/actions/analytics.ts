@@ -65,15 +65,45 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
       throw new Error("dateRange should be a string or number")
     }
 
-    const days = Number.parseInt(dateRange.toString(), 10)
-    const endDate = new Date()
-    const startDate = new Date()
-    startDate.setDate(endDate.getDate() - days)
-    const startIso = startDate.toISOString().split("T")[0]
-    const prevStart = new Date(startDate)
-    prevStart.setDate(prevStart.getDate() - days)
-    const prevIso = prevStart.toISOString().split("T")[0]
-    const endIso = endDate.toISOString().split("T")[0]
+    let startIso: string
+    let endIso: string
+    let prevIso: string
+    let days: number
+
+    const now = new Date()
+
+    if (dateRange === "today") {
+      days = 1
+      startIso = now.toISOString().split("T")[0]
+      endIso = startIso
+      
+      const yesterday = new Date(now)
+      yesterday.setDate(now.getDate() - 1)
+      prevIso = yesterday.toISOString().split("T")[0]
+    } else if (dateRange === "yesterday") {
+      days = 1
+      const yesterday = new Date(now)
+      yesterday.setDate(yesterday.getDate() - 1)
+      startIso = yesterday.toISOString().split("T")[0]
+      endIso = startIso
+      
+      const dayBefore = new Date(yesterday)
+      dayBefore.setDate(yesterday.getDate() - 1)
+      prevIso = dayBefore.toISOString().split("T")[0]
+    } else {
+      days = Number.parseInt(dateRange.toString(), 10)
+      if (isNaN(days)) days = 30 // fallback
+      
+      const endDate = new Date()
+      const startDate = new Date()
+      startDate.setDate(endDate.getDate() - days)
+      startIso = startDate.toISOString().split("T")[0]
+      endIso = endDate.toISOString().split("T")[0]
+      
+      const prevStart = new Date(startDate)
+      prevStart.setDate(prevStart.getDate() - days)
+      prevIso = prevStart.toISOString().split("T")[0]
+    }
 
     const fallbackData: AnalyticsData = {
       totalRevenue: 0,
@@ -277,12 +307,15 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
 
       const demoResult = await sql`
         SELECT
-          COUNT(*) FILTER (WHERE gender='male') AS male,
-          COUNT(*) FILTER (WHERE gender='female') AS female,
-          COUNT(*) FILTER (WHERE gender NOT IN ('male','female') OR gender IS NULL) AS others
-        FROM customers
-        WHERE tenant_id = ${tenantId}
-          AND created_at >= ${startIso}
+          COUNT(DISTINCT b.customer_id) FILTER (WHERE c.gender='male') AS male,
+          COUNT(DISTINCT b.customer_id) FILTER (WHERE c.gender='female') AS female,
+          -- For others, include walk-ins (where customer_id is null) or gender is not male/female
+          COUNT(DISTINCT b.id) FILTER (WHERE b.customer_id IS NULL) + COUNT(DISTINCT b.customer_id) FILTER (WHERE c.gender NOT IN ('male','female') OR c.gender IS NULL) AS others
+        FROM bookings b
+        LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+        WHERE b.tenant_id = ${tenantId}
+          AND b.booking_date >= ${startIso}
+          AND b.status = 'completed'
       `
       const demo = demoResult[0] || { male: 0, female: 0, others: 0 }
       const customerDemographics = {
@@ -297,7 +330,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
           COALESCE(SUM(b.total_amount) FILTER (WHERE c.gender='female'), 0) AS female_spending,
           COALESCE(SUM(b.total_amount) FILTER (WHERE c.gender NOT IN ('male','female') OR c.gender IS NULL), 0) AS others_spending
         FROM bookings b
-        JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+        LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
         WHERE b.tenant_id = ${tenantId}
           AND b.booking_date >= ${startIso}
           AND b.status = 'completed'
