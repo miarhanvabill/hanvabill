@@ -205,7 +205,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
       const currTimeResult = await sql`
         SELECT AVG(s.duration_minutes) AS avg_minutes
         FROM bookings b
-        JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
+        JOIN booking_services bs ON b.id = bs.booking_id
         JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
         WHERE b.tenant_id = ${tenantId}
           AND b.booking_date >= ${startIso}
@@ -216,7 +216,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
       const prevTimeResult = await sql`
         SELECT AVG(s.duration_minutes) AS avg_minutes
         FROM bookings b
-        JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
+        JOIN booking_services bs ON b.id = bs.booking_id
         JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
         WHERE b.tenant_id = ${tenantId}
           AND b.booking_date BETWEEN ${prevIso} AND ${startIso}
@@ -271,7 +271,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         SELECT s.category AS name,
                COALESCE(SUM(bs.price * bs.quantity),0) AS revenue
         FROM bookings b
-        JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
+        JOIN booking_services bs ON b.id = bs.booking_id
         JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
         WHERE b.tenant_id = ${tenantId}
           AND b.booking_date >= ${startIso}
@@ -348,7 +348,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
                COUNT(bs.id) AS booking_count,
                COALESCE(SUM(bs.price * bs.quantity),0) AS revenue
         FROM services s
-        LEFT JOIN booking_services bs ON s.id = bs.service_id AND bs.tenant_id = ${tenantId}
+        LEFT JOIN booking_services bs ON s.id = bs.service_id
         LEFT JOIN bookings b ON bs.booking_id = b.id AND b.tenant_id = ${tenantId}
         WHERE b.booking_date >= ${startIso}
           AND b.status='completed'
@@ -361,7 +361,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         SELECT s.name,
                COALESCE(SUM(bs.price * bs.quantity),0) AS prev_revenue
         FROM services s
-        LEFT JOIN booking_services bs ON s.id = bs.service_id AND bs.tenant_id = ${tenantId}
+        LEFT JOIN booking_services bs ON s.id = bs.service_id
         LEFT JOIN bookings b ON bs.booking_id = b.id AND b.tenant_id = ${tenantId}
         WHERE b.booking_date >= ${prevIso} AND b.booking_date < ${startIso}
           AND b.status='completed'
@@ -393,9 +393,10 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
                COUNT(r.id) AS rating_count
         FROM staff st
         LEFT JOIN bookings b ON st.id = b.staff_id AND b.tenant_id = ${tenantId}
-        LEFT JOIN reviews r ON b.id = r.booking_id AND r.tenant_id = ${tenantId}
-        WHERE b.booking_date >= ${startIso}
-          AND b.status='completed'
+        LEFT JOIN reviews r ON b.id = r.booking_id
+        WHERE st.tenant_id = ${tenantId}
+          AND (b.booking_date >= ${startIso} OR b.booking_date IS NULL)
+          AND (b.status='completed' OR b.status IS NULL)
         GROUP BY st.id, st.name
         ORDER BY revenue DESC
       `
@@ -418,7 +419,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
                ) AS utilization
         FROM staff st
         JOIN bookings b ON st.id = b.staff_id AND b.tenant_id = ${tenantId}
-        JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
+        JOIN booking_services bs ON b.id = bs.booking_id
         JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
         WHERE b.booking_date >= ${startIso}
           AND b.status='completed'
@@ -471,9 +472,15 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         staffUtilization,
         revenueTrend,
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching analytics:", error)
-      return fallbackData
+      return {
+        ...fallbackData,
+        // Hack: put the error message in the revenueByCategory so the UI can display it
+        revenueByCategory: [
+          { name: `ERROR: ${error.message}`, revenue: 0, percentage: 100 }
+        ]
+      }
     }
   })
 }
