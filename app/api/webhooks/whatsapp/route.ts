@@ -1,6 +1,22 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedSql } from "@/lib/db"; 
 
+// Normalize msgType from provider (uppercase) to DB-valid values
+function normalizeMessageType(msgType?: string): string {
+  if (!msgType) return 'text';
+  switch (msgType.toUpperCase()) {
+    case 'TEXT':      return 'text';
+    case 'IMAGE':     return 'image';
+    case 'DOCUMENT':  return 'document';
+    case 'TEMPLATE':  return 'template';
+    case 'VIDEO':     return 'document'; // DB doesn't have 'video', map to document
+    case 'AUDIO':     return 'document'; // DB doesn't have 'audio', map to document
+    case 'BUTTON':    return 'text';
+    case 'INTERACTIVE': return 'text';
+    default:          return 'text';
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const url = new URL(req.url);
@@ -14,7 +30,7 @@ export async function POST(req: Request) {
     const payload = await req.json();
     console.log("[WhatsApp Webhook] Received payload:", type, payload);
     
-    // Infer type if missing from query
+    // Infer type if missing from query param
     if (!type) {
       if (payload.type) {
         type = payload.type;
@@ -27,24 +43,23 @@ export async function POST(req: Request) {
       }
     }
 
-    // We assume the URL provides the true internal tenantId.
     const { sql, tenantId: internalTenantId, tenantKey } = await getAuthenticatedSql(tenantId);
 
     if (type === "mo" || (payload.from && !payload.status)) {
       // Mobile Originated (Incoming Message)
       const phone = payload.from?.toString();
-      const msgId = payload.msgId;
       
       let content = payload.msg || "";
-      if (payload.msgType === "IMAGE") content = payload.imageUrl || "Image Received";
-      if (payload.msgType === "VIDEO") content = payload.videoUrl || "Video Received";
-      if (payload.msgType === "DOCUMENT") content = payload.documentUrl || "Document Received";
-      if (payload.msgType === "AUDIO") content = payload.audioUrl || "Audio Received";
+      if (payload.msgType === "IMAGE") content = payload.imageUrl || "📷 Image";
+      if (payload.msgType === "VIDEO") content = payload.videoUrl || "🎥 Video";
+      if (payload.msgType === "DOCUMENT") content = payload.documentUrl || "📄 Document";
+      if (payload.msgType === "AUDIO") content = payload.audioUrl || "🎵 Audio";
       if (payload.msgType === "BUTTON" || payload.msgType === "INTERACTIVE") {
-        content = payload.buttonsPayload?.title || "Button Clicked";
+        content = payload.buttonsPayload?.title || payload.msg || "Button Clicked";
       }
 
-      // Try to find the customer
+      const messageType = normalizeMessageType(payload.msgType);
+
       try {
         const customer = await sql`
           SELECT id FROM customers 
@@ -61,18 +76,29 @@ export async function POST(req: Request) {
             message_content, direction, status
           ) VALUES (
             ${internalTenantId}, ${tenantKey}, ${customerId}, ${phone}, 
-            ${payload.msgType?.toLowerCase() || 'text'}, 
-            ${content}, 'inbound', 'received'
+            ${messageType}, 
+            ${content}, 'inbound', 'delivered'
           )
         `;
+        console.log(`[WhatsApp Webhook] Saved inbound message from ${phone} for tenant ${internalTenantId}`);
       } catch (e) {
         console.error("[WhatsApp Webhook] Error saving MO:", e);
       }
       
-    } else if (type === "dlr" || payload.status) {
-      // Delivery Report
+    } else if (type === "dlr") {
+      // Delivery Report — update message status
       try {
-        console.log("[WhatsApp Webhook] DLR received for msgId:", payload.msgId, "status:", payload.status);
+        if (payload.msgId) {
+          const newStatus = ['sent','delivered','read','failed'].includes(payload.status?.toLowerCase())
+            ? payload.status.toLowerCase()
+            : 'delivered';
+          await sql`
+            UPDATE whatsapp_messages 
+            SET status = ${newStatus}
+            WHERE msg_id = ${payload.msgId} AND tenant_id = ${internalTenantId}
+          `;
+          console.log(`[WhatsApp Webhook] DLR updated msgId ${payload.msgId} → ${newStatus}`);
+        }
       } catch (e) {
         console.error("[WhatsApp Webhook] Error updating DLR:", e);
       }
