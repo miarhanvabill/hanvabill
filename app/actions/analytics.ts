@@ -29,6 +29,11 @@ export interface AnalyticsData {
     female: number
     others: number
   }
+  demographicSpending: {
+    male: number
+    female: number
+    others: number
+  }
   topServices: Array<{
     name: string
     bookings: number
@@ -41,6 +46,7 @@ export interface AnalyticsData {
     bookings: number
     revenue: number
     rating: number
+    ratingCount: number
   }>
   staffUtilization: Array<{
     name: string
@@ -84,6 +90,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
       revenueByCategory: [],
       customerAcquisition: [],
       customerDemographics: { male: 0, female: 0, others: 0 },
+      demographicSpending: { male: 0, female: 0, others: 0 },
       topServices: [],
       staffPerformance: [],
       staffUtilization: [],
@@ -282,6 +289,24 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         others: Number.parseInt(demo.others),
       }
 
+      const spendingResult = await sql`
+        SELECT
+          COALESCE(SUM(b.total_amount) FILTER (WHERE c.gender='male'), 0) AS male_spending,
+          COALESCE(SUM(b.total_amount) FILTER (WHERE c.gender='female'), 0) AS female_spending,
+          COALESCE(SUM(b.total_amount) FILTER (WHERE c.gender NOT IN ('male','female') OR c.gender IS NULL), 0) AS others_spending
+        FROM bookings b
+        JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+        WHERE b.tenant_id = ${tenantId}
+          AND b.booking_date >= ${startIso}
+          AND b.status = 'completed'
+      `
+      const spending = spendingResult[0] || { male_spending: 0, female_spending: 0, others_spending: 0 }
+      const demographicSpending = {
+        male: Number.parseFloat(spending.male_spending),
+        female: Number.parseFloat(spending.female_spending),
+        others: Number.parseFloat(spending.others_spending),
+      }
+
       // 9. Top services & staff performance
       const srvResult = await sql`
         SELECT s.name,
@@ -310,7 +335,8 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         SELECT st.name,
                COUNT(b.id) AS booking_count,
                COALESCE(SUM(b.total_amount),0) AS revenue,
-               COALESCE(AVG(r.rating), 0) AS avg_rating
+               COALESCE(AVG(r.rating), 0) AS avg_rating,
+               COUNT(r.id) AS rating_count
         FROM staff st
         LEFT JOIN bookings b ON st.id = b.staff_id AND b.tenant_id = ${tenantId}
         LEFT JOIN reviews r ON b.id = r.booking_id AND r.tenant_id = ${tenantId}
@@ -325,6 +351,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         bookings: Number.parseInt(s.booking_count),
         revenue: Number.parseFloat(s.revenue),
         rating: Number.parseFloat(s.avg_rating),
+        ratingCount: Number.parseInt(s.rating_count) || 0,
       }))
 
       // 10. Staff utilization - using service duration as proxy for time worked
@@ -384,6 +411,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         revenueByCategory,
         customerAcquisition,
         customerDemographics,
+        demographicSpending,
         topServices,
         staffPerformance,
         staffUtilization,

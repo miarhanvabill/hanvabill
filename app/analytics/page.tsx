@@ -576,28 +576,33 @@ export default function AnalyticsPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {[
-                        { label: "Male", value: analytics?.customerDemographics?.male || 0, color: "bg-blue-600" },
-                        { label: "Female", value: analytics?.customerDemographics?.female || 0, color: "bg-pink-600" },
-                        {
-                          label: "Others",
-                          value: analytics?.customerDemographics?.others || 0,
-                          color: "bg-purple-600",
-                        },
-                      ].map((d) => (
-                        <div key={d.label}>
-                          <div className="flex justify-between mb-2 text-sm font-medium">
-                            <span>{d.label}</span>
-                            <span>{d.value}</span>
+                      {(() => {
+                        const demo = analytics?.customerDemographics || { male: 0, female: 0, others: 0 }
+                        const spend = analytics?.demographicSpending || { male: 0, female: 0, others: 0 }
+                        const totalCustomers = demo.male + demo.female + demo.others || 1 // prevent div by zero
+                        
+                        return [
+                          { label: "Male", count: demo.male, spend: spend.male, color: "bg-blue-600" },
+                          { label: "Female", count: demo.female, spend: spend.female, color: "bg-pink-600" },
+                          { label: "Others", count: demo.others, spend: spend.others, color: "bg-purple-600" },
+                        ].map((d) => (
+                          <div key={d.label}>
+                            <div className="flex justify-between items-end mb-2 text-sm font-medium">
+                              <div>
+                                <span>{d.label}</span>
+                                <span className="text-gray-500 ml-2">({d.count})</span>
+                              </div>
+                              <span className="text-green-600 font-semibold">₹{d.spend.toLocaleString()}</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div
+                                className={`${d.color} h-2 rounded-full transition-all duration-500`}
+                                style={{ width: `${(d.count / totalCustomers) * 100}%` }}
+                              ></div>
+                            </div>
                           </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                              className={`${d.color} h-2 rounded-full transition-all duration-500`}
-                              style={{ width: `${Math.min(d.value, 100)}%` }}
-                            ></div>
-                          </div>
-                        </div>
-                      ))}
+                        ))
+                      })()}
                     </div>
                   </CardContent>
                 </Card>
@@ -685,7 +690,14 @@ export default function AnalyticsPage() {
                                 <td className="p-4 font-medium">{s.name}</td>
                                 <td className="p-4">{s.bookings}</td>
                                 <td className="p-4">₹{s.revenue.toLocaleString()}</td>
-                                <td className="p-4">{s.rating.toFixed(1)}</td>
+                                <td className="p-4 flex items-center gap-2">
+                                  <span>{s.rating.toFixed(1)}</span>
+                                  {s.ratingCount > 0 ? (
+                                    <span className="text-xs text-gray-500">({s.ratingCount} {s.ratingCount === 1 ? 'rating' : 'ratings'})</span>
+                                  ) : (
+                                    <span className="text-xs text-gray-400 italic">(No ratings)</span>
+                                  )}
+                                </td>
                               </tr>
                             ))
                           ) : (
