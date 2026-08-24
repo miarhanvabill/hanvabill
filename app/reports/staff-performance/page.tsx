@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { downloadCSV } from "@/lib/utils"
-import { Download, ArrowLeft, Star } from "lucide-react"
+import { Download, ArrowLeft, Star, Users } from "lucide-react"
 import Link from "next/link"
 
 interface StaffPerformanceData {
@@ -22,10 +22,43 @@ interface StaffPerformanceData {
   avg_service_time: number
 }
 
+// ── Split-revenue helpers ────────────────────────────────────────────────
+function dateRangeToDates(range: string): { startDate?: string; endDate?: string } {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, "0")
+  const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+
+  switch (range) {
+    case "Today":
+      return { startDate: fmt(now), endDate: fmt(now) }
+    case "Yesterday": {
+      const y = new Date(now); y.setDate(y.getDate() - 1)
+      return { startDate: fmt(y), endDate: fmt(y) }
+    }
+    case "Last 7 Days": {
+      const s = new Date(now); s.setDate(s.getDate() - 6)
+      return { startDate: fmt(s), endDate: fmt(now) }
+    }
+    case "Last 30 Days": {
+      const s = new Date(now); s.setDate(s.getDate() - 29)
+      return { startDate: fmt(s), endDate: fmt(now) }
+    }
+    case "Last 3 Months": {
+      const s = new Date(now); s.setMonth(s.getMonth() - 3)
+      return { startDate: fmt(s), endDate: fmt(now) }
+    }
+    default:
+      return {}
+  }
+}
+
 export default function StaffPerformancePage() {
   const [dateRange, setDateRange] = useState("Last 30 Days")
   const [staffData, setStaffData] = useState<StaffPerformanceData[]>([])
   const [loading, setLoading] = useState(true)
+  // Map of staff_id → revenue from splits
+  const [splitRevenueMap, setSplitRevenueMap] = useState<Record<number, number>>({})
+  const [splitsLoading, setSplitsLoading] = useState(true)
 
   const fetchStaffPerformance = async () => {
     setLoading(true)
@@ -42,9 +75,33 @@ export default function StaffPerformancePage() {
     }
   }
 
+  const fetchSplitRevenue = async () => {
+    setSplitsLoading(true)
+    try {
+      const { startDate, endDate } = dateRangeToDates(dateRange)
+      const { getStaffCommissionSplits } = await import("@/app/actions/staff")
+      const result = await getStaffCommissionSplits(startDate, endDate)
+      if (result.success) {
+        const map = result.data.reduce<Record<number, number>>((acc, row) => {
+          acc[row.staff_id] = (acc[row.staff_id] ?? 0) + row.revenue_amount
+          return acc
+        }, {})
+        setSplitRevenueMap(map)
+      }
+    } catch (err) {
+      console.error("Error fetching split revenue:", err)
+    } finally {
+      setSplitsLoading(false)
+    }
+  }
+
   useEffect(() => {
     fetchStaffPerformance()
-    const interval = setInterval(fetchStaffPerformance, 60000) // Refresh every minute
+    fetchSplitRevenue()
+    const interval = setInterval(() => {
+      fetchStaffPerformance()
+      fetchSplitRevenue()
+    }, 60000) // Refresh every minute
     return () => clearInterval(interval)
   }, [dateRange])
 
@@ -61,6 +118,7 @@ export default function StaffPerformancePage() {
 
   const totalRevenue = staffData.reduce((sum, staff) => sum + staff.total_revenue, 0)
   const totalBookings = staffData.reduce((sum, staff) => sum + staff.bookings_count, 0)
+  const totalSplitRevenue = Object.values(splitRevenueMap).reduce((a, b) => a + b, 0)
 
   return (
     <div className="flex-1 flex flex-col">
@@ -139,6 +197,30 @@ export default function StaffPerformancePage() {
             </Card>
           </div>
 
+          {/* Multi-Staff Split Revenue Summary Card */}
+          <Card className="border-violet-200 bg-violet-50/50">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="h-10 w-10 rounded-full bg-violet-100 flex items-center justify-center">
+                  <Users className="h-5 w-5 text-violet-600" />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-violet-700">Revenue from Multi-Staff Services</div>
+                  <div className="text-2xl font-bold text-violet-900">
+                    {splitsLoading ? (
+                      <span className="text-sm text-muted-foreground">Loading…</span>
+                    ) : (
+                      `₹${totalSplitRevenue.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    )}
+                  </div>
+                  <p className="text-xs text-violet-600 mt-0.5">
+                    Across {Object.keys(splitRevenueMap).length} staff member{Object.keys(splitRevenueMap).length !== 1 ? "s" : ""} for selected period
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Staff Performance Table */}
           <Card>
             <CardHeader>
@@ -153,6 +235,7 @@ export default function StaffPerformancePage() {
                       <th className="text-left p-3 font-medium">Role</th>
                       <th className="text-center p-3 font-medium">Bookings</th>
                       <th className="text-center p-3 font-medium">Revenue</th>
+                      <th className="text-center p-3 font-medium">Multi-Staff Rev.</th>
                       <th className="text-center p-3 font-medium">Avg Rating</th>
                       <th className="text-center p-3 font-medium">Attendance</th>
                       <th className="text-center p-3 font-medium">Services</th>
@@ -160,35 +243,49 @@ export default function StaffPerformancePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {staffData.map((staff) => (
-                      <tr key={staff.id} className="hover:bg-gray-50">
-                        <td className="p-3 font-medium">{staff.name}</td>
-                        <td className="p-3">{staff.role}</td>
-                        <td className="p-3 text-center">{staff.bookings_count}</td>
-                        <td className="p-3 text-center font-medium">₹{staff.total_revenue.toLocaleString()}</td>
-                        <td className="p-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                            <span>{staff.avg_rating.toFixed(1)}</span>
-                          </div>
-                        </td>
-                        <td className="p-3 text-center">
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              staff.attendance_rate >= 90
-                                ? "bg-green-100 text-green-800"
-                                : staff.attendance_rate >= 80
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : "bg-red-100 text-red-800"
-                            }`}
-                          >
-                            {staff.attendance_rate.toFixed(0)}%
-                          </span>
-                        </td>
-                        <td className="p-3 text-center">{staff.services_completed}</td>
-                        <td className="p-3 text-center">{staff.avg_service_time.toFixed(0)}m</td>
-                      </tr>
-                    ))}
+                    {staffData.map((staff) => {
+                      const splitRev = splitRevenueMap[staff.id] ?? 0
+                      return (
+                        <tr key={staff.id} className="hover:bg-gray-50">
+                          <td className="p-3 font-medium">{staff.name}</td>
+                          <td className="p-3">{staff.role}</td>
+                          <td className="p-3 text-center">{staff.bookings_count}</td>
+                          <td className="p-3 text-center font-medium">₹{staff.total_revenue.toLocaleString()}</td>
+                          <td className="p-3 text-center">
+                            {splitsLoading ? (
+                              <span className="text-xs text-muted-foreground">…</span>
+                            ) : splitRev > 0 ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-800">
+                                ₹{splitRev.toFixed(2)}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs">—</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                              <span>{staff.avg_rating.toFixed(1)}</span>
+                            </div>
+                          </td>
+                          <td className="p-3 text-center">
+                            <span
+                              className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                staff.attendance_rate >= 90
+                                  ? "bg-green-100 text-green-800"
+                                  : staff.attendance_rate >= 80
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : "bg-red-100 text-red-800"
+                              }`}
+                            >
+                              {staff.attendance_rate.toFixed(0)}%
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">{staff.services_completed}</td>
+                          <td className="p-3 text-center">{staff.avg_service_time.toFixed(0)}m</td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
