@@ -219,6 +219,15 @@ const miscellaneousSections = [
     badge: true,
   },
   {
+    title: "Digital Forms Builder",
+    description:
+      "Create custom digital forms, questionnaires, and consent agreements using a drag-and-drop builder to collect structured data from your customers.",
+    icon: FileText,
+    href: "/manage/forms-builder",
+    color: "bg-emerald-50 text-emerald-600",
+    badge: true,
+  },
+  {
     title: "Consent Forms",
     description:
       "Securely stores customer consents for services, policies, and marketing, ensuring compliance and trust.",
