@@ -70,6 +70,7 @@ export async function sendWhatsAppInvoice(tenantId: string, phone: string, data:
         LIMIT 1
       `;
       
+      const customerId = customer.length > 0 ? customer[0].id : null;
       const tenant = await sql`SELECT tenant_key FROM tenants WHERE id = ${tenantId} LIMIT 1`;
       const tenantKey = tenant.length > 0 ? tenant[0].tenant_key : null;
       
@@ -113,6 +114,7 @@ export async function sendWhatsAppText(tenantId: string, customerPhone: string, 
         LIMIT 1
       `;
       
+      const customerId = customer.length > 0 ? customer[0].id : null;
       const tenant = await sql`SELECT tenant_key FROM tenants WHERE id = ${tenantId} LIMIT 1`;
       const tenantKey = tenant.length > 0 ? tenant[0].tenant_key : null;
       
