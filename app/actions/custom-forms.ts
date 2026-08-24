@@ -58,7 +58,7 @@ export async function createCustomForm(data: { name: string; description?: strin
           ${tenantId},
           ${data.name},
           ${data.description || null},
-          ${sql.json(data.schema_json)}
+          ${JSON.stringify(data.schema_json)}
         )
         RETURNING *
       `
@@ -79,7 +79,7 @@ export async function updateCustomForm(id: string, data: { name: string; descrip
         UPDATE custom_forms SET
           name = ${data.name},
           description = ${data.description || null},
-          schema_json = ${sql.json(data.schema_json)}
+          schema_json = ${JSON.stringify(data.schema_json)}
         WHERE id = ${id} AND tenant_id = ${tenantId}
         RETURNING *
       `
