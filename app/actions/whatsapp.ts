@@ -335,7 +335,7 @@ export async function getCustomerChatSidebarData(phoneNumber: string): Promise<C
         FROM customers c
         LEFT JOIN bookings b ON c.id = b.customer_id
         WHERE c.tenant_id = ${tenantId} 
-        AND (c.phone_number LIKE ${'%' + cleanPhone} OR c.phone LIKE ${'%' + cleanPhone})
+        AND c.phone_number LIKE ${'%' + cleanPhone}
         GROUP BY c.id
         LIMIT 1
       `
