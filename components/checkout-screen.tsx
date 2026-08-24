@@ -34,6 +34,7 @@ interface CartItem {
   type: "service" | "product" | "package" | "membership"
   staff_id?: number
   staff_name?: string
+  staff_members?: Array<{ id: number; name: string; split_percentage: number }>
 }
 interface Invoice {
   id: number
@@ -437,7 +438,13 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
                       {item.type}
                     </Badge>
                   </div>
-                  {item.staff_name && <p className="text-sm text-muted-foreground">Staff: {item.staff_name}</p>}
+                  {item.staff_members && item.staff_members.length > 1 ? (
+                    <p className="text-sm text-muted-foreground">
+                      Staff: {item.staff_members.map(s => `${s.name.split(' ')[0]} (${s.split_percentage}%)`).join(' + ')}
+                    </p>
+                  ) : item.staff_name ? (
+                    <p className="text-sm text-muted-foreground">Staff: {item.staff_name}</p>
+                  ) : null}
                   <p className="text-sm text-muted-foreground">
                     {formatCurrency(item.price)} × {item.quantity}
                   </p>

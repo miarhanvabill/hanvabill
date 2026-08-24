@@ -31,6 +31,7 @@ interface CartItem {
   type: "service" | "product" | "package" | "membership"
   staff_id?: number
   staff_name?: string
+  staff_members?: Array<{ id: number; name: string; split_percentage: number }>
 }
 
 interface Invoice {

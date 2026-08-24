@@ -455,3 +455,70 @@ export async function getStaffTodaysSchedule(staffId: number) {
     }
   })
 }
+
+export async function getStaffCommissionSplits(
+  startDate?: string,
+  endDate?: string
+): Promise<{
+  success: boolean
+  data: Array<{
+    staff_id: number
+    staff_name: string
+    service_name: string
+    split_percentage: number
+    revenue_amount: number
+    invoice_id: number
+    created_at: string
+  }>
+}> {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      // Ensure the table exists before querying
+      await sql`
+        CREATE TABLE IF NOT EXISTS staff_commission_splits (
+          id SERIAL PRIMARY KEY,
+          tenant_id INTEGER NOT NULL,
+          invoice_id INTEGER NOT NULL,
+          service_item_name TEXT NOT NULL,
+          staff_id INTEGER NOT NULL,
+          split_percentage NUMERIC(5,2) NOT NULL DEFAULT 50.00,
+          revenue_amount NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+          created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `
+
+      const rows = await sql`
+        SELECT 
+          scs.staff_id,
+          st.name as staff_name,
+          scs.service_item_name as service_name,
+          scs.split_percentage,
+          scs.revenue_amount,
+          scs.invoice_id,
+          scs.created_at
+        FROM staff_commission_splits scs
+        JOIN staff st ON scs.staff_id = st.id AND st.tenant_id = ${tenantId}
+        WHERE scs.tenant_id = ${tenantId}
+          AND (${startDate ?? null}::date IS NULL OR scs.created_at >= ${startDate ?? null}::date)
+          AND (${endDate ?? null}::date IS NULL OR scs.created_at < ${endDate ?? null}::date + INTERVAL '1 day')
+        ORDER BY scs.created_at DESC
+        LIMIT 200
+      `
+
+      return {
+        success: true,
+        data: (rows || []).map((r: any) => ({
+          ...r,
+          staff_id: Number(r.staff_id),
+          invoice_id: Number(r.invoice_id),
+          split_percentage: Number(r.split_percentage),
+          revenue_amount: Number(r.revenue_amount),
+          created_at: r.created_at instanceof Date ? r.created_at.toISOString() : String(r.created_at ?? ""),
+        })),
+      }
+    } catch (error: any) {
+      console.error("[v0] Failed to fetch commission splits:", error)
+      return { success: false, data: [] }
+    }
+  })
+}

@@ -43,7 +43,9 @@ import {
   Users,
   Calendar,
   Percent,
+  Pencil,
 } from "lucide-react"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 type ItemKind = "service" | "product" | "package" | "membership"
 
@@ -63,6 +65,7 @@ interface CartItem {
   type: "service" | "product" | "package" | "membership"
   staff_id?: number
   staff_name?: string
+  staff_members?: Array<{ id: number; name: string; split_percentage: number }>
 }
 
 interface Service {
@@ -346,6 +349,38 @@ export function ServiceSelectionScreen({
 
   // Per-card staff selection
   const [staffChoice, setStaffChoice] = useState<Record<string, string>>({})
+  const [selectedStaffMembers, setSelectedStaffMembers] = useState<Record<string, Array<{id: number; name: string; split_percentage: number}>>>({})
+
+  const equalizeSplits = (members: Array<{id: number; name: string; split_percentage: number}>) => {
+    if (members.length === 0) return []
+    const equal = Math.floor(100 / members.length)
+    const remainder = 100 - (equal * members.length)
+    return members.map((m, i) => ({ ...m, split_percentage: equal + (i === 0 ? remainder : 0) }))
+  }
+
+  const toggleStaffMember = (key: string, staffMember: Staff) => {
+    setSelectedStaffMembers(prev => {
+      const current = prev[key] || []
+      const exists = current.find(s => s.id === staffMember.id)
+      if (exists) {
+        const updated = current.filter(s => s.id !== staffMember.id)
+        return { ...prev, [key]: equalizeSplits(updated) }
+      } else {
+        const updated = [...current, { id: staffMember.id, name: staffMember.name, split_percentage: 0 }]
+        return { ...prev, [key]: equalizeSplits(updated) }
+      }
+    })
+  }
+
+  const handleManualSplitChange = (key: string, staffId: number, newPercentage: number) => {
+    setSelectedStaffMembers(prev => {
+      const current = prev[key] || []
+      return {
+        ...prev,
+        [key]: current.map(s => s.id === staffId ? { ...s, split_percentage: newPercentage } : s)
+      }
+    })
+  }
 
   // Quick Add dialog
   const [quickType, setQuickType] = useState<ItemKind | null>(null)
@@ -484,10 +519,29 @@ export function ServiceSelectionScreen({
 
   const addToCart = (kind: ItemKind, item: any, forcedStaffId?: number) => {
     const key = `${kind}-${item.id}`
-    const stored = staffChoice[key]
-    const selectedStaffId =
-      typeof forcedStaffId === "number" ? forcedStaffId : stored && stored !== "any" ? Number(stored) : undefined
-    const staffMember = selectedStaffId ? staff.find((st) => st.id === selectedStaffId) : undefined
+    let selectedStaffId: number | undefined
+    let staffName: string | undefined
+    let staffMembersArray = undefined
+
+    if (kind === "service") {
+      const selected = selectedStaffMembers[key] || []
+      if (selected.length > 0) {
+        selectedStaffId = selected[0].id
+        staffName = selected.map(s => s.name).join(", ")
+        staffMembersArray = selected
+      } else {
+        selectedStaffId = undefined
+        staffName = undefined
+      }
+    } else {
+      const stored = staffChoice[key]
+      selectedStaffId = typeof forcedStaffId === "number" ? forcedStaffId : stored && stored !== "any" ? Number(stored) : undefined
+      const staffMember = selectedStaffId ? staff.find((st) => st.id === selectedStaffId) : undefined
+      staffName = staffMember?.name
+      if (staffMember) {
+        staffMembersArray = [{ id: staffMember.id, name: staffMember.name, split_percentage: 100 }]
+      }
+    }
 
     const lineType: "service" | "product" | "package" | "membership" = kind
     const existingIndex = cartItems.findIndex(
@@ -510,7 +564,8 @@ export function ServiceSelectionScreen({
       quantity: 1,
       type: lineType, // Now correctly preserves the actual item type
       staff_id: selectedStaffId,
-      staff_name: staffMember?.name,
+      staff_name: staffName,
+      staff_members: staffMembersArray
     }
 
     let updated: CartItem[]
@@ -529,8 +584,94 @@ export function ServiceSelectionScreen({
   const removeFromCart = (index: number) => onCartUpdate(cartItems.filter((_, i) => i !== index))
   const cartTotal = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
 
-  const renderStaffSelect = (kind: ItemKind, id: number | string) => {
-    const key = `${kind}-${id}`
+  const renderStaffSelect = (kind: ItemKind, item: any) => {
+    const key = `${kind}-${item.id}`
+    
+    if (kind === "service") {
+      const selected = selectedStaffMembers[key] || []
+      return (
+        <div className="space-y-3">
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Select Staff (Multi-select)</Label>
+            <div className="flex flex-wrap gap-2">
+              {staff.map((st) => {
+                const isSelected = selected.some(s => s.id === st.id)
+                return (
+                  <Badge
+                    key={st.id}
+                    variant={isSelected ? "default" : "outline"}
+                    className="cursor-pointer py-1 px-2 text-xs transition-colors hover:bg-primary/90"
+                    onClick={() => toggleStaffMember(key, st)}
+                  >
+                    <Avatar className="w-4 h-4 mr-1.5 inline-block">
+                      <AvatarFallback className="text-[8px] bg-primary-foreground text-primary">
+                        {st.name.substring(0, 2).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    {st.name}
+                  </Badge>
+                )
+              })}
+            </div>
+          </div>
+          
+          {selected.length === 0 ? (
+            <div className="text-xs text-muted-foreground italic">Any Staff</div>
+          ) : (
+            <div className="space-y-2 bg-muted/30 p-2 rounded-md border text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">Split Setup</span>
+                {selected.length > 1 && (
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-5 px-2 text-[10px]"
+                    onClick={() => setSelectedStaffMembers(prev => ({ ...prev, [key]: equalizeSplits(selected) }))}
+                  >
+                    Reset Equal
+                  </Button>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                {selected.map(st => {
+                  const amt = (Number(item.price) * st.split_percentage) / 100
+                  return (
+                    <div key={st.id} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <Avatar className="w-5 h-5">
+                          <AvatarFallback className="text-[9px] bg-primary/10">
+                            {st.name.substring(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium truncate max-w-[80px]">{st.name}</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        {selected.length > 1 ? (
+                          <div className="flex items-center gap-1">
+                            <Input 
+                              type="number" 
+                              className="w-12 h-6 text-xs px-1 text-center" 
+                              value={st.split_percentage}
+                              onChange={(e) => handleManualSplitChange(key, st.id, Number(e.target.value))}
+                            />
+                            <span className="text-muted-foreground">%</span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground w-12 text-right">100%</span>
+                        )}
+                        <span className="font-semibold text-primary w-14 text-right">₹{amt.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    }
+
     const value = String(staffChoice[key] ?? "any")
     return (
       <div className="space-y-1">
@@ -715,7 +856,7 @@ export function ServiceSelectionScreen({
                       )}
                     </div>
 
-                    {renderStaffSelect("service", sv.id)}
+                    {renderStaffSelect("service", sv)}
                     <Button size="sm" className="w-full" onClick={() => addToCart("service", sv)}>
                       Add to cart
                     </Button>
@@ -748,7 +889,7 @@ export function ServiceSelectionScreen({
                       )}
                     </div>
 
-                    {renderStaffSelect("product", p.id)}
+                    {renderStaffSelect("product", p)}
                     <Button size="sm" className="w-full" onClick={() => addToCart("product", p)}>
                       Add to cart
                     </Button>
@@ -887,7 +1028,7 @@ export function ServiceSelectionScreen({
                         </Tooltip>
                       </div>
 
-                      {renderStaffSelect("package", pkg.id)}
+                      {renderStaffSelect("package", pkg)}
 
                       <Button
                         size="lg"
@@ -1008,7 +1149,7 @@ export function ServiceSelectionScreen({
                         </div>
                       </div>
 
-                      {renderStaffSelect("membership", m.id)}
+                      {renderStaffSelect("membership", m)}
 
                       <Button
                         size="lg"
@@ -1058,15 +1199,27 @@ export function ServiceSelectionScreen({
                 <>
                   <div className="space-y-3 max-h-64 overflow-y-auto">
                     {cartItems.map((item, index) => (
-                      <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{item.name}</p>
-                          {item.staff_name && <p className="text-xs text-muted-foreground">Staff: {item.staff_name}</p>}
-                          <p className="text-sm text-muted-foreground">
-                            {formatCurrency(item.price)} each • {item.type}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
+                      <div key={index} className="flex flex-col p-3 bg-gray-50 rounded-lg gap-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{item.name}</p>
+                            
+                            {item.staff_members && item.staff_members.length > 1 ? (
+                              <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                                {item.staff_members.length} Staff: {item.staff_members.map(s => `${s.name.split(' ')[0]} (${s.split_percentage}%)`).join(' + ')}<br/>
+                                <span className="text-gray-500 font-medium">
+                                  {item.staff_members.map(s => `₹${((item.price * item.quantity * s.split_percentage) / 100).toFixed(2)}`).join(' / ')}
+                                </span>
+                              </p>
+                            ) : item.staff_name ? (
+                              <p className="text-xs text-muted-foreground">Staff: {item.staff_name}</p>
+                            ) : null}
+                            
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {formatCurrency(item.price)} each • {item.type}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
                           <div className="flex items-center gap-1">
                             <Button
                               size="sm"
@@ -1094,6 +1247,7 @@ export function ServiceSelectionScreen({
                           >
                             <Trash2 className="w-3 h-3" />
                           </Button>
+                        </div>
                         </div>
                       </div>
                     ))}

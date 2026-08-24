@@ -26,6 +26,201 @@ interface Summary {
   totalCommission: number
 }
 
+// ── Multi-Staff Split types ────────────────────────────────────────────────
+interface SplitRow {
+  staff_id: number
+  staff_name: string
+  service_name: string
+  split_percentage: number
+  revenue_amount: number
+  invoice_id: number
+  created_at: string
+}
+
+function dateRangeToISO(range: string): { startDate?: string; endDate?: string } {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, "0")
+  const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+
+  switch (range) {
+    case "Today":
+      return { startDate: fmt(now), endDate: fmt(now) }
+    case "Yesterday": {
+      const y = new Date(now)
+      y.setDate(y.getDate() - 1)
+      return { startDate: fmt(y), endDate: fmt(y) }
+    }
+    case "This Week": {
+      const s = new Date(now)
+      s.setDate(s.getDate() - s.getDay())
+      return { startDate: fmt(s), endDate: fmt(now) }
+    }
+    case "Last 7 Days": {
+      const s = new Date(now)
+      s.setDate(s.getDate() - 6)
+      return { startDate: fmt(s), endDate: fmt(now) }
+    }
+    case "This Month":
+      return {
+        startDate: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`,
+        endDate: fmt(now),
+      }
+    case "Last 30 Days": {
+      const s = new Date(now)
+      s.setDate(s.getDate() - 29)
+      return { startDate: fmt(s), endDate: fmt(now) }
+    }
+    case "This Year":
+      return { startDate: `${now.getFullYear()}-01-01`, endDate: fmt(now) }
+    default:
+      return {}
+  }
+}
+
+// ── Multi-Staff Split History component ───────────────────────────────────
+function MultiStaffSplitHistory({ dateRange }: { dateRange: string }) {
+  const [splits, setSplits] = useState<SplitRow[]>([])
+  const [splitsLoading, setSplitsLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      setSplitsLoading(true)
+      try {
+        const { startDate, endDate } = dateRangeToISO(dateRange)
+        const { getStaffCommissionSplits } = await import("@/app/actions/staff")
+        const result = await getStaffCommissionSplits(startDate, endDate)
+        if (result.success) setSplits(result.data)
+      } catch (err) {
+        console.error("Failed to load split history:", err)
+      } finally {
+        setSplitsLoading(false)
+      }
+    }
+    load()
+  }, [dateRange])
+
+  // Aggregate per-staff totals from split rows
+  const staffSummary = splits.reduce<Record<number, { name: string; total: number }>>(
+    (acc, row) => {
+      if (!acc[row.staff_id]) acc[row.staff_id] = { name: row.staff_name, total: 0 }
+      acc[row.staff_id].total += row.revenue_amount
+      return acc
+    },
+    {}
+  )
+
+  const handleExportSplits = () => {
+    const csvData = [
+      ["Staff", "Service", "Split %", "Revenue Amount", "Invoice ID", "Date"],
+      ...splits.map((s) => [
+        s.staff_name,
+        s.service_name,
+        `${s.split_percentage}%`,
+        `₹${s.revenue_amount.toFixed(2)}`,
+        String(s.invoice_id),
+        new Date(s.created_at).toLocaleDateString("en-IN"),
+      ]),
+    ]
+    downloadCSV(csvData, `multi_staff_splits_${dateRange.replace(/\s+/g, "_").toLowerCase()}.csv`)
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between">
+        <div>
+          <CardTitle className="text-base font-semibold">Multi-Staff Split History</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            Revenue from services handled by multiple staff members
+          </p>
+        </div>
+        {splits.length > 0 && (
+          <Button size="sm" variant="outline" onClick={handleExportSplits}>
+            <Download className="mr-2 h-3 w-3" /> Export
+          </Button>
+        )}
+      </CardHeader>
+
+      <CardContent className="space-y-6">
+        {splitsLoading ? (
+          <div className="flex justify-center items-center py-10">
+            <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-primary" />
+          </div>
+        ) : splits.length === 0 ? (
+          <div className="text-center py-10 text-muted-foreground text-sm">
+            No multi-staff split transactions found for this period.
+          </div>
+        ) : (
+          <>
+            {/* Per-staff revenue summary chips */}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-3">
+                Revenue by Staff (from Splits)
+              </p>
+              <div className="flex flex-wrap gap-3">
+                {Object.entries(staffSummary).map(([id, { name, total }]) => (
+                  <div
+                    key={id}
+                    className="flex items-center gap-3 px-4 py-3 rounded-lg border bg-slate-50"
+                  >
+                    <div className="h-8 w-8 rounded-full bg-violet-100 flex items-center justify-center text-violet-700 font-bold text-sm">
+                      {name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-slate-900">{name}</div>
+                      <div className="text-sm font-bold text-violet-700">₹{total.toFixed(2)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Split transactions table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="pb-3 font-medium">Staff</th>
+                    <th className="pb-3 font-medium">Service</th>
+                    <th className="pb-3 font-medium text-center">Split %</th>
+                    <th className="pb-3 font-medium text-right">Revenue</th>
+                    <th className="pb-3 font-medium text-center">Invoice</th>
+                    <th className="pb-3 font-medium text-right">Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {splits.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="py-3 font-medium text-slate-900">{row.staff_name}</td>
+                      <td className="py-3 text-slate-600">{row.service_name}</td>
+                      <td className="py-3 text-center">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-800">
+                          {row.split_percentage}%
+                        </span>
+                      </td>
+                      <td className="py-3 text-right font-semibold text-slate-900">
+                        ₹{row.revenue_amount.toFixed(2)}
+                      </td>
+                      <td className="py-3 text-center text-slate-500">#{row.invoice_id}</td>
+                      <td className="py-3 text-right text-slate-500 text-xs">
+                        {new Date(row.created_at).toLocaleDateString("en-IN", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────
 export default function StaffCommissionPage() {
   const [dateRange, setDateRange] = useState("This Month")
   const [data, setData] = useState<StaffCommission[]>([])
@@ -197,6 +392,9 @@ export default function StaffCommissionPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Multi-Staff Split History ──────────────────────────────────────── */}
+      <MultiStaffSplitHistory dateRange={dateRange} />
     </div>
   )
 }

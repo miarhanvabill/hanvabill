@@ -13,6 +13,7 @@ export interface FinalizeCheckoutInput {
     type: "service" | "product" | "package" | "membership"
     staff_id?: number
     staff_name?: string
+    staff_members?: Array<{ id: number; name: string; split_percentage: number }>
   }>
   payment_method: string
   notes?: string | null
@@ -263,6 +264,53 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
           NOW()
         ) RETURNING *
       `
+
+      // --- Staff Commission Splits ---
+      try {
+        await sql`
+          CREATE TABLE IF NOT EXISTS staff_commission_splits (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL,
+            invoice_id INTEGER NOT NULL,
+            service_item_name TEXT NOT NULL,
+            staff_id INTEGER NOT NULL,
+            split_percentage NUMERIC(5,2) NOT NULL DEFAULT 50.00,
+            revenue_amount NUMERIC(10,2) NOT NULL DEFAULT 0.00,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+          );
+        `
+        await sql`CREATE INDEX IF NOT EXISTS idx_commission_splits_invoice ON staff_commission_splits(invoice_id);`
+        await sql`CREATE INDEX IF NOT EXISTS idx_commission_splits_staff ON staff_commission_splits(staff_id, tenant_id);`
+
+        for (const item of serviceItems) {
+          if (item.staff_members && item.staff_members.length > 0) {
+            for (const member of item.staff_members) {
+              const amount = (item.price * item.quantity * member.split_percentage) / 100
+              await sql`
+                INSERT INTO staff_commission_splits (
+                  tenant_id, invoice_id, service_item_name, staff_id, 
+                  split_percentage, revenue_amount, created_at
+                ) VALUES (
+                  ${tenantId}, ${invoice.id}, ${item.name}, ${member.id},
+                  ${member.split_percentage}, ${amount}, NOW()
+                )
+              `
+            }
+          } else if (item.staff_id) {
+            await sql`
+              INSERT INTO staff_commission_splits (
+                tenant_id, invoice_id, service_item_name, staff_id, 
+                split_percentage, revenue_amount, created_at
+              ) VALUES (
+                ${tenantId}, ${invoice.id}, ${item.name}, ${item.staff_id},
+                100, ${item.price * item.quantity}, NOW()
+              )
+            `
+          }
+        }
+      } catch (err) {
+        console.error("Failed to insert staff commission splits:", err)
+      }
 
       const pointsRedeemed = Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, input.redeem_points || 0))
       const pointsEarned = Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, input.points_earned_client || 0))
