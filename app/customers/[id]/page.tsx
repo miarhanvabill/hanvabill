@@ -21,7 +21,18 @@ async function CustomerDetailsContent({ id }: { id: string }) {
       getActiveCustomerMembership(Number(id))
     ])
 
-    return <CustomerProfileDisplay customer={customer} bookings={bookings} invoices={invoices} activeMembership={activeMembership} />
+    // Serialize all data passing to the Client Component to avoid Date serialization errors
+    const serializedCustomer = JSON.parse(JSON.stringify(customer))
+    const serializedBookings = JSON.parse(JSON.stringify(bookings))
+    const serializedInvoices = JSON.parse(JSON.stringify(invoices))
+    const serializedMembership = activeMembership ? JSON.parse(JSON.stringify(activeMembership)) : null
+
+    return <CustomerProfileDisplay 
+      customer={serializedCustomer} 
+      bookings={serializedBookings} 
+      invoices={serializedInvoices} 
+      activeMembership={serializedMembership} 
+    />
   } catch (error) {
     console.error("Error loading customer details:", error)
     notFound()
