@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("API Error fetching analytics:", error)
     return NextResponse.json(
-      { error: "Failed to fetch analytics data" },
+      { error: "Failed to fetch analytics data", details: error instanceof Error ? error.message : String(error) },
       { status: 500 }
     )
   }

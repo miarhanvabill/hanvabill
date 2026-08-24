@@ -309,19 +309,19 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         SELECT
           COUNT(DISTINCT b.customer_id) FILTER (WHERE c.gender='male') AS male,
           COUNT(DISTINCT b.customer_id) FILTER (WHERE c.gender='female') AS female,
-          -- For others, include walk-ins (where customer_id is null) or gender is not male/female
-          COUNT(DISTINCT b.id) FILTER (WHERE b.customer_id IS NULL) + COUNT(DISTINCT b.customer_id) FILTER (WHERE c.gender NOT IN ('male','female') OR c.gender IS NULL) AS others
+          COUNT(DISTINCT b.customer_id) FILTER (WHERE c.gender NOT IN ('male','female') OR c.gender IS NULL) AS others_registered,
+          COUNT(b.id) FILTER (WHERE b.customer_id IS NULL) AS others_walkin
         FROM bookings b
         LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
         WHERE b.tenant_id = ${tenantId}
           AND b.booking_date >= ${startIso}
           AND b.status = 'completed'
       `
-      const demo = demoResult[0] || { male: 0, female: 0, others: 0 }
+      const demo = demoResult[0] || { male: 0, female: 0, others_registered: 0, others_walkin: 0 }
       const customerDemographics = {
-        male: Number.parseInt(demo.male),
-        female: Number.parseInt(demo.female),
-        others: Number.parseInt(demo.others),
+        male: Number.parseInt(demo.male || 0),
+        female: Number.parseInt(demo.female || 0),
+        others: Number.parseInt(demo.others_registered || 0) + Number.parseInt(demo.others_walkin || 0),
       }
 
       const spendingResult = await sql`
