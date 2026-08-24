@@ -1,718 +1,535 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, useMemo, memo } from "react"
-import { PageHeader } from "@/components/page-header"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { format, addDays, subDays, isToday, parseISO, isSameDay } from "date-fns"
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Loader2, RefreshCw, Clock, IndianRupee, Users, User, FileText, CheckCircle, XCircle } from "lucide-react"
+import { getCalendarBookings, updateBookingStatus, type CalendarBooking } from "@/app/actions/bookings"
+import { getStaff } from "@/app/actions/staff"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  ChevronLeft,
-  ChevronRight,
-  Calendar,
-  Clock,
-  Package,
-  MoreHorizontal,
-  RefreshCw,
-  Users,
-  AlertCircle,
-} from "lucide-react"
-import { getBookings, type Booking } from "@/app/actions/bookings"
-import { getStaff, type Staff } from "@/app/actions/staff"
-import { useRouter } from "next/navigation"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "@/components/ui/sheet"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
 import { toast } from "sonner"
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 
-interface StatsData {
-  pendingConfirmations: number
-  upcomingBookings: number
-  todaysBookings: number
-  lowStockItems: number
-}
+const START_HOUR = 8 // 8:00 AM
+const END_HOUR = 21 // 9:00 PM
+const SLOT_DURATION_MINS = 30
+const SLOT_WIDTH_PX = 60
+const HOUR_SLOTS = 2
 
-interface BookingWithDetails extends Booking {
-  customer_name?: string
-  service_name?: string
-  staff_name?: string
-}
+const TIME_SLOTS = Array.from({ length: (END_HOUR - START_HOUR) * HOUR_SLOTS + 1 }).map((_, i) => {
+  const hour = START_HOUR + Math.floor(i / HOUR_SLOTS)
+  const minute = (i % HOUR_SLOTS) * SLOT_DURATION_MINS
+  return { hour, minute, label: format(new Date(2000, 0, 1, hour, minute), "h:mm a") }
+})
 
-const BookingCard = memo(
-  ({
-    booking,
-    showDate = false,
-    onBookingClick,
-  }: {
-    booking: BookingWithDetails
-    showDate?: boolean
-    onBookingClick: (booking: BookingWithDetails) => void
-  }) => {
-    const formatTime = useCallback((time: string) => {
-      return new Date(`2000-01-01T${time}`).toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      })
-    }, [])
+export default function BookingCalendarPage() {
+  const [currentDate, setCurrentDate] = useState<Date>(new Date())
+  const [bookings, setBookings] = useState<CalendarBooking[]>([])
+  const [staffList, setStaffList] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [selectedStaffId, setSelectedStaffId] = useState<string>("all")
+  
+  const [selectedBooking, setSelectedBooking] = useState<CalendarBooking | null>(null)
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
 
-    return (
-      <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => onBookingClick(booking)}>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Badge
-                variant={
-                  booking.status === "confirmed"
-                    ? "default"
-                    : booking.status === "pending"
-                      ? "secondary"
-                      : booking.status === "completed"
-                        ? "outline"
-                        : "destructive"
-                }
-              >
-                {booking.status}
-              </Badge>
-              <span className="text-sm font-medium">#{booking.booking_number?.replace("#", "") || booking.id}</span>
-            </div>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-              <MoreHorizontal className="w-4 h-4" />
-            </Button>
-          </div>
-          <div className="space-y-1">
-            <div className="font-medium">{booking.customer_name || "Unknown Customer"}</div>
-            <div className="text-sm text-gray-600 flex items-center gap-2">
-              <Users className="w-3 h-3" />
-              {booking.staff_name}
-            </div>
-            <div className="text-sm text-gray-600 flex items-center gap-2">
-              <Clock className="w-3 h-3" />
-              {showDate && `${booking.booking_date} `}
-              {formatTime(booking.booking_time || "00:00")}
-            </div>
-            {booking.total_amount && <div className="text-sm font-medium text-green-600">₹{booking.total_amount}</div>}
-          </div>
-        </CardContent>
-      </Card>
-    )
-  },
-)
+  const [currentTimePos, setCurrentTimePos] = useState<number>(0)
 
-BookingCard.displayName = "BookingCard"
-
-export default function CalendarView() {
-  const [bookings, setBookings] = useState<BookingWithDetails[]>([])
-  const [staff, setStaff] = useState<Staff[]>([])
-  const [currentDate, setCurrentDate] = useState(new Date())
-  const [interval, setInterval] = useState("15-mins")
-  const [viewType, setViewType] = useState("timeline-day")
-  const [activeTab, setActiveTab] = useState("timeline")
-  const [autoRefresh, setAutoRefresh] = useState(true)
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
-  const [loading, setLoading] = useState(true)
-  const router = useRouter()
-
-  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const isLoadingRef = useRef(false)
-  const mountedRef = useRef(true)
-
-  const stats = useMemo<StatsData>(() => {
-    const today = new Date()
-    const todayStr = today.toISOString().split("T")[0]
-    const currentDateTime = new Date()
-
-    const pendingCount = bookings.filter((b) => b.status === "pending").length
-
-    const todayCount = bookings.filter((b) => {
-      const bookingDateStr = new Date(b.booking_date).toISOString().split("T")[0]
-      return bookingDateStr === todayStr
-    }).length
-
-    const upcomingCount = bookings.filter((b) => {
-      const bookingDateTime = new Date(`${b.booking_date}T${b.booking_time || "00:00"}`)
-      return bookingDateTime > currentDateTime && b.status !== "cancelled"
-    }).length
-
-    return {
-      pendingConfirmations: pendingCount,
-      upcomingBookings: upcomingCount,
-      todaysBookings: todayCount,
-      lowStockItems: 8, // Fixed value to prevent random changes
-    }
-  }, [bookings])
-
-  const loadData = useCallback(async (showToast = false) => {
-    if (isLoadingRef.current || !mountedRef.current) return
-
-    isLoadingRef.current = true
-    if (showToast) setLoading(true)
-
+  const fetchCalendarData = useCallback(async (date: Date, showRefreshing = false) => {
+    if (showRefreshing) setIsRefreshing(true)
+    else setIsLoading(true)
+    
     try {
-      const [bookingsData, staffData] = await Promise.all([getBookings(), getStaff()])
+      const dateStr = format(date, "yyyy-MM-dd")
+      const [bookingsData, staffData] = await Promise.all([
+        getCalendarBookings(dateStr),
+        getStaff()
+      ])
+      
+      setBookings(bookingsData)
+      setStaffList(staffData)
+    } catch (error) {
+      console.error("Error fetching calendar data:", error)
+      toast.error("Failed to load calendar data")
+    } finally {
+      setIsLoading(false)
+      setIsRefreshing(false)
+    }
+  }, [])
 
-      if (!mountedRef.current) return
+  useEffect(() => {
+    fetchCalendarData(currentDate)
+  }, [currentDate, fetchCalendarData])
 
-      console.log("[v0] Staff data:", staffData)
-      console.log("[v0] Bookings data:", bookingsData)
-      console.log(
-        "[v0] Looking for staff_id 5:",
-        staffData.find((s) => s.id === 5),
-      )
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchCalendarData(currentDate, true)
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [currentDate, fetchCalendarData])
 
-      const enhancedBookings = bookingsData.map((booking) => ({
-        ...booking,
-        staff_name: staffData.find((s) => s.id === booking.staff_id)?.name || booking.staff_name || "Unknown Staff",
-      }))
+  useEffect(() => {
+    const updateTimeIndicator = () => {
+      const now = new Date()
+      if (isSameDay(now, currentDate)) {
+        const hours = now.getHours()
+        const minutes = now.getMinutes()
+        if (hours >= START_HOUR && hours <= END_HOUR) {
+          const totalMinutes = (hours - START_HOUR) * 60 + minutes
+          const position = (totalMinutes / SLOT_DURATION_MINS) * SLOT_WIDTH_PX
+          setCurrentTimePos(position)
+        } else {
+          setCurrentTimePos(-1) // Hidden
+        }
+      } else {
+        setCurrentTimePos(-1)
+      }
+    }
+    
+    updateTimeIndicator()
+    const interval = setInterval(updateTimeIndicator, 60000)
+    return () => clearInterval(interval)
+  }, [currentDate])
 
-      console.log("[v0] Enhanced bookings:", enhancedBookings)
+  const handlePrevDay = () => setCurrentDate(prev => subDays(prev, 1))
+  const handleNextDay = () => setCurrentDate(prev => addDays(prev, 1))
+  const handleToday = () => setCurrentDate(new Date())
 
-      setBookings(enhancedBookings)
-      setStaff(staffData)
-      setLastUpdated(new Date())
-
-      if (showToast && mountedRef.current) {
-        toast.success("Calendar data refreshed")
+  const handleStatusUpdate = async (bookingId: number, newStatus: string) => {
+    try {
+      const res = await updateBookingStatus(bookingId, newStatus)
+      if (res.success) {
+        toast.success(res.message)
+        // Optimistic update
+        setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status: newStatus as any } : b))
+        if (selectedBooking && selectedBooking.id === bookingId) {
+          setSelectedBooking({ ...selectedBooking, status: newStatus as any })
+        }
+      } else {
+        toast.error(res.message)
       }
     } catch (error) {
-      console.error("Error loading data:", error)
-      if (showToast && mountedRef.current) {
-        toast.error("Failed to load calendar data")
-      }
-    } finally {
-      isLoadingRef.current = false
-      if (showToast && mountedRef.current) setLoading(false)
+      toast.error("Failed to update status")
     }
-  }, [])
-
-  const navigateDate = useCallback((direction: string) => {
-    setCurrentDate((prev) => {
-      const newDate = new Date(prev)
-      if (direction === "prev") {
-        newDate.setDate(prev.getDate() - 1)
-      } else if (direction === "next") {
-        newDate.setDate(prev.getDate() + 1)
-      }
-      return newDate
-    })
-  }, [])
-
-  const handleBookingClick = useCallback(
-    (booking: BookingWithDetails) => {
-      router.push(`/bookings/details/${booking.id}`)
-    },
-    [router],
-  )
-
-  const handleManualRefresh = useCallback(() => {
-    if (!isLoadingRef.current) {
-      loadData(true)
-    }
-  }, [loadData])
-
-  const toggleAutoRefresh = useCallback(() => {
-    setAutoRefresh((prev) => {
-      const newValue = !prev
-      toast.success(`Auto-refresh ${newValue ? "enabled" : "disabled"}`)
-      return newValue
-    })
-  }, [])
-
-  const handleTodayClick = useCallback(() => {
-    setCurrentDate(new Date())
-    toast.success("Navigated to today")
-  }, [])
-
-  const handleViewTypeChange = useCallback(
-    (type: string) => {
-      setViewType(type)
-      if (type === "timeline-month") {
-        toast.info("Timeline Month view - Coming soon!")
-      } else if (type === "schedule") {
-        router.push("/bookings")
-      }
-    },
-    [router],
-  )
-
-  const handleIntervalChange = useCallback((newInterval: string) => {
-    setInterval(newInterval)
-    toast.success(`Interval changed to ${newInterval.replace("-", " ")}`)
-  }, [])
-
-  const { todaysBookings, upcomingBookings, pendingBookings, allBookings } = useMemo(() => {
-    const todayStr = new Date().toISOString().split("T")[0]
-    const currentDateTime = new Date()
-
-    const today = bookings.filter((booking) => {
-      const bookingDateStr = new Date(booking.booking_date).toISOString().split("T")[0]
-      return bookingDateStr === todayStr
-    })
-
-    const upcoming = bookings
-      .filter((booking) => {
-        const bookingDateStr = new Date(booking.booking_date).toISOString().split("T")[0]
-        const bookingDateTime = new Date(`${booking.booking_date}T${booking.booking_time || "00:00"}`)
-        return (bookingDateStr > todayStr || bookingDateTime > currentDateTime) && booking.status !== "cancelled"
-      })
-      .slice(0, 10)
-
-    const pending = bookings.filter((booking) => booking.status === "pending")
-
-    const all = bookings.sort((a, b) => {
-      const dateA = new Date(`${a.booking_date}T${a.booking_time}`)
-      const dateB = new Date(`${b.booking_date}T${b.booking_time}`)
-      return dateB.getTime() - dateA.getTime()
-    })
-
-    return {
-      todaysBookings: today,
-      upcomingBookings: upcoming,
-      pendingBookings: pending,
-      allBookings: all,
-    }
-  }, [bookings])
-
-  const timeSlots = useMemo(() => {
-    const intervalMinutes = interval === "15-mins" ? 15 : interval === "30-mins" ? 30 : 60
-    const slotsPerHour = 60 / intervalMinutes
-    const totalSlots = 12 * slotsPerHour
-
-    return Array.from({ length: totalSlots }, (_, i) => {
-      const totalMinutes = i * intervalMinutes + 7 * 60
-      const hour = Math.floor(totalMinutes / 60)
-      const minute = totalMinutes % 60
-      return `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
-    })
-  }, [interval])
-
-  const getBookingForStaffAndTime = useCallback(
-    (staffId: number, timeSlot: string) => {
-      const currentDateStr = currentDate.toISOString().split("T")[0]
-
-      // Convert timeSlot to minutes for comparison
-      const [slotHour, slotMinute] = timeSlot.split(":").map(Number)
-      const slotMinutes = slotHour * 60 + slotMinute
-
-      // Calculate interval in minutes
-      const intervalMinutes = interval === "15-mins" ? 15 : interval === "30-mins" ? 30 : 60
-
-      return bookings.find((booking) => {
-        const bookingDateStr = new Date(booking.booking_date).toISOString().split("T")[0]
-
-        if (booking.staff_id !== staffId || bookingDateStr !== currentDateStr) {
-          return false
-        }
-
-        // Convert booking time to minutes
-        const bookingTime = booking.booking_time?.substring(0, 5)
-        if (!bookingTime) return false
-
-        const [bookingHour, bookingMinute] = bookingTime.split(":").map(Number)
-        const bookingMinutes = bookingHour * 60 + bookingMinute
-
-        // Check if booking falls within this time slot range
-        const isInRange = bookingMinutes >= slotMinutes && bookingMinutes < slotMinutes + intervalMinutes
-
-        if (booking.staff_id === 5) {
-          console.log("[v0] Checking booking for staff 5:", {
-            bookingTime,
-            bookingMinutes,
-            slotMinutes,
-            intervalMinutes,
-            isInRange,
-            timeSlot,
-            bookingDate: bookingDateStr,
-            currentDate: currentDateStr,
-          })
-        }
-
-        return isInRange
-      })
-    },
-    [bookings, currentDate, interval],
-  )
-
-  const getStatusColor = useCallback((status: string) => {
-    switch (status) {
-      case "completed":
-        return "bg-green-500"
-      case "pending":
-        return "bg-yellow-500"
-      case "confirmed":
-        return "bg-blue-500"
-      case "cancelled":
-        return "bg-red-500"
-      default:
-        return "bg-gray-500"
-    }
-  }, [])
-
-  const formatDate = useCallback((date: Date) => {
-    return date.toLocaleDateString("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    })
-  }, [])
-
-  useEffect(() => {
-    mountedRef.current = true
-    loadData(true)
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, [loadData])
-
-  useEffect(() => {
-    const today = new Date()
-    console.log("[v0] Current date set to:", today.toISOString().split("T")[0])
-    setCurrentDate(today)
-  }, [])
-
-  if (loading) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Loading calendar...</p>
-        </div>
-      </div>
-    )
   }
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "confirmed": return "bg-green-100 text-green-800 border-green-200"
+      case "completed": return "bg-blue-100 text-blue-800 border-blue-200"
+      case "cancelled": return "bg-red-100 text-red-800 border-red-200"
+      case "pending": return "bg-amber-100 text-amber-800 border-amber-200"
+      default: return "bg-gray-100 text-gray-800 border-gray-200"
+    }
+  }
+  
+  const getStatusBadgeVariant = (status: string) => {
+    switch (status) {
+      case "confirmed": return "default" // we will override colors manually or use tailwind
+      case "completed": return "secondary"
+      case "cancelled": return "destructive"
+      case "pending": return "outline"
+      default: return "default"
+    }
+  }
+
+  const filteredStaff = useMemo(() => {
+    return selectedStaffId === "all" ? staffList : staffList.filter(s => s.id.toString() === selectedStaffId)
+  }, [staffList, selectedStaffId])
+
+  const stats = useMemo(() => {
+    const todayBookings = bookings.length
+    const confirmed = bookings.filter(b => b.status === "confirmed").length
+    const pending = bookings.filter(b => b.status === "pending").length
+    const revenue = bookings
+      .filter(b => b.status === "completed" || b.status === "confirmed")
+      .reduce((sum, b) => sum + Number(b.total_amount || 0), 0)
+      
+    return { todayBookings, confirmed, pending, revenue }
+  }, [bookings])
+
   return (
-    <div className="flex-1 flex flex-col">
-      <PageHeader
-        title="Bookings Calendar"
-        subtitle="Real-time view of your salon's appointments, staff schedules, and booking management."
-      />
+    <div className="flex flex-col h-[calc(100vh-4rem)] space-y-4 p-4 sm:p-6 overflow-hidden">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Booking Calendar</h1>
+          <p className="text-muted-foreground">Manage your daily appointments and staff schedules.</p>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="All Staff" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Staff</SelectItem>
+              {staffList.map(staff => (
+                <SelectItem key={staff.id} value={staff.id.toString()}>{staff.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-      <main className="flex-1 p-6 bg-gray-50">
-        <div className="max-w-7xl mx-auto space-y-6">
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <AlertCircle className="w-4 h-4" />
-                  <span className="text-sm font-medium">Pending Confirmations</span>
-                </div>
-                <div className="text-2xl font-bold text-yellow-600">{stats.pendingConfirmations}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <Clock className="w-4 h-4" />
-                  <span className="text-sm font-medium">Upcoming Bookings</span>
-                </div>
-                <div className="text-2xl font-bold text-blue-600">{stats.upcomingBookings}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <Calendar className="w-4 h-4" />
-                  <span className="text-sm font-medium">Today's Bookings</span>
-                </div>
-                <div className="text-2xl font-bold text-green-600">{stats.todaysBookings}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <Package className="w-4 h-4" />
-                  <span className="text-sm font-medium">Low Stock Items</span>
-                </div>
-                <div className="text-2xl font-bold text-red-600">{stats.lowStockItems}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-4 text-center">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <Users className="w-4 h-4" />
-                  <span className="text-sm font-medium">Total Staff</span>
-                </div>
-                <div className="text-2xl font-bold text-purple-600">{staff.length}</div>
-              </CardContent>
-            </Card>
+          <div className="flex items-center rounded-md border p-1 bg-background">
+            <Button variant="ghost" size="icon" onClick={handlePrevDay}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" className="w-[160px] font-medium flex items-center justify-center gap-2">
+                  <CalendarIcon className="h-4 w-4" />
+                  {format(currentDate, "EEE, MMM d, yyyy")}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="center">
+                <Calendar
+                  mode="single"
+                  selected={currentDate}
+                  onSelect={(date) => date && setCurrentDate(date)}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            <Button variant="ghost" size="icon" onClick={handleNextDay}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
 
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <Button variant="outline" size="sm" onClick={handleManualRefresh} disabled={loading}>
-                    <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-                    Refresh
-                  </Button>
-                  <Button variant={autoRefresh ? "default" : "outline"} size="sm" onClick={toggleAutoRefresh}>
-                    Auto-refresh {autoRefresh ? "ON" : "OFF"}
-                  </Button>
-                  <span className="text-sm text-gray-600">Last updated: {lastUpdated.toLocaleTimeString()}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <Button variant="outline" onClick={handleToday} disabled={isToday(currentDate)}>
+            Today
+          </Button>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="timeline">Timeline</TabsTrigger>
-              <TabsTrigger value="today">Today ({stats.todaysBookings})</TabsTrigger>
-              <TabsTrigger value="upcoming">Upcoming ({stats.upcomingBookings})</TabsTrigger>
-              <TabsTrigger value="pending">Pending ({stats.pendingConfirmations})</TabsTrigger>
-              <TabsTrigger value="all">All Bookings</TabsTrigger>
-            </TabsList>
+          <Button 
+            variant="outline" 
+            size="icon" 
+            onClick={() => fetchCalendarData(currentDate, true)}
+            disabled={isLoading || isRefreshing}
+          >
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+      </div>
 
-            <TabsContent value="timeline" className="space-y-4">
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <Button variant="outline" size="sm" onClick={() => navigateDate("prev")}>
-                        <ChevronLeft className="w-4 h-4" />
-                      </Button>
-                      <div className="text-lg font-semibold min-w-[200px] text-center">{formatDate(currentDate)}</div>
-                      <Button variant="outline" size="sm" onClick={() => navigateDate("next")}>
-                        <ChevronRight className="w-4 h-4" />
-                      </Button>
-                    </div>
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-primary/10 rounded-full">
+              <CalendarIcon className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Total Bookings</p>
+              <p className="text-2xl font-bold">{stats.todayBookings}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-green-100 rounded-full">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Confirmed</p>
+              <p className="text-2xl font-bold">{stats.confirmed}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-amber-100 rounded-full">
+              <Clock className="h-5 w-5 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Pending</p>
+              <p className="text-2xl font-bold">{stats.pending}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4 flex items-center gap-4">
+            <div className="p-3 bg-blue-100 rounded-full">
+              <IndianRupee className="h-5 w-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Expected Revenue</p>
+              <p className="text-2xl font-bold">₹{stats.revenue.toLocaleString()}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">Interval:</span>
-                        <Select value={interval} onValueChange={handleIntervalChange}>
-                          <SelectTrigger className="w-24">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="15-mins">15 Mins</SelectItem>
-                            <SelectItem value="30-mins">30 Mins</SelectItem>
-                            <SelectItem value="60-mins">60 Mins</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={handleTodayClick}>
-                          Today
-                        </Button>
-                        <Button
-                          variant={viewType === "timeline-day" ? "default" : "outline"}
-                          size="sm"
-                          className={viewType === "timeline-day" ? "bg-red-500 text-white" : ""}
-                          onClick={() => handleViewTypeChange("timeline-day")}
-                        >
-                          Timeline Day
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleViewTypeChange("timeline-month")}>
-                          Timeline Month
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleViewTypeChange("schedule")}>
-                          Schedule
-                        </Button>
-                      </div>
-                    </div>
+      {/* Main Calendar View */}
+      <Card className="flex-1 flex flex-col min-h-0 overflow-hidden border">
+        {isLoading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : filteredStaff.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center">
+            <Users className="h-12 w-12 mb-4 opacity-20" />
+            <p className="text-lg font-medium">No staff available</p>
+            <p className="text-sm">Please add staff members or adjust your filters.</p>
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col overflow-hidden relative">
+            <ScrollArea className="flex-1 w-full h-full">
+              <div className="min-w-max flex">
+                {/* Left Staff Column (Sticky) */}
+                <div className="sticky left-0 z-20 bg-background border-r w-[200px] flex-shrink-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                  {/* Empty top left corner */}
+                  <div className="h-[60px] border-b flex items-center justify-center bg-muted/30">
+                    <span className="text-xs font-medium text-muted-foreground">Staff \ Time</span>
                   </div>
-                </CardContent>
-              </Card>
-
-              {/* Calendar Grid */}
-              <Card>
-                <CardContent className="p-0">
-                  <div className="overflow-x-auto">
-                    <div className="min-w-[1200px]">
-                      {/* Header with time slots */}
-                      <div className={`grid grid-cols-[200px_repeat(${timeSlots.length},1fr)] border-b bg-gray-50`}>
-                        <div className="p-3 font-medium border-r">Staff</div>
-                        {timeSlots.map((time, index) => {
-                          const showTime =
-                            interval === "15-mins" ? index % 4 === 0 : interval === "30-mins" ? index % 2 === 0 : true
-                          return (
-                            <div key={time} className="p-1 text-xs text-center border-r">
-                              {showTime ? time : ""}
-                            </div>
-                          )
-                        })}
+                  
+                  {/* Staff Rows */}
+                  {filteredStaff.map((staff) => (
+                    <div key={staff.id} className="h-[80px] border-b flex items-center px-4 gap-3 bg-background">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={staff.image_url} alt={staff.name} />
+                        <AvatarFallback>{staff.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div className="truncate">
+                        <p className="font-medium text-sm truncate">{staff.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{staff.role || 'Stylist'}</p>
                       </div>
+                    </div>
+                  ))}
+                </div>
 
-                      {/* Staff rows */}
-                      {staff.map((staffMember) => (
-                        <div
-                          key={staffMember.id}
-                          className={`grid grid-cols-[200px_repeat(${timeSlots.length},1fr)] border-b min-h-[80px]`}
-                        >
-                          {/* Staff info */}
-                          <div className="p-3 border-r bg-white flex items-center">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center">
-                                <span className="text-sm font-medium text-orange-600">
-                                  {staffMember.name.charAt(0)}
-                                </span>
-                              </div>
-                              <div>
-                                <div className="font-medium">{staffMember.name}</div>
-                                <div className="text-xs text-gray-500">{staffMember.role || "Staff"}</div>
-                              </div>
-                            </div>
-                          </div>
+                {/* Grid Area */}
+                <div className="flex flex-col relative">
+                  {/* Time Header Row */}
+                  <div className="h-[60px] border-b flex bg-muted/30 sticky top-0 z-10">
+                    {TIME_SLOTS.map((slot, i) => (
+                      <div 
+                        key={i} 
+                        className="flex-shrink-0 border-r flex items-center justify-center relative"
+                        style={{ width: `${SLOT_WIDTH_PX}px` }}
+                      >
+                        {slot.minute === 0 && (
+                          <span className="text-xs font-medium text-muted-foreground absolute -left-1/2 w-full text-center">
+                            {format(new Date(2000, 0, 1, slot.hour, 0), "ha")}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
 
-                          {/* Time slots */}
-                          {timeSlots.map((timeSlot) => {
-                            const booking = getBookingForStaffAndTime(staffMember.id, timeSlot)
+                  {/* Staff Grid Rows */}
+                  <div className="relative">
+                    {/* Current Time Indicator */}
+                    {currentTimePos >= 0 && (
+                      <div 
+                        className="absolute top-0 bottom-0 w-[2px] bg-red-500 z-10 pointer-events-none"
+                        style={{ left: `${currentTimePos}px` }}
+                      >
+                        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold shadow-md">
+                          NOW
+                        </div>
+                      </div>
+                    )}
+
+                    {filteredStaff.map((staff) => {
+                      const staffBookings = bookings.filter(b => b.staff_id === staff.id)
+                      
+                      return (
+                        <div key={staff.id} className="h-[80px] border-b flex relative">
+                          {/* Empty Grid Cells */}
+                          {TIME_SLOTS.map((_, i) => (
+                            <div 
+                              key={i} 
+                              className="flex-shrink-0 border-r border-dashed border-gray-200 h-full hover:bg-muted/50 transition-colors"
+                              style={{ width: `${SLOT_WIDTH_PX}px` }}
+                            />
+                          ))}
+
+                          {/* Booking Blocks */}
+                          {staffBookings.map((booking) => {
+                            // Parse booking time
+                            const [hours, minutes] = booking.booking_time.split(':').map(Number)
+                            
+                            // Check if within visible bounds
+                            if (hours < START_HOUR || (hours >= END_HOUR && minutes > 0)) {
+                              return null // Outside visible calendar
+                            }
+                            
+                            const startOffsetMinutes = (hours - START_HOUR) * 60 + minutes
+                            const leftPos = (startOffsetMinutes / SLOT_DURATION_MINS) * SLOT_WIDTH_PX
+                            const durationMins = booking.duration_minutes || 60 // fallback
+                            let width = (durationMins / SLOT_DURATION_MINS) * SLOT_WIDTH_PX
+                            
+                            // Adjust width if it overflows past END_HOUR
+                            const maxMins = (END_HOUR - START_HOUR) * 60
+                            if (startOffsetMinutes + durationMins > maxMins) {
+                                width = ((maxMins - startOffsetMinutes) / SLOT_DURATION_MINS) * SLOT_WIDTH_PX
+                            }
+
+                            const colorClasses = getStatusColor(booking.status)
+
                             return (
-                              <div key={timeSlot} className="border-r border-gray-200 relative min-h-[60px]">
-                                {booking && (
-                                  <div
-                                    className={`absolute inset-1 ${getStatusColor(booking.status)} rounded text-white text-xs p-1 overflow-hidden cursor-pointer hover:opacity-90 transition-opacity`}
-                                    onClick={() => handleBookingClick(booking)}
-                                  >
-                                    <div className="font-medium">
-                                      #{booking.booking_number?.replace("#", "") || booking.id}
-                                    </div>
-                                    <div className="text-xs opacity-90">{booking.customer_name}</div>
-                                    <div className="text-xs opacity-75 capitalize">{booking.status}</div>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="absolute top-0 right-0 h-4 w-4 p-0 text-white hover:bg-white/20"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        toast.info("Booking options - Coming soon!")
+                              <TooltipProvider key={booking.id}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div 
+                                      className={`absolute top-2 bottom-2 rounded-md border shadow-sm p-2 overflow-hidden cursor-pointer hover:shadow-md transition-all ${colorClasses}`}
+                                      style={{ left: `${leftPos}px`, width: `${width - 4}px` }}
+                                      onClick={() => {
+                                        setSelectedBooking(booking)
+                                        setIsDrawerOpen(true)
                                       }}
                                     >
-                                      <MoreHorizontal className="w-3 h-3" />
-                                    </Button>
-                                  </div>
-                                )}
-                              </div>
+                                      <div className="flex flex-col h-full justify-start">
+                                        <div className="font-semibold text-xs truncate">
+                                          {booking.customer_name}
+                                        </div>
+                                        {width > 80 && (
+                                          <div className="text-[10px] truncate opacity-90 mt-0.5">
+                                            {booking.service_name}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <div className="space-y-1 text-sm">
+                                      <p className="font-semibold">{booking.customer_name}</p>
+                                      <p>{booking.service_name}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {format(parseISO(`2000-01-01T${booking.booking_time}`), "h:mm a")} ({durationMins} mins)
+                                      </p>
+                                      <Badge variant="outline" className="mt-1 capitalize">
+                                        {booking.status}
+                                      </Badge>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             )
                           })}
                         </div>
-                      ))}
-                    </div>
+                      )
+                    })}
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
+                </div>
+              </div>
+              <ScrollBar orientation="horizontal" />
+            </ScrollArea>
+          </div>
+        )}
+      </Card>
 
-            <TabsContent value="today" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calendar className="w-5 h-5" />
-                    Today's Bookings ({todaysBookings.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {todaysBookings.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">No bookings scheduled for today</div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {todaysBookings.map((booking) => (
-                        <BookingCard key={booking.id} booking={booking} onBookingClick={handleBookingClick} />
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
+      {/* Booking Quick View Drawer */}
+      <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+          {selectedBooking && (
+            <>
+              <SheetHeader className="mb-6">
+                <div className="flex items-center justify-between">
+                  <SheetTitle>Booking Details</SheetTitle>
+                  <Badge className={`${getStatusColor(selectedBooking.status)} capitalize`}>
+                    {selectedBooking.status}
+                  </Badge>
+                </div>
+                <SheetDescription>
+                  {selectedBooking.booking_number} • Created {format(parseISO(selectedBooking.created_at), "MMM d, yyyy")}
+                </SheetDescription>
+              </SheetHeader>
 
-            <TabsContent value="upcoming" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Clock className="w-5 h-5" />
-                    Upcoming Bookings ({upcomingBookings.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {upcomingBookings.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">No upcoming bookings</div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {upcomingBookings.map((booking) => (
-                        <BookingCard
-                          key={booking.id}
-                          booking={booking}
-                          showDate={true}
-                          onBookingClick={handleBookingClick}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
+              <div className="space-y-6">
+                {/* Customer Info */}
+                <div className="flex items-start gap-4">
+                  <div className="bg-muted p-3 rounded-full">
+                    <User className="h-6 w-6 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-lg">{selectedBooking.customer_name}</h3>
+                    <Button variant="link" className="p-0 h-auto text-muted-foreground">View Customer Profile</Button>
+                  </div>
+                </div>
 
-            <TabsContent value="pending" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5" />
-                    Pending Bookings ({pendingBookings.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {pendingBookings.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">No pending bookings</div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {pendingBookings.map((booking) => (
-                        <BookingCard
-                          key={booking.id}
-                          booking={booking}
-                          showDate={true}
-                          onBookingClick={handleBookingClick}
-                        />
-                      ))}
+                {/* Service & Time Info */}
+                <Card>
+                  <CardContent className="p-4 space-y-4">
+                    <div className="flex items-start gap-3">
+                      <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
+                      <div>
+                        <p className="font-medium">Services</p>
+                        <p className="text-sm text-muted-foreground">{selectedBooking.service_name}</p>
+                      </div>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
+                    
+                    <div className="flex items-start gap-3">
+                      <Users className="h-5 w-5 text-muted-foreground mt-0.5" />
+                      <div>
+                        <p className="font-medium">Staff Member</p>
+                        <p className="text-sm text-muted-foreground">{selectedBooking.staff_name || "Unassigned"}</p>
+                      </div>
+                    </div>
 
-            <TabsContent value="all" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="w-5 h-5" />
-                    All Bookings ({allBookings.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {allBookings.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">No bookings found</div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {allBookings.slice(0, 20).map((booking) => (
-                        <BookingCard
-                          key={booking.id}
-                          booking={booking}
-                          showDate={true}
-                          onBookingClick={handleBookingClick}
-                        />
-                      ))}
+                    <div className="flex items-start gap-3">
+                      <Clock className="h-5 w-5 text-muted-foreground mt-0.5" />
+                      <div>
+                        <p className="font-medium">Date & Time</p>
+                        <p className="text-sm text-muted-foreground">
+                          {format(parseISO(selectedBooking.booking_date), "EEEE, MMMM d, yyyy")}<br/>
+                          {format(parseISO(`2000-01-01T${selectedBooking.booking_time}`), "h:mm a")} ({selectedBooking.duration_minutes} mins)
+                        </p>
+                      </div>
                     </div>
-                  )}
-                  {allBookings.length > 20 && (
-                    <div className="text-center mt-4">
-                      <Button variant="outline" onClick={() => toast.info("Load more functionality - Coming soon!")}>
-                        Load More Bookings
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </div>
-      </main>
+                  </CardContent>
+                </Card>
+
+                {/* Financials */}
+                <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <IndianRupee className="h-5 w-5 text-muted-foreground" />
+                    <span className="font-medium">Total Amount</span>
+                  </div>
+                  <span className="text-xl font-bold">₹{Number(selectedBooking.total_amount).toLocaleString()}</span>
+                </div>
+
+                {/* Notes */}
+                {selectedBooking.notes && (
+                  <div>
+                    <h4 className="font-medium mb-2 text-sm">Notes</h4>
+                    <p className="text-sm bg-muted/30 p-3 rounded-md border text-muted-foreground">
+                      {selectedBooking.notes}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <SheetFooter className="mt-8 flex-col sm:flex-col gap-2">
+                {selectedBooking.status === "pending" && (
+                  <Button className="w-full" onClick={() => handleStatusUpdate(selectedBooking.id, "confirmed")}>
+                    Confirm Booking
+                  </Button>
+                )}
+                
+                {(selectedBooking.status === "confirmed" || selectedBooking.status === "pending") && (
+                  <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => handleStatusUpdate(selectedBooking.id, "completed")}>
+                    Mark as Completed
+                  </Button>
+                )}
+
+                {selectedBooking.status !== "cancelled" && selectedBooking.status !== "completed" && (
+                  <Button variant="destructive" className="w-full" onClick={() => handleStatusUpdate(selectedBooking.id, "cancelled")}>
+                    Cancel Booking
+                  </Button>
+                )}
+              </SheetFooter>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

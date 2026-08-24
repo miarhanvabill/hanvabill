@@ -885,3 +885,45 @@ export async function getBookingsByStaffId(staffId: string): Promise<Booking[]> 
     }
   })
 }
+
+export interface CalendarBooking extends Booking {
+  duration_minutes: number
+}
+
+export async function getCalendarBookings(date: string): Promise<CalendarBooking[]> {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const bookings = await sql`
+        SELECT 
+          b.id, b.booking_number, b.customer_id, b.staff_id, b.booking_date, b.booking_time,
+          b.total_amount, b.status, b.notes, b.created_at,
+          c.full_name as customer_name,
+          st.name as staff_name,
+          STRING_AGG(s.name, ', ') AS service_name,
+          COALESCE(SUM(sv.duration_minutes), 60) AS duration_minutes
+        FROM bookings b
+        LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+        LEFT JOIN staff st ON b.staff_id = st.id AND st.tenant_id = ${tenantId}
+        JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
+        LEFT JOIN services sv ON bs.service_id = sv.id AND sv.tenant_id = ${tenantId}
+        LEFT JOIN (SELECT * FROM services WHERE tenant_id = ${tenantId}) s ON bs.service_id = s.id
+        WHERE b.booking_date = ${date} AND b.tenant_id = ${tenantId}
+        GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, b.booking_date, b.booking_time, b.total_amount, b.status, b.notes, b.created_at, c.full_name, st.name
+        ORDER BY b.booking_time ASC
+      `
+      
+      // Need to cast the results correctly to match types
+      return JSON.parse(JSON.stringify(bookings.map((booking: any) => ({
+        ...booking,
+        id: Number(booking.id),
+        customer_id: Number(booking.customer_id),
+        staff_id: Number(booking.staff_id),
+        total_amount: Number(booking.total_amount),
+        duration_minutes: Number(booking.duration_minutes)
+      }))))
+    } catch (error) {
+      console.error("Error fetching calendar bookings:", error)
+      return []
+    }
+  })
+}
