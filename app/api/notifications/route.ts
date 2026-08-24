@@ -20,21 +20,21 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(result[0] || { total: 0, sent: 0, failed: 0, skipped: 0 })
       }
 
-      // Read from whatsapp_automation_logs — where actual messages are stored
+      // UNION: WA automation logs + recent booking events
       const rows = await sql`
         SELECT 
           wal.id,
           wal.event_type as type,
           COALESCE(
             CASE 
-              WHEN wal.event_type = 'invoice_receipt' THEN 'Invoice sent to ' || COALESCE(c.full_name, wal.recipient_phone)
-              WHEN wal.event_type = 'loyalty_update' THEN 'Loyalty points updated for ' || COALESCE(c.full_name, wal.recipient_phone)
-              WHEN wal.event_type = 'booking_created' THEN 'Booking confirmation sent to ' || COALESCE(c.full_name, wal.recipient_phone)
-              WHEN wal.event_type = 'appointment_reminder_24h' THEN '24h reminder sent to ' || COALESCE(c.full_name, wal.recipient_phone)
-              WHEN wal.event_type = 'appointment_reminder_2h' THEN '2h reminder sent to ' || COALESCE(c.full_name, wal.recipient_phone)
-              WHEN wal.event_type = 'birthday_greeting' THEN 'Birthday wish sent to ' || COALESCE(c.full_name, wal.recipient_phone)
-              WHEN wal.event_type = 'anniversary_greeting' THEN 'Anniversary wish sent to ' || COALESCE(c.full_name, wal.recipient_phone)
-              WHEN wal.event_type = 'we_miss_you' THEN 'Win-back message sent to ' || COALESCE(c.full_name, wal.recipient_phone)
+              WHEN wal.event_type = 'invoice_receipt' THEN '🧾 Invoice sent to ' || COALESCE(c.full_name, wal.recipient_phone)
+              WHEN wal.event_type = 'loyalty_update' THEN '⭐ Loyalty points updated for ' || COALESCE(c.full_name, wal.recipient_phone)
+              WHEN wal.event_type = 'booking_created' THEN '📅 Booking confirmation sent to ' || COALESCE(c.full_name, wal.recipient_phone)
+              WHEN wal.event_type = 'appointment_reminder_24h' THEN '⏰ 24h reminder sent to ' || COALESCE(c.full_name, wal.recipient_phone)
+              WHEN wal.event_type = 'appointment_reminder_2h' THEN '⏰ 2h reminder sent to ' || COALESCE(c.full_name, wal.recipient_phone)
+              WHEN wal.event_type = 'birthday_greeting' THEN '🎂 Birthday wish sent to ' || COALESCE(c.full_name, wal.recipient_phone)
+              WHEN wal.event_type = 'anniversary_greeting' THEN '🎉 Anniversary wish sent to ' || COALESCE(c.full_name, wal.recipient_phone)
+              WHEN wal.event_type = 'we_miss_you' THEN '💌 Win-back message sent to ' || COALESCE(c.full_name, wal.recipient_phone)
               ELSE wal.event_type || ' sent to ' || COALESCE(c.full_name, wal.recipient_phone)
             END,
             wal.message_content
@@ -47,7 +47,36 @@ export async function GET(request: NextRequest) {
         FROM whatsapp_automation_logs wal
         LEFT JOIN customers c ON wal.customer_id = c.id AND c.tenant_id = ${tenantId}
         WHERE wal.tenant_id = ${tenantId}::text
-        ORDER BY wal.sent_at DESC
+
+        UNION ALL
+
+        SELECT
+          b.id,
+          CASE b.status
+            WHEN 'pending'   THEN 'appointment_pending'
+            WHEN 'confirmed' THEN 'appointment_confirmed'
+            WHEN 'cancelled' THEN 'appointment_cancelled'
+            WHEN 'completed' THEN 'appointment_completed'
+            ELSE 'appointment'
+          END as type,
+          CASE b.status
+            WHEN 'pending'   THEN '📅 New booking from ' || COALESCE(c.full_name, 'Walk-in') || ' awaiting confirmation'
+            WHEN 'confirmed' THEN '✅ Confirmed: ' || COALESCE(c.full_name, 'Walk-in') || ' on ' || TO_CHAR(b.booking_date::date, 'DD Mon')
+            WHEN 'cancelled' THEN '❌ Cancelled: appointment for ' || COALESCE(c.full_name, 'Walk-in')
+            WHEN 'completed' THEN '✔ Completed: appointment for ' || COALESCE(c.full_name, 'Walk-in')
+            ELSE 'Appointment for ' || COALESCE(c.full_name, 'Walk-in')
+          END as message,
+          b.status,
+          false as is_read,
+          b.created_at,
+          c.full_name as customer_name,
+          c.phone_number as recipient_phone
+        FROM bookings b
+        LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+        WHERE b.tenant_id = ${tenantId}
+          AND b.created_at >= NOW() - INTERVAL '7 days'
+
+        ORDER BY created_at DESC
         LIMIT 20
       `
 
