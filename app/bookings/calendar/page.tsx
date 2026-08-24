@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { format, addDays, subDays, isToday, parseISO, isSameDay } from "date-fns"
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Loader2, RefreshCw, Clock, IndianRupee, Users, User, FileText, CheckCircle, XCircle } from "lucide-react"
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Loader2, RefreshCw, Clock, IndianRupee, Users, User, Package, FileText, CheckCircle, XCircle } from "lucide-react"
 import { getCalendarBookings, updateBookingStatus, type CalendarBooking } from "@/app/actions/bookings"
 import { getStaff } from "@/app/actions/staff"
 import { Button } from "@/components/ui/button"
