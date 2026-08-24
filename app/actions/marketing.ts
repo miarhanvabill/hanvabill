@@ -39,7 +39,11 @@ export async function getMarketingCampaigns() {
         WHERE tenant_id = ${tenantId}
         ORDER BY created_at DESC
       `
-      return campaigns as Campaign[]
+      return campaigns.map(c => ({
+        ...c,
+        revenue: Number.parseFloat(c.revenue || 0),
+        budget: Number.parseFloat(c.budget || 0),
+      })) as Campaign[]
     } catch (error) {
       console.error("Error fetching campaigns:", error)
       return [
