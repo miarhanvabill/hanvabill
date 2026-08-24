@@ -28,6 +28,7 @@ import {
 } from "lucide-react"
 import { useState, useEffect, useCallback, useRef } from "react"
 import type { AnalyticsData } from "@/app/actions/analytics"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts"
 
 interface ConnectionStatus {
   isOnline: boolean
@@ -430,12 +431,40 @@ export default function AnalyticsPage() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="h-64 flex items-center justify-center bg-gray-50 rounded-lg">
-                      <div className="text-center">
-                        <BarChart3 className="w-12 h-12 opacity-50 mx-auto" />
-                        <p className="mt-2 text-gray-500">Revenue trend chart</p>
-                        <p className="text-xs text-gray-400">Chart integration available</p>
-                      </div>
+                    <div className="h-[300px] w-full pt-4">
+                      {analytics?.revenueTrend && analytics.revenueTrend.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={analytics.revenueTrend}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis 
+                              dataKey="date" 
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fill: '#6b7280', fontSize: 12 }}
+                              dy={10}
+                            />
+                            <YAxis 
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fill: '#6b7280', fontSize: 12 }}
+                              tickFormatter={(value) => `₹${value}`}
+                            />
+                            <RechartsTooltip 
+                              cursor={{ fill: '#f3f4f6' }}
+                              contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                              formatter={(value: number) => [`₹${value.toLocaleString()}`, 'Revenue']}
+                            />
+                            <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-full flex items-center justify-center bg-gray-50 rounded-lg">
+                          <div className="text-center">
+                            <BarChart3 className="w-12 h-12 opacity-50 mx-auto" />
+                            <p className="mt-2 text-gray-500">No revenue data available</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

@@ -46,6 +46,10 @@ export interface AnalyticsData {
     name: string
     utilization: number
   }>
+  revenueTrend: Array<{
+    date: string
+    revenue: number
+  }>
 }
 
 export async function getBusinessAnalytics(dateRange: string): Promise<AnalyticsData> {
@@ -83,6 +87,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
       topServices: [],
       staffPerformance: [],
       staffUtilization: [],
+      revenueTrend: [],
     }
 
     try {
@@ -344,6 +349,26 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         utilization: Number.parseFloat(u.utilization) || 0,
       }))
 
+      // 12. Revenue Trend
+      const trendResult = await sql`
+        SELECT 
+          TO_CHAR(booking_date::date, 'DD Mon') as date,
+          booking_date::date as full_date,
+          COALESCE(SUM(total_amount), 0) as revenue
+        FROM bookings
+        WHERE tenant_id = ${tenantId}
+          AND booking_date >= ${startIso}
+          AND booking_date <= ${endIso}
+          AND status='completed'
+        GROUP BY booking_date::date, TO_CHAR(booking_date::date, 'DD Mon')
+        ORDER BY full_date ASC
+      `
+      const trendRes = Array.isArray(trendResult) ? trendResult : []
+      const revenueTrend = trendRes.map((t) => ({
+        date: t.date,
+        revenue: Number.parseFloat(t.revenue) || 0,
+      }))
+
       return {
         totalRevenue,
         revenueGrowth,
@@ -362,6 +387,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         topServices,
         staffPerformance,
         staffUtilization,
+        revenueTrend,
       }
     } catch (error) {
       console.error("Error fetching analytics:", error)
