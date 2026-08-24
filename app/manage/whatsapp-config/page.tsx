@@ -140,7 +140,7 @@ export default function WhatsAppConfigPage() {
           userid: settings.whatsapp?.userid || "",
           password: settings.whatsapp?.password || "",
           wabaNumber: settings.whatsapp?.wabaNumber || "",
-          salonName: settings.name || "Hanva Luxury Salon",
+          salonName: settings.profile?.salonName || "Hanva Luxury Salon",
         })
 
         if (settings.whatsapp?.userid && settings.whatsapp?.wabaNumber) {
@@ -170,6 +170,11 @@ export default function WhatsAppConfigPage() {
         userid: gatewayData.userid,
         password: gatewayData.password,
         wabaNumber: gatewayData.wabaNumber,
+      })
+      
+      // Also save the salonName to profile so templates pick it up
+      await updateBusinessSettings("profile", {
+        salonName: gatewayData.salonName,
       })
 
       if (result.success) {

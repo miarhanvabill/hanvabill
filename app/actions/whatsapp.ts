@@ -129,7 +129,9 @@ export async function getWhatsAppMessages(phoneNumber?: string): Promise<WhatsAp
           direction: m.direction || "outbound",
           status: m.status || "sent",
           trigger_type: m.trigger_type,
-          created_at: m.created_at ? new Date(m.created_at).toISOString() : new Date().toISOString(),
+          created_at: m.created_at 
+            ? new Date(new Date(m.created_at).getTime() - (5.5 * 60 * 60 * 1000)).toISOString()
+            : new Date().toISOString(),
         }))
       }
 

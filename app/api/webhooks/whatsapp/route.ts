@@ -89,8 +89,11 @@ export async function POST(req: Request) {
       // Delivery Report — update message status
       try {
         if (payload.msgId) {
-          const newStatus = ['sent','delivered','read','failed'].includes(payload.status?.toLowerCase())
-            ? payload.status.toLowerCase()
+          let incomingStatus = (payload.status || "").toLowerCase();
+          if (incomingStatus === "seen") incomingStatus = "read";
+          
+          const newStatus = ['sent','delivered','read','failed'].includes(incomingStatus)
+            ? incomingStatus
             : 'delivered';
           await sql`
             UPDATE whatsapp_messages 
