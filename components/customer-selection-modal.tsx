@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { Search, Plus, User, Phone, Mail } from "lucide-react"
-import { getCustomers, createCustomer, type Customer } from "@/app/actions/customers"
+import { getCustomers, createCustomerData, getOrCreateWalkInCustomer, type Customer } from "@/app/actions/customers"
 
 interface CustomerSelectionModalProps {
   isOpen: boolean
@@ -97,7 +97,7 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
     setCreateLoading(true)
 
     try {
-      const customer = await createCustomer(newCustomer)
+      const customer = await createCustomerData(newCustomer)
       setCustomers([customer, ...customers])
       setNewCustomer({
         full_name: "",
@@ -113,6 +113,18 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
       console.error("Error creating customer:", error)
     } finally {
       setCreateLoading(false)
+    }
+  }
+
+  const handleWalkIn = async () => {
+    setLoading(true)
+    try {
+      const walkInCustomer = await getOrCreateWalkInCustomer()
+      onSelect(walkInCustomer)
+    } catch (error) {
+      console.error("Error setting Walk In customer:", error)
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -156,10 +168,16 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
               </div>
 
               {/* Create New Customer Button */}
-              <Button onClick={() => setShowCreateForm(true)} className="w-full" variant="outline">
-                <Plus className="h-4 w-4 mr-2" />
-                Create New Customer
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={handleWalkIn} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" variant="default" disabled={loading}>
+                  <User className="h-4 w-4 mr-2" />
+                  Walk-In Customer
+                </Button>
+                <Button onClick={() => setShowCreateForm(true)} className="flex-1" variant="outline">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create New Customer
+                </Button>
+              </div>
 
               {/* Customer List */}
               <div className="space-y-2 max-h-96 overflow-y-auto">

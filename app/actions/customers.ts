@@ -529,6 +529,32 @@ export async function findOrCreateCustomer(phoneNumber: string, fullName: string
   })
 }
 
+export async function getOrCreateWalkInCustomer(): Promise<Customer> {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    // Check if Walk-In exists for this tenant
+    const existing = await sql`
+      SELECT * FROM customers 
+      WHERE tenant_id = ${tenantId} AND phone_number = '0000000000'
+      LIMIT 1
+    `
+    if (existing.length > 0) {
+      const customer = existing[0]
+      return {
+        ...customer,
+        id: Number(customer.id) || 0,
+        total_bookings: 0,
+        total_spent: 0,
+      } as Customer
+    }
+
+    // Create Walk-In customer
+    return await createCustomerData({
+      full_name: "Walk In",
+      phone_number: "0000000000",
+    })
+  })
+}
+
 export async function bulkUploadCustomers(
   file: File,
 ): Promise<{ success: boolean; message: string; recordsProcessed?: number }> {
