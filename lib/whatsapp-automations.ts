@@ -588,69 +588,79 @@ export async function runAutomationsCronForTenant(sql: any, tenantId: string): P
     const currentYear = new Date().getFullYear()
     const currentMonthYear = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`
 
-    // 1. Scan 24-hour reminders: Bookings scheduled for tomorrow (pending or confirmed)
-    try {
-      const tomorrowBookings = await sql`
-        SELECT 
-          b.id,
-          b.booking_number,
-          b.booking_date,
-          b.booking_time,
-          b.total_amount,
-          b.status,
-          b.customer_id,
-          c.full_name as customer_name,
-          c.phone_number as customer_phone,
-          st.name as staff_name,
-          COALESCE(STRING_AGG(s.name, ', '), 'Salon Services') as service_names
-        FROM bookings b
-        JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
-        LEFT JOIN staff st ON b.staff_id = st.id AND st.tenant_id = ${tenantId}
-        LEFT JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
-        LEFT JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
-        WHERE b.tenant_id = ${tenantId}
-          AND b.status IN ('pending', 'confirmed')
-          AND DATE(b.booking_date) = CURRENT_DATE + INTERVAL '1 day'
-          AND c.phone_number IS NOT NULL
-        GROUP BY b.id, b.booking_number, b.booking_date, b.booking_time, b.total_amount, b.status, b.customer_id, c.full_name, c.phone_number, st.name
-      `
+    // Calculate current hour in IST
+    const istOffset = 5.5 * 60 * 60 * 1000
+    const istTime = new Date(Date.now() + istOffset)
+    const currentIstHour = istTime.getUTCHours()
+    
+    // Only run daily batch jobs (Birthdays, 24h reminders) if it's 9 AM or later in IST
+    const shouldRunDailyBatches = currentIstHour >= 9
 
-      for (const booking of tomorrowBookings) {
-        const refId = `booking:${booking.id}:24h`
-        // Check if already sent
-        const alreadySent = await sql`
-          SELECT 1 FROM whatsapp_automation_logs 
-          WHERE tenant_id = ${tenantId} 
-            AND event_type = 'reminder_24h' 
-            AND reference_id = ${refId}
-            AND status = 'sent'
-          LIMIT 1
+    // 1. Scan 24-hour reminders: Bookings scheduled for tomorrow (pending or confirmed)
+    if (shouldRunDailyBatches) {
+      try {
+        const tomorrowBookings = await sql`
+          SELECT 
+            b.id,
+            b.booking_number,
+            b.booking_date,
+            b.booking_time,
+            b.total_amount,
+            b.status,
+            b.customer_id,
+            c.full_name as customer_name,
+            c.phone_number as customer_phone,
+            st.name as staff_name,
+            COALESCE(STRING_AGG(s.name, ', '), 'Salon Services') as service_names
+          FROM bookings b
+          JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+          LEFT JOIN staff st ON b.staff_id = st.id AND st.tenant_id = ${tenantId}
+          LEFT JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
+          LEFT JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
+          WHERE b.tenant_id = ${tenantId}
+            AND b.status IN ('pending', 'confirmed')
+            AND DATE(b.booking_date) = CURRENT_DATE + INTERVAL '1 day'
+            AND c.phone_number IS NOT NULL
+          GROUP BY b.id, b.booking_number, b.booking_date, b.booking_time, b.total_amount, b.status, b.customer_id, c.full_name, c.phone_number, st.name
         `
-        if (alreadySent.length === 0) {
-          const res = await triggerWhatsAppAutomation({
-            tenantId,
-            eventType: "reminder_24h",
-            recipientPhone: booking.customer_phone,
-            customerId: Number(booking.customer_id),
-            referenceId: refId,
-            variables: {
-              customer_name: booking.customer_name,
-              booking_date: String(booking.booking_date).split("T")[0],
-              booking_time: booking.booking_time || "",
-              service_name: booking.service_names || "your scheduled service",
-              staff_name: booking.staff_name || "our team",
-            },
-            sql,
-          })
-          if (res.success) {
-            summary.reminders24hSent++
-            summary.totalSent++
+
+        for (const booking of tomorrowBookings) {
+          const refId = `booking:${booking.id}:24h`
+          // Check if already sent
+          const alreadySent = await sql`
+            SELECT 1 FROM whatsapp_automation_logs 
+            WHERE tenant_id = ${tenantId} 
+              AND event_type = 'reminder_24h' 
+              AND reference_id = ${refId}
+              AND status = 'sent'
+            LIMIT 1
+          `
+          if (alreadySent.length === 0) {
+            const res = await triggerWhatsAppAutomation({
+              tenantId,
+              eventType: "reminder_24h",
+              recipientPhone: booking.customer_phone,
+              customerId: Number(booking.customer_id),
+              referenceId: refId,
+              variables: {
+                customer_name: booking.customer_name,
+                booking_date: String(booking.booking_date).split("T")[0],
+                booking_time: booking.booking_time || "",
+                service_name: booking.service_names || "your scheduled service",
+                staff_name: booking.staff_name || "our team",
+              },
+              sql,
+            })
+            if (res.success) {
+              summary.reminders24hSent++
+              summary.totalSent++
+            }
           }
         }
+      } catch (e: any) {
+        console.error(`[WhatsApp Cron] Error processing 24h reminders for tenant ${tenantId}:`, e)
+        summary.errors.push(`24h reminders: ${e.message}`)
       }
-    } catch (e: any) {
-      console.error(`[WhatsApp Cron] Error processing 24h reminders for tenant ${tenantId}:`, e)
-      summary.errors.push(`24h reminders: ${e.message}`)
     }
 
     // 2. Scan 2-hour reminders: Bookings scheduled for today within next ~2.5 hours
@@ -739,49 +749,51 @@ export async function runAutomationsCronForTenant(sql: any, tenantId: string): P
     }
 
     // 3. Scan Birthday Greetings (month & day match today)
-    try {
-      const birthdayCustomers = await sql`
-        SELECT id, full_name, phone_number, date_of_birth
-        FROM customers
-        WHERE tenant_id = ${tenantId}
-          AND date_of_birth IS NOT NULL
-          AND phone_number IS NOT NULL
-          AND EXTRACT(MONTH FROM date_of_birth) = EXTRACT(MONTH FROM CURRENT_DATE)
-          AND EXTRACT(DAY FROM date_of_birth) = EXTRACT(DAY FROM CURRENT_DATE)
-      `
-
-      for (const customer of birthdayCustomers) {
-        const refId = `customer:${customer.id}:bday:${currentYear}`
-        const alreadySent = await sql`
-          SELECT 1 FROM whatsapp_automation_logs 
-          WHERE tenant_id = ${tenantId} 
-            AND event_type = 'birthday' 
-            AND reference_id = ${refId}
-            AND status = 'sent'
-          LIMIT 1
+    if (shouldRunDailyBatches) {
+      try {
+        const birthdayCustomers = await sql`
+          SELECT id, full_name, phone_number, date_of_birth
+          FROM customers
+          WHERE tenant_id = ${tenantId}
+            AND date_of_birth IS NOT NULL
+            AND phone_number IS NOT NULL
+            AND EXTRACT(MONTH FROM date_of_birth) = EXTRACT(MONTH FROM CURRENT_DATE)
+            AND EXTRACT(DAY FROM date_of_birth) = EXTRACT(DAY FROM CURRENT_DATE)
         `
-        if (alreadySent.length === 0) {
-          const res = await triggerWhatsAppAutomation({
-            tenantId,
-            eventType: "birthday",
-            recipientPhone: customer.phone_number,
-            customerId: Number(customer.id),
-            referenceId: refId,
-            variables: {
-              customer_name: customer.full_name,
-              coupon_code: "BDAYTREAT",
-            },
-            sql,
-          })
-          if (res.success) {
-            summary.birthdaysSent++
-            summary.totalSent++
+
+        for (const customer of birthdayCustomers) {
+          const refId = `customer:${customer.id}:bday:${currentYear}`
+          const alreadySent = await sql`
+            SELECT 1 FROM whatsapp_automation_logs 
+            WHERE tenant_id = ${tenantId} 
+              AND event_type = 'birthday' 
+              AND reference_id = ${refId}
+              AND status = 'sent'
+            LIMIT 1
+          `
+          if (alreadySent.length === 0) {
+            const res = await triggerWhatsAppAutomation({
+              tenantId,
+              eventType: "birthday",
+              recipientPhone: customer.phone_number,
+              customerId: Number(customer.id),
+              referenceId: refId,
+              variables: {
+                customer_name: customer.full_name,
+                coupon_code: "BDAYTREAT",
+              },
+              sql,
+            })
+            if (res.success) {
+              summary.birthdaysSent++
+              summary.totalSent++
+            }
           }
         }
+      } catch (e: any) {
+        console.error(`[WhatsApp Cron] Error processing birthdays for tenant ${tenantId}:`, e)
+        summary.errors.push(`birthdays: ${e.message}`)
       }
-    } catch (e: any) {
-      console.error(`[WhatsApp Cron] Error processing birthday greetings for tenant ${tenantId}:`, e)
-      summary.errors.push(`Birthdays: ${e.message}`)
     }
 
     // 4. Scan Anniversary Greetings (month & day match today)
