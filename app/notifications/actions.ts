@@ -28,15 +28,24 @@ export interface NotificationPreference {
 export async function getNotificationLogs() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      // Read from whatsapp_automation_logs — where actual WA messages are stored
       const logs = await sql`
         SELECT 
-          nl.*,
-          c.full_name as customer_name,
-          COALESCE(c.phone_number, '') as customer_phone
-        FROM notification_logs nl
-        LEFT JOIN customers c ON nl.customer_id = c.id
-        WHERE nl.tenant_id = ${tenantId}
-        ORDER BY nl.sent_at DESC
+          wal.id::text as id,
+          wal.tenant_id::text as tenant_id,
+          wal.customer_id,
+          COALESCE(c.full_name, '') as customer_name,
+          COALESCE(c.phone_number, wal.recipient_phone, '') as customer_phone,
+          wal.event_type as type,
+          'whatsapp' as channel,
+          wal.status,
+          COALESCE(wal.message_content, '') as content,
+          wal.error_message,
+          wal.sent_at
+        FROM whatsapp_automation_logs wal
+        LEFT JOIN customers c ON wal.customer_id = c.id AND c.tenant_id = ${tenantId}
+        WHERE wal.tenant_id = ${tenantId}::text
+        ORDER BY wal.sent_at DESC
         LIMIT 100
       `
       return { success: true, data: (logs || []) as NotificationLog[] }
@@ -96,14 +105,14 @@ export async function sendTestNotification(channel: "whatsapp" | "sms" | "email"
       const testContent = `[Hanva Billing] Your ${channel.toUpperCase()} notification channel is configured and active!`
       
       await sql`
-        INSERT INTO notification_logs (
-          tenant_id, type, channel, status, content, sent_at
+        INSERT INTO whatsapp_automation_logs (
+          tenant_id, event_type, recipient_phone, message_content, status, sent_at, created_at
         ) VALUES (
-          ${tenantId}, 'test_notification', ${channel}, 'delivered', ${testContent}, NOW()
+          ${tenantId}::text, ${'test_notification'}, ${recipientPhoneOrEmail}, ${testContent}, 'sent', NOW(), NOW()
         )
       `
       revalidatePath("/notifications")
-      return { success: true, message: `Test ${channel.toUpperCase()} message sent successfully!` }
+      return { success: true, message: `Test ${channel.toUpperCase()} message logged successfully!` }
     } catch (error: any) {
       console.error("Failed to send test notification:", error)
       return { success: false, error: error?.message || "Failed to send test notification" }
