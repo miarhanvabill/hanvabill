@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     console.log("[WhatsApp Webhook] Received payload:", type, payload);
     
     // We assume the URL provides the true internal tenantId.
-    const { sql, tenantId: internalTenantId } = await getAuthenticatedSql(tenantId);
+    const { sql, tenantId: internalTenantId, tenantKey } = await getAuthenticatedSql(tenantId);
 
     if (type === "mo") {
       // Mobile Originated (Incoming Message)
@@ -45,10 +45,10 @@ export async function POST(req: Request) {
         // Note: For 'msg_id' we assume it's added to the db schema.
         await sql`
           INSERT INTO whatsapp_messages (
-            tenant_id, customer_id, phone_number, message_type, 
+            tenant_id, tenant_key, customer_id, phone_number, message_type, 
             message_content, direction, status
           ) VALUES (
-            ${internalTenantId}, ${customerId}, ${phone}, 
+            ${internalTenantId}, ${tenantKey}, ${customerId}, ${phone}, 
             ${payload.msgType?.toLowerCase() || 'text'}, 
             ${content}, 'inbound', 'received'
           )

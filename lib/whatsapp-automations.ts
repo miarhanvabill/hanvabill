@@ -447,12 +447,15 @@ export async function triggerWhatsAppAutomation(
 
     // Log to whatsapp_messages table
     try {
+      const tenant = await sqlClient`SELECT tenant_key FROM tenants WHERE id = ${tenantId} LIMIT 1`;
+      const tenantKey = tenant.length > 0 ? tenant[0].tenant_key : null;
+      
       await sqlClient`
         INSERT INTO whatsapp_messages (
-          tenant_id, customer_id, phone_number, message_type,
+          tenant_id, tenant_key, customer_id, phone_number, message_type,
           message_content, direction, status, msg_id, created_at
         ) VALUES (
-          ${tenantId}, ${finalCustomerId || null}, ${sendResult.safePhone}, 'text',
+          ${tenantId}, ${tenantKey}, ${finalCustomerId || null}, ${sendResult.safePhone}, 'text',
           ${messageContent}, 'outbound', 'sent', ${sendResult.msgId || null}, NOW()
         )
       `

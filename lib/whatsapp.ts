@@ -70,14 +70,15 @@ export async function sendWhatsAppInvoice(tenantId: string, phone: string, data:
         LIMIT 1
       `;
       
-      const customerId = customer.length > 0 ? customer[0].id : null;
+      const tenant = await sql`SELECT tenant_key FROM tenants WHERE id = ${tenantId} LIMIT 1`;
+      const tenantKey = tenant.length > 0 ? tenant[0].tenant_key : null;
       
       await sql`
         INSERT INTO whatsapp_messages (
-          tenant_id, customer_id, phone_number, message_type, 
+          tenant_id, tenant_key, customer_id, phone_number, message_type, 
           message_content, direction, status, msg_id, created_at
         ) VALUES (
-          ${tenantId}, ${customerId}, ${safePhone}, 'text', 
+          ${tenantId}, ${tenantKey}, ${customerId}, ${safePhone}, 'text', 
           ${textMessage}, 'outbound', 'sent', ${msgId}, NOW()
         )
       `;
@@ -112,14 +113,15 @@ export async function sendWhatsAppText(tenantId: string, customerPhone: string, 
         LIMIT 1
       `;
       
-      const customerId = customer.length > 0 ? customer[0].id : null;
+      const tenant = await sql`SELECT tenant_key FROM tenants WHERE id = ${tenantId} LIMIT 1`;
+      const tenantKey = tenant.length > 0 ? tenant[0].tenant_key : null;
       
       await sql`
         INSERT INTO whatsapp_messages (
-          tenant_id, customer_id, phone_number, message_type, 
+          tenant_id, tenant_key, customer_id, phone_number, message_type, 
           message_content, direction, status, msg_id, created_at
         ) VALUES (
-          ${tenantId}, ${customerId}, ${safePhone}, 'text', 
+          ${tenantId}, ${tenantKey}, ${customerId}, ${safePhone}, 'text', 
           ${text}, 'outbound', 'sent', ${msgId}, NOW()
         )
       `;
