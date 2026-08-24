@@ -298,7 +298,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
           COALESCE(SUM(b.total_amount) FILTER (WHERE c.gender='female'), 0) AS female_spending,
           COALESCE(SUM(b.total_amount) FILTER (WHERE c.gender NOT IN ('male','female') OR c.gender IS NULL), 0) AS others_spending
         FROM bookings b
-        JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+        LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
         WHERE b.tenant_id = ${tenantId}
           AND b.booking_date >= ${startIso}
           AND b.status = 'completed'
