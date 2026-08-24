@@ -94,7 +94,7 @@ export async function sendWhatsAppInvoice(tenantId: string, phone: string, data:
   }
 }
 
-export async function sendWhatsAppText(tenantId: string, customerPhone: string, text: string, sqlClient?: any) {
+export async function sendWhatsAppText(tenantId: string, customerPhone: string, text: string, sqlClient?: any, tenantKey?: string) {
   const sql = sqlClient || baseSql;
   try {
     const config = await getTenantWhatsAppConfig(sql, tenantId);
@@ -115,18 +115,24 @@ export async function sendWhatsAppText(tenantId: string, customerPhone: string, 
       `;
       
       const customerId = customer.length > 0 ? customer[0].id : null;
-      const tenant = await sql`SELECT tenant_key FROM tenants WHERE id = ${tenantId} LIMIT 1`;
-      const tenantKey = tenant.length > 0 ? tenant[0].tenant_key : null;
+
+      // Use provided tenantKey or fall back to DB lookup
+      let resolvedTenantKey = tenantKey;
+      if (!resolvedTenantKey) {
+        const tenantRow = await sql`SELECT tenant_key FROM tenants WHERE id = ${tenantId} LIMIT 1`;
+        resolvedTenantKey = tenantRow.length > 0 ? tenantRow[0].tenant_key : null;
+      }
       
       await sql`
         INSERT INTO whatsapp_messages (
           tenant_id, tenant_key, customer_id, phone_number, message_type, 
           message_content, direction, status, msg_id, created_at
         ) VALUES (
-          ${tenantId}, ${tenantKey}, ${customerId}, ${safePhone}, 'text', 
+          ${tenantId}, ${resolvedTenantKey}, ${customerId}, ${safePhone}, 'text', 
           ${text}, 'outbound', 'sent', ${msgId}, NOW()
         )
       `;
+      console.log(`[WhatsApp] Saved outbound message for tenant ${tenantId} to ${safePhone}`);
     } catch (dbErr) {
       console.error("[WhatsApp Service] DB Insert failed:", dbErr);
     }
@@ -137,3 +143,4 @@ export async function sendWhatsAppText(tenantId: string, customerPhone: string, 
     return { success: false, error: error.message };
   }
 }
+

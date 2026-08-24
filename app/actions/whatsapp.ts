@@ -135,49 +135,8 @@ export async function getWhatsAppMessages(phoneNumber?: string): Promise<WhatsAp
         }))
       }
 
-      // Return initial welcoming seed conversation if database is completely empty
-      return [
-        {
-          id: 1,
-          customer_name: "Priya Sharma",
-          phone_number: "+919876543210",
-          message_type: "text",
-          message_content: "Hi! Can I confirm my appointment for tomorrow at 4 PM?",
-          direction: "inbound" as const,
-          status: "delivered" as const,
-          created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
-        },
-        {
-          id: 2,
-          customer_name: "Priya Sharma",
-          phone_number: "+919876543210",
-          message_type: "text",
-          message_content: "Hello Priya! 🌟 Yes, your appointment for Keratin Hair Spa is confirmed for tomorrow at 4:00 PM with Sarah. See you soon!",
-          direction: "outbound" as const,
-          status: "read" as const,
-          created_at: new Date(Date.now() - 3600000 * 1.5).toISOString(),
-        },
-        {
-          id: 3,
-          customer_name: "Rahul Verma",
-          phone_number: "+919812345678",
-          message_type: "text",
-          message_content: "Thank you for the amazing haircut today! Loved the service.",
-          direction: "inbound" as const,
-          status: "delivered" as const,
-          created_at: new Date(Date.now() - 1800000).toISOString(),
-        },
-        {
-          id: 4,
-          customer_name: "Rahul Verma",
-          phone_number: "+919812345678",
-          message_type: "text",
-          message_content: "You're most welcome Rahul! ✨ Here is your digital receipt & 100 bonus loyalty points. Have a wonderful weekend!",
-          direction: "outbound" as const,
-          status: "sent" as const,
-          created_at: new Date(Date.now() - 1200000).toISOString(),
-        },
-      ]
+      // No messages yet — return empty array so the UI shows the real empty state
+      return []
     } catch (error) {
       console.error("Error fetching WhatsApp messages:", error)
       return []
@@ -242,13 +201,13 @@ export async function sendWhatsAppMessage(data: {
   customerId?: number
   triggerType?: string
 }) {
-  return await withTenantAuth(async ({ sql, tenantId }) => {
+  return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
     try {
       if (!data.phoneNumber || !data.message.trim()) {
         return { success: false, message: "Phone number and message are required" }
       }
 
-      const result = await sendWhatsAppText(tenantId, data.phoneNumber, data.message.trim())
+      const result = await sendWhatsAppText(tenantId, data.phoneNumber, data.message.trim(), sql, tenantKey)
 
       if (data.triggerType) {
         try {
