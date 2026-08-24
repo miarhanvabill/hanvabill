@@ -119,7 +119,18 @@ export default function WhatsAppPage() {
   const loadChatMessages = async (phone: string) => {
     try {
       const msgs = await getWhatsAppMessages(phone)
-      setMessages(msgs || [])
+      if (msgs) {
+        // Deduplicate by ID to prevent duplicate display
+        const seen = new Set<number>()
+        const unique = msgs.filter((m) => {
+          if (seen.has(m.id)) return false
+          seen.add(m.id)
+          return true
+        })
+        setMessages(unique)
+      } else {
+        setMessages([])
+      }
     } catch (error) {
       console.error("Error fetching messages for phone:", error)
     }
@@ -141,9 +152,10 @@ export default function WhatsAppPage() {
     setNewMessage("")
     setSending(true)
 
-    // Optimistic UI append
+    // Optimistic UI: show the message immediately with a temp ID
+    const optimisticId = Date.now()
     const optimisticMsg: WhatsAppMessage = {
-      id: Date.now(),
+      id: optimisticId,
       phone_number: selectedPhone,
       customer_name: sidebarData?.full_name || "Customer",
       message_content: messageText,
@@ -164,13 +176,17 @@ export default function WhatsAppPage() {
 
       if (result.success) {
         toast.success("Message delivered")
-        // Refresh conversations & messages
+        // Remove optimistic message, then load canonical messages from DB
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId))
         loadChatMessages(selectedPhone)
         getChatConversations().then((c) => setConversations(c))
       } else {
+        // Remove optimistic on failure too
+        setMessages((prev) => prev.filter((m) => m.id !== optimisticId))
         toast.error(result.message || "Failed to send message")
       }
     } catch (error: any) {
+      setMessages((prev) => prev.filter((m) => m.id !== optimisticId))
       toast.error(error.message || "Error sending WhatsApp message")
     } finally {
       setSending(false)

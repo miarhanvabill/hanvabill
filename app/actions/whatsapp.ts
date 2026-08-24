@@ -95,28 +95,26 @@ export async function getWhatsAppMessages(phoneNumber?: string): Promise<WhatsAp
       if (phoneNumber) {
         const cleanPhone = phoneNumber.replace(/^\+/, "").slice(-10)
         messages = await sql`
-          SELECT 
+          SELECT DISTINCT ON (w.id)
             w.*,
             COALESCE(c.full_name, c.name, 'Customer') as customer_name
           FROM whatsapp_messages w
-          LEFT JOIN customers c ON (
-            w.customer_id = c.id OR 
-            w.phone_number LIKE ${'%' + cleanPhone} OR 
-            c.phone_number LIKE ${'%' + cleanPhone}
-          ) AND c.tenant_id = ${tenantId}
+          LEFT JOIN customers c ON c.tenant_id = ${tenantId}
+            AND (c.id = w.customer_id OR c.phone_number LIKE ${'%' + cleanPhone})
           WHERE w.tenant_id = ${tenantId} 
           AND w.phone_number LIKE ${'%' + cleanPhone}
-          ORDER BY w.created_at ASC
+          ORDER BY w.id, w.created_at ASC
         `
       } else {
         messages = await sql`
-          SELECT 
+          SELECT DISTINCT ON (w.id)
             w.*,
             COALESCE(c.full_name, c.name, 'Customer') as customer_name
           FROM whatsapp_messages w
-          LEFT JOIN customers c ON (w.customer_id = c.id OR w.phone_number = c.phone_number) AND c.tenant_id = ${tenantId}
+          LEFT JOIN customers c ON c.tenant_id = ${tenantId}
+            AND (c.id = w.customer_id OR c.phone_number = w.phone_number)
           WHERE w.tenant_id = ${tenantId}
-          ORDER BY w.created_at ASC
+          ORDER BY w.id, w.created_at ASC
         `
       }
 
@@ -220,9 +218,6 @@ export async function sendWhatsAppMessage(data: {
           `
         } catch {}
       }
-
-      revalidatePath("/whatsapp")
-      revalidatePath("/manage/whatsapp-config")
 
       return {
         success: result.success,
