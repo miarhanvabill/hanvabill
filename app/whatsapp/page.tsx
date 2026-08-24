@@ -205,10 +205,11 @@ export default function WhatsAppPage() {
           invoiceNumber: inv.invoice_number,
           amount: inv.amount,
           shareToken: inv.share_token,
+          couponCode: inv.coupon_code || "",
         }
       } else if (actionType === "loyalty") {
         metadata = {
-          points: sidebarData?.loyalty_points || 250,
+          points: sidebarData?.loyalty_points ?? 0,
         }
       }
 

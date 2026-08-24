@@ -369,7 +369,8 @@ export async function getCustomerChatSidebarData(phoneNumber: string): Promise<C
             invoice_number,
             amount,
             invoice_date,
-            share_token
+            share_token,
+            coupon_code
           FROM invoices
           WHERE customer_id = ${customerId} AND tenant_id = ${tenantId}
           ORDER BY created_at DESC
@@ -381,6 +382,7 @@ export async function getCustomerChatSidebarData(phoneNumber: string): Promise<C
           amount: Number(inv.amount) || 1500,
           invoice_date: inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString("en-IN", { month: "short", day: "numeric" }) : "Recent",
           share_token: inv.share_token,
+          coupon_code: inv.coupon_code || "",
         }))
       } catch {}
 
@@ -410,42 +412,69 @@ export async function sendCustomerQuickAction(data: {
   customerId?: number
   metadata?: any
 }) {
-  return await withTenantAuth(async ({ tenantId }) => {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const settings = await getBusinessSettings(tenantId)
-      const salonName = settings?.name || "Hanva Luxury Salon"
-      const currency = settings?.currency || "₹"
-
-      let textMessage = ""
-      let trigger = "direct_quick_action"
+      const { triggerWhatsAppAutomation } = await import("@/lib/whatsapp-automations")
+      
+      let eventType = ""
+      let variables: any = {}
 
       if (data.actionType === "invoice") {
-        trigger = "instant_invoice"
-        const invNo = data.metadata?.invoiceNumber || "INV-LATEST"
-        const amount = data.metadata?.amount || "1,850"
-        const link = data.metadata?.shareToken ? `https://biz.hanva.in/inv/${data.metadata.shareToken}` : "https://biz.hanva.in/inv/latest"
-        textMessage = `Hello! ✨ Here is your digital tax invoice #${invNo} for ${currency}${amount} from ${salonName}.\n\nView & download your receipt here: ${link}\n\nThank you for visiting us!`
+        if (!data.metadata?.invoiceNumber) {
+          return { success: false, message: "No recent invoice found to send." }
+        }
+        eventType = "invoice_receipt"
+        variables = {
+          booking_number: data.metadata.invoiceNumber,
+          total_amount: data.metadata.amount,
+          invoice_url: `https://biz.hanva.in/inv/${data.metadata.shareToken}`,
+          coupon_code: data.metadata.couponCode || "",
+        }
       } else if (data.actionType === "review") {
-        trigger = "review_request"
-        const reviewUrl = settings?.reviewUrl || "https://g.page/r/hanva-salon/review"
-        textMessage = `Hi! ✨ Thank you for choosing ${salonName} today. We hope you loved your salon experience! Could you please leave us a quick 5-star Google review? It takes only 30 seconds:\n\n${reviewUrl}\n\nThank you so much! 💖`
-      } else if (data.actionType === "booking") {
-        trigger = "appointment_confirmation"
-        const bookUrl = `https://biz.hanva.in/book`
-        textMessage = `Hi! Ready for your next pampering session at ${salonName}? 🌟 View our real-time stylist availability and easily reserve your preferred slot here:\n\n${bookUrl}\n\nWe look forward to seeing you!`
+        eventType = "review_request"
       } else if (data.actionType === "loyalty") {
-        trigger = "loyalty_points_update"
-        const points = data.metadata?.points || 350
-        const rupeeVal = Math.round(Number(points) * 0.5)
-        textMessage = `🎉 Rewards Update: You currently have ${points} loyalty points (worth ${currency}${rupeeVal}) at ${salonName}! You can redeem your points instantly at checkout on your next visit.`
+        eventType = "loyalty_update"
+        variables = {
+          points: data.metadata?.points ?? 0,
+        }
+      } else if (data.actionType === "booking") {
+        // We don't have a specific eventType for 'send booking link', so we send a direct message
+        const settings = await getBusinessSettings(tenantId)
+        const salonName = settings?.profile?.salonName || "Hanva Luxury Salon"
+        
+        const tenantInfo = await sql`SELECT slug FROM tenants WHERE id = ${tenantId} LIMIT 1`
+        const slug = tenantInfo[0]?.slug || tenantId
+        const bookUrl = `https://biz.hanva.in/book/${slug}`
+        
+        const textMessage = `Hi! Ready for your next pampering session at ${salonName}? 🌟 View our real-time stylist availability and easily reserve your preferred slot here:\n\n${bookUrl}\n\nWe look forward to seeing you!`
+
+        
+        return await sendWhatsAppMessage({
+          phoneNumber: data.phoneNumber,
+          message: textMessage,
+          customerId: data.customerId,
+          triggerType: "appointment_confirmation",
+        })
       }
 
-      return await sendWhatsAppMessage({
-        phoneNumber: data.phoneNumber,
-        message: textMessage,
-        customerId: data.customerId,
-        triggerType: trigger,
-      })
+      if (eventType) {
+        const result = await triggerWhatsAppAutomation({
+          tenantId: tenantId.toString(),
+          eventType,
+          recipientPhone: data.phoneNumber,
+          customerId: data.customerId,
+          referenceId: `quick_action:${data.actionType}:${Date.now()}`,
+          variables,
+          sql,
+        })
+        
+        return {
+          success: result.success,
+          message: result.success ? "Message sent" : result.error || "Failed to trigger automation",
+        }
+      }
+
+      return { success: false, message: "Invalid action type" }
     } catch (error: any) {
       console.error("sendCustomerQuickAction error:", error)
       return { success: false, message: error.message || "Failed to execute quick action" }
