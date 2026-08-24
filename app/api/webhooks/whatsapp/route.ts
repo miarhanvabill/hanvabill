@@ -5,7 +5,7 @@ export async function POST(req: Request) {
   try {
     const url = new URL(req.url);
     const tenantId = url.searchParams.get("tenant_id");
-    const type = url.searchParams.get("type");
+    let type = url.searchParams.get("type");
 
     if (!tenantId) {
       return NextResponse.json({ error: "Missing tenant_id" }, { status: 400 });
@@ -14,10 +14,23 @@ export async function POST(req: Request) {
     const payload = await req.json();
     console.log("[WhatsApp Webhook] Received payload:", type, payload);
     
+    // Infer type if missing from query
+    if (!type) {
+      if (payload.type) {
+        type = payload.type;
+      } else if (payload.from && (payload.msg || payload.msgType)) {
+        type = "mo";
+      } else if (payload.status) {
+        type = "dlr";
+      } else if (payload.direction === "INBOUND") {
+        type = "mo";
+      }
+    }
+
     // We assume the URL provides the true internal tenantId.
     const { sql, tenantId: internalTenantId, tenantKey } = await getAuthenticatedSql(tenantId);
 
-    if (type === "mo") {
+    if (type === "mo" || (payload.from && !payload.status)) {
       // Mobile Originated (Incoming Message)
       const phone = payload.from?.toString();
       const msgId = payload.msgId;
@@ -42,7 +55,6 @@ export async function POST(req: Request) {
         
         const customerId = customer.length > 0 ? customer[0].id : null;
         
-        // Note: For 'msg_id' we assume it's added to the db schema.
         await sql`
           INSERT INTO whatsapp_messages (
             tenant_id, tenant_key, customer_id, phone_number, message_type, 
@@ -57,20 +69,9 @@ export async function POST(req: Request) {
         console.error("[WhatsApp Webhook] Error saving MO:", e);
       }
       
-    } else if (type === "dlr") {
+    } else if (type === "dlr" || payload.status) {
       // Delivery Report
       try {
-        // Ideally we update based on msg_id. Since we don't have msg_id in the insert
-        // right now, we can update based on phone number and content if msg_id isn't in db schema,
-        // or just ignore until msg_id column is verified.
-        // For now, we attempt to update if we have msg_id.
-        /*
-        await sql`
-          UPDATE whatsapp_messages 
-          SET status = ${payload.status?.toLowerCase()} 
-          WHERE msg_id = ${payload.msgId} AND tenant_id = ${internalTenantId}
-        `;
-        */
         console.log("[WhatsApp Webhook] DLR received for msgId:", payload.msgId, "status:", payload.status);
       } catch (e) {
         console.error("[WhatsApp Webhook] Error updating DLR:", e);
