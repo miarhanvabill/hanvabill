@@ -405,9 +405,7 @@ export default function BookingCalendarPage() {
                                       <p className="text-xs text-muted-foreground">
                                         {format(parseISO(`2000-01-01T${booking.booking_time}`), "h:mm a")} ({durationMins} mins)
                                       </p>
-                                      <Badge variant="outline" className="mt-1 capitalize">
-                                        {booking.status}
-                                      </Badge>
+                                      <span className={`mt-1 inline-block px-2 py-0.5 text-xs font-medium rounded-full ${getStatusColor(booking.status)} capitalize`}>{booking.status}</span>
                                     </div>
                                   </TooltipContent>
                                 </Tooltip>
@@ -431,12 +429,12 @@ export default function BookingCalendarPage() {
         <SheetContent className="w-full sm:max-w-md overflow-y-auto">
           {selectedBooking && (
             <>
-              <SheetHeader className="mb-6">
-                <div className="flex items-center justify-between">
+              <SheetHeader className="mb-6 pr-6">
+                <div className="flex items-center justify-start gap-3">
                   <SheetTitle>Booking Details</SheetTitle>
-                  <Badge className={`${getStatusColor(selectedBooking.status)} capitalize`}>
+                  <span className={`${getStatusColor(selectedBooking.status)} px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize`}>
                     {selectedBooking.status}
-                  </Badge>
+                  </span>
                 </div>
                 <SheetDescription>
                   {selectedBooking.booking_number} • Created {format(parseISO(selectedBooking.created_at), "MMM d, yyyy")}
@@ -445,13 +443,15 @@ export default function BookingCalendarPage() {
 
               <div className="space-y-6">
                 {/* Customer Info */}
-                <div className="flex items-start gap-4">
-                  <div className="bg-muted p-3 rounded-full">
-                    <User className="h-6 w-6 text-muted-foreground" />
+                <div className="flex items-center gap-4 bg-muted/30 p-4 rounded-xl border">
+                  <div className="bg-primary/10 p-3 rounded-full">
+                    <User className="h-6 w-6 text-primary" />
                   </div>
-                  <div>
+                  <div className="flex-1">
                     <h3 className="font-semibold text-lg">{selectedBooking.customer_name}</h3>
-                    <Button variant="link" className="p-0 h-auto text-muted-foreground">View Customer Profile</Button>
+                    <Link href={`/customers/${selectedBooking.customer_id}`}>
+                      <Button variant="link" className="p-0 h-auto text-muted-foreground hover:text-primary">View Customer Profile</Button>
+                    </Link>
                   </div>
                 </div>
 
@@ -459,7 +459,7 @@ export default function BookingCalendarPage() {
                 <Card>
                   <CardContent className="p-4 space-y-4">
                     <div className="flex items-start gap-3">
-                      <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
+                      <Package className="h-5 w-5 text-muted-foreground mt-0.5" />
                       <div>
                         <p className="font-medium">Services</p>
                         <p className="text-sm text-muted-foreground">{selectedBooking.service_name}</p>
