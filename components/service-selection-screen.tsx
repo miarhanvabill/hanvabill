@@ -609,6 +609,9 @@ export function ServiceSelectionScreen({
                       </AvatarFallback>
                     </Avatar>
                     {st.name}
+                    {st.attendance_status === 'present' && !st.check_out_time && (
+                      <span className="w-2 h-2 rounded-full bg-green-500 ml-1.5 inline-block" title="Checked In Today" />
+                    )}
                   </Badge>
                 )
               })}
@@ -684,7 +687,12 @@ export function ServiceSelectionScreen({
             <SelectItem value="any">Any Staff</SelectItem>
             {staff.map((st) => (
               <SelectItem key={st.id} value={String(st.id)}>
-                {st.name}
+                <div className="flex items-center gap-2">
+                  {st.name}
+                  {st.attendance_status === 'present' && !st.check_out_time && (
+                    <span className="w-2 h-2 rounded-full bg-green-500 inline-block" title="Checked In Today" />
+                  )}
+                </div>
               </SelectItem>
             ))}
           </SelectContent>
@@ -1314,7 +1322,12 @@ export function ServiceSelectionScreen({
                     <SelectItem value="any">Any Staff</SelectItem>
                     {staff.map((st) => (
                       <SelectItem value={String(st.id)} key={st.id}>
-                        {st.name}
+                        <div className="flex items-center gap-2">
+                          {st.name}
+                          {st.attendance_status === 'present' && !st.check_out_time && (
+                            <span className="w-2 h-2 rounded-full bg-green-500 inline-block" title="Checked In Today" />
+                          )}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>

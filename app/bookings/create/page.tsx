@@ -324,7 +324,12 @@ export default function CreateBookingPage() {
                   <SelectContent>
                     {staff.map((member) => (
                       <SelectItem key={member.id} value={member.id.toString()}>
-                        {member.name} - {member.role}
+                        <div className="flex items-center gap-2">
+                          <span>{member.name} - {member.role}</span>
+                          {member.attendance_status === 'present' && !member.check_out_time && (
+                            <span className="w-2 h-2 rounded-full bg-green-500" title="Checked In Today" />
+                          )}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>

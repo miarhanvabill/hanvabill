@@ -20,6 +20,9 @@ export interface Staff {
   avatar_url?: string | null
   created_at?: string | null // TIMESTAMP in DB, fetched as string
   updated_at?: string | null // VARCHAR in DB, fetched as string
+  attendance_status?: string | null
+  check_in_time?: string | null
+  check_out_time?: string | null
 }
 
 export interface StaffStats {
@@ -36,15 +39,19 @@ export async function getStaff(): Promise<Staff[]> {
 
       const staffResult = await sql`
         SELECT 
-          id, name, phone, email, role, salary, 
-          TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date,
-          is_active, address, emergency_contact, skills, commission_rate, avatar_url,
-          created_at::text,
-          updated_at::text
-        FROM staff 
-        WHERE is_active = true 
-          AND tenant_id = ${tenantId}
-        ORDER BY name
+          s.id, s.name, s.phone, s.email, s.role, s.salary, 
+          TO_CHAR(s.hire_date, 'YYYY-MM-DD') as hire_date,
+          s.is_active, s.address, s.emergency_contact, s.skills, s.commission_rate, s.avatar_url,
+          s.created_at::text,
+          s.updated_at::text,
+          a.status as attendance_status,
+          a.check_in_time,
+          a.check_out_time
+        FROM staff s
+        LEFT JOIN attendance a ON s.id = a.staff_id AND a.date = CURRENT_DATE AND a.tenant_id = ${tenantId}
+        WHERE s.is_active = true 
+          AND s.tenant_id = ${tenantId}
+        ORDER BY s.name
       `
 
       console.log("[v0] Raw staffResult:", staffResult)

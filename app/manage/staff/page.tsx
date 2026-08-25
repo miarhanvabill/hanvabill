@@ -369,9 +369,12 @@ export default function StaffManagePage() {
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <CardTitle className="text-lg font-semibold">
-                              <Link href={`/staff/${member.id}`} className="hover:underline">
+                            <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                              <Link href={`/staff/${member.id}`} className="hover:underline flex items-center gap-2">
                                 {member.name}
+                                {member.attendance_status === 'present' && !member.check_out_time && (
+                                  <span className="w-2.5 h-2.5 rounded-full bg-green-500" title="Checked In Today" />
+                                )}
                               </Link>
                             </CardTitle>
                             <Badge

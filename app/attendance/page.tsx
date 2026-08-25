@@ -275,6 +275,32 @@ export default function AttendancePage() {
                                   <SelectItem value="half_day">Half Day</SelectItem>
                                 </SelectContent>
                               </Select>
+
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-9 px-2 text-green-600 border-green-200 hover:bg-green-50"
+                                onClick={() => {
+                                  const time = new Date().toLocaleTimeString("en-IN", { hour12: false, timeZone: "Asia/Kolkata" }).slice(0, 5)
+                                  handleMarkAttendance(member.id, "present", time, undefined)
+                                }}
+                                disabled={!!attendanceRecord?.check_in_time}
+                              >
+                                Check In
+                              </Button>
+
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-9 px-2 text-blue-600 border-blue-200 hover:bg-blue-50"
+                                onClick={() => {
+                                  const time = new Date().toLocaleTimeString("en-IN", { hour12: false, timeZone: "Asia/Kolkata" }).slice(0, 5)
+                                  handleMarkAttendance(member.id, attendanceRecord?.status || "present", attendanceRecord?.check_in_time || undefined, time)
+                                }}
+                                disabled={!attendanceRecord?.check_in_time || !!attendanceRecord?.check_out_time}
+                              >
+                                Check Out
+                              </Button>
                             </div>
                           </td>
                         </tr>
