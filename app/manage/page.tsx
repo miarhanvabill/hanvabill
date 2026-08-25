@@ -265,6 +265,17 @@ const integrationSections = [
   },
 ]
 
+const reportsSections = [
+  {
+    title: "Store Performance",
+    description: "Comprehensive analytics and performance metrics for the store, including revenue growth, leaderboards, and quarterly results.",
+    icon: BarChart3,
+    href: "/manage/store-performance",
+    color: "bg-indigo-50 text-indigo-600",
+    badge: true,
+  }
+]
+
 const storeOnlineSections = [
   {
     title: "Plans & Billing",
@@ -342,6 +353,7 @@ export default function ManagePage() {
     ...miscellaneousSections,
     ...integrationSections,
     ...storeOnlineSections,
+    ...reportsSections,
     ...additionalSections,
   ]
 
@@ -631,8 +643,45 @@ export default function ManagePage() {
                 </div>
               </div>
 
+              {/* Reports & Analytics */}
+              <div>
+                <h2 className="text-xl font-semibold mb-4">Reports & Analytics</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                  {reportsSections.map((section) => (
+                    <Card
+                      key={section.title}
+                      className="hover:shadow-md transition-all duration-200 cursor-pointer hover:scale-105"
+                      onClick={() => handleCardClick(section)}
+                    >
+                      <CardHeader>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${section.color}`}>
+                            <section.icon className="w-6 h-6" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <CardTitle className="text-lg">{section.title}</CardTitle>
+                              {section.badge && (
+                                <Badge variant="secondary" className="text-xs">
+                                  New
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <CardDescription className="text-sm leading-relaxed">{section.description}</CardDescription>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+
               {/* Additional Features */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h2 className="text-xl font-semibold mb-4">Additional Features</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {additionalSections.map((section) => (
                   <Card
                     key={section.title}
@@ -652,6 +701,7 @@ export default function ManagePage() {
                     </CardContent>
                   </Card>
                 ))}
+                </div>
               </div>
             </>
           )}
