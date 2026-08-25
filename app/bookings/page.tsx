@@ -862,6 +862,12 @@ export default function BookingsPage({ searchParams }: { searchParams: { [key: s
           <p className="text-sm text-muted-foreground">Manage your salon bookings</p>
         </div>
         <div className="flex gap-2">
+          <Link href="/bookings/customer-schedule">
+            <Button variant="outline" className="gap-2">
+              <Calendar className="w-4 h-4" />
+              Customer View
+            </Button>
+          </Link>
           <Button onClick={() => setShowBulkUpload(true)} variant="outline">
             <Upload className="w-4 h-4 mr-2" />
             Bulk Upload

@@ -1,3 +1,4 @@
+import Link from "next/link"
 "use client"
 
 import { useState, useEffect, useRef } from "react"
@@ -10,7 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { InvoiceTemplate } from "@/components/invoice-template"
 import { formatCurrency } from "@/lib/currency"
-import { Search, Plus, Eye, Download, Send, Printer } from "lucide-react"
+import { Search, Plus, FileText,  Eye, Download, Send, Printer } from "lucide-react"
 import { getInvoices } from "@/app/actions/invoices"
 
 // ⬇️ import helpers
@@ -147,8 +148,19 @@ export default function InvoicesPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col">
-      <PageHeader title="Invoices" subtitle="Create, manage and track your salon invoices with GST compliance" />
+    <div className="flex-1 flex flex-col p-6">
+      <PageHeader 
+        title="Invoices" 
+        subtitle="Create, manage and track your salon invoices with GST compliance" 
+        action={
+          <Link href="/invoices/preview">
+            <Button variant="outline" className="gap-2">
+              <FileText className="w-4 h-4" />
+              Template Preview
+            </Button>
+          </Link>
+        }
+      />
 
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-7xl mx-auto space-y-6">

@@ -160,6 +160,30 @@ const staffSections = [
   },
 ]
 
+const billingSections = [
+  {
+    title: "Advanced Billing Reports",
+    description: "Deep dive into financial reports, revenue streams, and detailed billing analytics.",
+    icon: BarChart3,
+    href: "/billing/advanced-reports",
+    color: "bg-emerald-50 text-emerald-600",
+  },
+  {
+    title: "Billing Reminders",
+    description: "Configure and manage automated payment reminders for outstanding customer invoices.",
+    icon: Bell,
+    href: "/billing/reminders",
+    color: "bg-orange-50 text-orange-600",
+  },
+  {
+    title: "Invoice Templates",
+    description: "Customize the look and feel of your customer invoices, receipts, and billing documents.",
+    icon: FileText,
+    href: "/billing/templates",
+    color: "bg-blue-50 text-blue-600",
+  },
+]
+
 const retentionSections = [
   {
     title: "Coupons",
@@ -500,6 +524,36 @@ export default function ManagePage() {
                                   New
                                 </Badge>
                               )}
+                            </div>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <CardDescription className="text-sm leading-relaxed">{section.description}</CardDescription>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+
+              {/* Billing & Financial Tools Section */}
+              <div>
+                <h2 className="text-xl font-semibold mb-4">Billing & Financial Tools</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {billingSections.map((section) => (
+                    <Card
+                      key={section.title}
+                      className="hover:shadow-md transition-all duration-200 cursor-pointer hover:scale-105"
+                      onClick={() => handleCardClick(section as any)}
+                    >
+                      <CardHeader>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${section.color}`}>
+                            <section.icon className="w-6 h-6" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <CardTitle className="text-lg">{section.title}</CardTitle>
                             </div>
                           </div>
                         </div>

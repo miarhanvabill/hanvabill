@@ -44,10 +44,22 @@ const menuItems = [
     description: "Customer Management",
   },
   {
+    title: "Enquiries",
+    href: "/enquiry",
+    icon: MessageSquare,
+    description: "Lead Management",
+  },
+  {
     title: "Bookings",
     href: "/bookings",
     icon: Calendar,
     description: "Appointments & Scheduling",
+  },
+  {
+    title: "Appointments",
+    href: "/appointments",
+    icon: Calendar,
+    description: "Alternative Appointments View",
   },
   {
     title: "Services",
@@ -66,6 +78,18 @@ const menuItems = [
     href: "/inventory",
     icon: Package,
     description: "Stock & Products",
+  },
+  {
+    title: "Expenses",
+    href: "/expenses",
+    icon: FileText,
+    description: "Expense Tracking",
+  },
+  {
+    title: "Invoices",
+    href: "/invoices",
+    icon: FileText,
+    description: "Invoice History",
   },
   {
     title: "Reports",
@@ -92,10 +116,22 @@ const menuItems = [
     description: "Reports & Insights",
   },
   {
+    title: "To-Dos",
+    href: "/todos",
+    icon: UserCheck,
+    description: "Task Management",
+  },
+  {
     title: "Marketing",
     href: "/marketing",
     icon: BarChart3,
     description: "Marketing Campaigns",
+  },
+  {
+    title: "Forms",
+    href: "/forms",
+    icon: FileText,
+    description: "Consent & Custom Forms",
   },
   {
     title: "WhatsApp Chat",
@@ -108,6 +144,12 @@ const menuItems = [
     href: "/settings",
     icon: Settings,
     description: "System Configuration",
+  },
+  {
+    title: "Hanva University",
+    href: "/university",
+    icon: Users,
+    description: "Training & Help",
   },
 ]
 
