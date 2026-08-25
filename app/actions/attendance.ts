@@ -91,22 +91,37 @@ export async function markAttendance(data: {
         return { success: false, message: "Staff member not found for this tenant" }
       }
 
-      await sql`
-        INSERT INTO attendance (
-          tenant_id, staff_id, date, status, check_in_time, check_out_time, notes
-        )
-        VALUES (
-          ${tenantId}, ${data.staffId}, ${data.date}, ${data.status}, 
-          ${data.checkInTime || null}, ${data.checkOutTime || null}, ${data.notes || null}
-        )
-        ON CONFLICT (tenant_id, staff_id, date) 
-        DO UPDATE SET 
-          status = EXCLUDED.status,
-          check_in_time = COALESCE(EXCLUDED.check_in_time, attendance.check_in_time),
-          check_out_time = COALESCE(EXCLUDED.check_out_time, attendance.check_out_time),
-          notes = COALESCE(EXCLUDED.notes, attendance.notes),
-          updated_at = CURRENT_TIMESTAMP
+      // Manually check if today's attendance exists to avoid relying on ON CONFLICT constraints
+      const existing = await sql`
+        SELECT id, check_in_time, check_out_time, notes 
+        FROM attendance 
+        WHERE tenant_id = ${tenantId} AND staff_id = ${data.staffId} AND date = ${data.date}
+        LIMIT 1
       `
+
+      if (existing.length > 0) {
+        // Update existing record
+        await sql`
+          UPDATE attendance SET 
+            status = ${data.status},
+            check_in_time = COALESCE(${data.checkInTime || null}, check_in_time),
+            check_out_time = COALESCE(${data.checkOutTime || null}, check_out_time),
+            notes = COALESCE(${data.notes || null}, notes),
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${existing[0].id}
+        `
+      } else {
+        // Insert new record
+        await sql`
+          INSERT INTO attendance (
+            tenant_id, staff_id, date, status, check_in_time, check_out_time, notes
+          )
+          VALUES (
+            ${tenantId}, ${data.staffId}, ${data.date}, ${data.status}, 
+            ${data.checkInTime || null}, ${data.checkOutTime || null}, ${data.notes || null}
+          )
+        `
+      }
 
       revalidatePath("/attendance")
       revalidatePath("/")
@@ -214,22 +229,36 @@ export async function bulkMarkAttendance(records: {
           continue
         }
 
-        await sql`
-          INSERT INTO attendance (
-            tenant_id, staff_id, date, status, check_in_time, check_out_time, notes
-          )
-          VALUES (
-            ${tenantId}, ${record.staffId}, ${record.date}, ${record.status}, 
-            ${record.checkInTime || null}, ${record.checkOutTime || null}, ${record.notes || null}
-          )
-          ON CONFLICT (tenant_id, staff_id, date) 
-          DO UPDATE SET 
-            status = EXCLUDED.status,
-            check_in_time = COALESCE(EXCLUDED.check_in_time, attendance.check_in_time),
-            check_out_time = COALESCE(EXCLUDED.check_out_time, attendance.check_out_time),
-            notes = COALESCE(EXCLUDED.notes, attendance.notes),
-            updated_at = CURRENT_TIMESTAMP
+        // Manually check if today's attendance exists to avoid relying on ON CONFLICT constraints
+        const existing = await sql`
+          SELECT id FROM attendance 
+          WHERE tenant_id = ${tenantId} AND staff_id = ${record.staffId} AND date = ${record.date}
+          LIMIT 1
         `
+
+        if (existing.length > 0) {
+          // Update existing record
+          await sql`
+            UPDATE attendance SET 
+              status = ${record.status},
+              check_in_time = COALESCE(${record.checkInTime || null}, check_in_time),
+              check_out_time = COALESCE(${record.checkOutTime || null}, check_out_time),
+              notes = COALESCE(${record.notes || null}, notes),
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ${existing[0].id}
+          `
+        } else {
+          // Insert new record
+          await sql`
+            INSERT INTO attendance (
+              tenant_id, staff_id, date, status, check_in_time, check_out_time, notes
+            )
+            VALUES (
+              ${tenantId}, ${record.staffId}, ${record.date}, ${record.status}, 
+              ${record.checkInTime || null}, ${record.checkOutTime || null}, ${record.notes || null}
+            )
+          `
+        }
       }
 
       revalidatePath("/attendance")

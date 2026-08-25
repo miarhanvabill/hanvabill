@@ -136,6 +136,14 @@ const staffSections = [
     color: "bg-purple-50 text-purple-600",
   },
   {
+    title: "Attendance & Time Tracking",
+    description: "Mark daily staff check-ins, check-outs, and monitor attendance history to track working hours.",
+    icon: Calendar,
+    href: "/attendance",
+    color: "bg-teal-50 text-teal-600",
+    badge: true,
+  },
+  {
     title: "Staff Revenue Goals",
     description: "Set clear revenue targets for staff to encourage performance and growth.",
     icon: TrendingUp,
