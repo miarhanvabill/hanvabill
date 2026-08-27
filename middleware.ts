@@ -46,7 +46,13 @@ const clerkMw = clerkMiddleware(async (auth, req) => {
 
   // 2) Protect protected routes
   if (isProtectedRoute(req) && !isPublicRoute(req)) {
-    await auth.protect();
+    const authObject = await auth();
+    if (!authObject.userId) {
+      // Force redirect to local /sign-in instead of accounts.hanva.in
+      const signInUrl = new URL("/sign-in", req.url);
+      signInUrl.searchParams.set("redirect_url", req.url);
+      return NextResponse.redirect(signInUrl);
+    }
   }
 
   // 3) Resolve tenant from Clerk session claims
