@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
@@ -76,6 +77,8 @@ interface CheckoutScreenProps {
   onComplete: (invoice: Invoice) => void
   onBack: () => void
   bookingId?: number | null
+  onChangeCustomer?: () => void
+  onResetToWalkIn?: () => void
 }
 
 interface LoyaltySettingsUI {
@@ -87,7 +90,7 @@ interface LoyaltySettingsUI {
   minimum_order_amount: number
 }
 
-function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId = null }: CheckoutScreenProps) {
+function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId = null, onChangeCustomer, onResetToWalkIn }: CheckoutScreenProps) {
   const [paymentMethod, setPaymentMethod] = useState<string>("cash")
   const [discountPercent, setDiscountPercent] = useState<number>(0)
   const [activeMembership, setActiveMembership] = useState<any>(null)
@@ -392,21 +395,37 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
         <CardContent className="space-y-4">
           {/* Customer Info */}
           <div className="bg-gray-50 p-4 rounded-lg">
-            <div className="flex items-center gap-2 mb-2">
-              <User className="w-4 h-4" />
-              <span className="font-medium">Customer</span>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4" />
+                <span className="font-medium">Walk-In Customer</span>
+              </div>
+              <Switch
+                checked={customer.name.toLowerCase().includes("walk")}
+                onCheckedChange={(checked) => {
+                  if (!checked && onChangeCustomer) {
+                    onChangeCustomer();
+                  } else if (checked && onResetToWalkIn) {
+                    onResetToWalkIn();
+                  }
+                }}
+              />
             </div>
-            <p className="font-semibold flex items-center gap-2">
-              {customer.name}
-              {activeMembership && (
-                <Badge className="bg-gold-100 text-gold-800 border-gold-300 hover:bg-gold-200">
-                  <Star className="w-3 h-3 mr-1" />
-                  {activeMembership.plan_name} Active
-                </Badge>
-              )}
-            </p>
-            <p className="text-sm text-muted-foreground">{customer.phone}</p>
-            {customer.email && <p className="text-sm text-muted-foreground">{customer.email}</p>}
+            {!customer.name.toLowerCase().includes("walk") && (
+              <>
+                <p className="font-semibold flex items-center gap-2 mt-4">
+                  {customer.name}
+                  {activeMembership && (
+                    <Badge className="bg-gold-100 text-gold-800 border-gold-300 hover:bg-gold-200">
+                      <Star className="w-3 h-3 mr-1" />
+                      {activeMembership.plan_name} Active
+                    </Badge>
+                  )}
+                </p>
+                <p className="text-sm text-muted-foreground">{customer.phone}</p>
+                {customer.email && <p className="text-sm text-muted-foreground">{customer.email}</p>}
+              </>
+            )}
           </div>
 
           {/* Items */}
