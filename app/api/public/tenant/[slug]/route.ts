@@ -50,9 +50,10 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
 
     // Fetch products
     const products = await sql`
-      SELECT id, name, description, price, stock_quantity as stock, category_name as category 
-      FROM products 
-      WHERE tenant_id = ${tenantId} AND is_active = 'true'
+      SELECT p.id, p.name, p.description, p.price, p.stock_quantity as stock, c.name as category 
+      FROM products p
+      LEFT JOIN categories c ON p.category_id = c.id
+      WHERE p.tenant_id = ${tenantId} AND p.is_active = true
     `.catch((e) => {
       console.error("Products error:", e);
       return [];
@@ -62,7 +63,7 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
     const packages = await sql`
       SELECT id, name, description, package_price as price, original_price, validity_days 
       FROM service_packages 
-      WHERE tenant_id = ${tenantId} AND is_active = 'true'
+      WHERE tenant_id = ${tenantId} AND is_active = true
     `.catch((e) => {
       console.error("Packages error:", e);
       return [];
