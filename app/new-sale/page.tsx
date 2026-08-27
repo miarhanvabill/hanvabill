@@ -49,52 +49,24 @@ interface Invoice {
 
 type SaleStep = "customer" | "services" | "checkout" | "invoice"
 
-import { getOrCreateWalkInCustomer } from "@/app/actions/customers"
-
 export default function NewSalePage() {
-  const [currentStep, setCurrentStep] = useState<SaleStep>("services")
+  const [currentStep, setCurrentStep] = useState<SaleStep>("customer")
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [showCustomerModal, setShowCustomerModal] = useState(false)
-  const [isInitializing, setIsInitializing] = useState(true)
-
-  // Initialize with Walk-in customer
-  const initWalkInCustomer = async () => {
-    setIsInitializing(true)
-    try {
-      const walkIn = await getOrCreateWalkInCustomer()
-      setSelectedCustomer({
-        id: walkIn.id,
-        name: walkIn.full_name,
-        email: walkIn.email || "",
-        phone: walkIn.phone_number,
-        address: walkIn.address || "",
-      } as any)
-      setCurrentStep("services")
-    } catch (error) {
-      console.error("Failed to load Walk-in customer:", error)
-      // Fallback to manual selection if DB fails
-      setCurrentStep("customer")
-      setShowCustomerModal(true)
-    } finally {
-      setIsInitializing(false)
-    }
-  }
-
-  useEffect(() => {
-    initWalkInCustomer()
-  }, [])
 
   // Reset everything when starting new sale
   const handleStartNewSale = () => {
+    setCurrentStep("customer")
+    setSelectedCustomer(null)
     setCartItems([])
     setInvoice(null)
-    initWalkInCustomer()
+    setShowCustomerModal(true)
   }
 
   // Handle customer selection
-  const handleCustomerSelect = (customer: any) => {
+  const handleCustomerSelect = (customer: Customer) => {
     console.log("Customer selected in NewSalePage:", customer)
     const mappedCustomer = {
       id: customer.id,
@@ -103,7 +75,7 @@ export default function NewSalePage() {
       phone: customer.phone_number,
       address: customer.address || "",
     }
-    setSelectedCustomer(mappedCustomer as any)
+    setSelectedCustomer(mappedCustomer)
     setCurrentStep("services")
     setShowCustomerModal(false)
   }
@@ -123,7 +95,8 @@ export default function NewSalePage() {
   const handleBack = () => {
     switch (currentStep) {
       case "services":
-        // Prevent going back if it's the first step
+        setCurrentStep("customer")
+        setSelectedCustomer(null)
         break
       case "checkout":
         setCurrentStep("services")
@@ -140,22 +113,19 @@ export default function NewSalePage() {
     }
   }
 
+  // Auto-open customer modal on mount
+  useEffect(() => {
+    if (currentStep === "customer" && !selectedCustomer) {
+      setShowCustomerModal(true)
+    }
+  }, [currentStep, selectedCustomer])
+
   const steps = [
+    { key: "customer", label: "Customer", icon: User },
     { key: "services", label: "Services", icon: ShoppingCart },
     { key: "checkout", label: "Checkout", icon: CreditCard },
     { key: "invoice", label: "Invoice", icon: FileText },
   ]
-
-  if (isInitializing) {
-    return (
-      <div className="flex-1 flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Initializing sale...</p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 print:bg-white print:min-h-0">
@@ -266,8 +236,6 @@ export default function NewSalePage() {
             cartItems={cartItems}
             onComplete={handleCheckoutComplete}
             onBack={() => setCurrentStep("services")}
-            onChangeCustomer={() => setShowCustomerModal(true)}
-            onResetToWalkIn={() => initWalkInCustomer()}
           />
         )}
 

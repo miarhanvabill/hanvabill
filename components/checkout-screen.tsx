@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
@@ -97,6 +98,9 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
   const [notes, setNotes] = useState<string>("")
   const [isProcessing, setIsProcessing] = useState(false)
   const [appliedCoupon, setAppliedCoupon] = useState<UICoupon | null>(null)
+  
+  // Customer Source State
+  const [isWalkInSource, setIsWalkInSource] = useState<boolean>(true)
 
   const [customerLoyalty, setCustomerLoyalty] = useState<UiCustomerLoyalty | null>(null)
   const [loyaltySettings, setLoyaltySettings] = useState<LoyaltySettingsUI | null>(null)
@@ -306,11 +310,14 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
       }
 
       const today = new Date().toISOString().split("T")[0]
+      const sourceStr = isWalkInSource ? "Walk-In" : customerSource;
+      const combinedNotes = notes ? `[Source: ${sourceStr}] ${notes}` : `[Source: ${sourceStr}]`;
+
       const payload = {
         customer_id: customer.id,
         items: cartItems,
         payment_method: paymentMethod,
-        notes: notes || null,
+        notes: combinedNotes,
         coupon_code: appliedCoupon?.code,
         coupon_discount: appliedCoupon ? couponDiscount : 0,
         manual_discount: !appliedCoupon ? manualDiscount : 0,
@@ -401,19 +408,31 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
                 <span className="font-medium">Walk-In Customer</span>
               </div>
               <Switch
-                checked={customer.name.toLowerCase().includes("walk")}
-                onCheckedChange={(checked) => {
-                  if (!checked && onChangeCustomer) {
-                    onChangeCustomer();
-                  } else if (checked && onResetToWalkIn) {
-                    onResetToWalkIn();
-                  }
-                }}
+                checked={isWalkInSource}
+                onCheckedChange={setIsWalkInSource}
               />
             </div>
-            {!customer.name.toLowerCase().includes("walk") && (
-              <>
-                <p className="font-semibold flex items-center gap-2 mt-4">
+            {!isWalkInSource && (
+              <div className="mt-3 mb-4">
+                <Label className="text-xs text-muted-foreground mb-1 block">Customer Type (Source)</Label>
+                <Select value={customerSource} onValueChange={setCustomerSource}>
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Online">Online</SelectItem>
+                    <SelectItem value="Referral">Referral</SelectItem>
+                    <SelectItem value="Social Media">Social Media</SelectItem>
+                    <SelectItem value="Phone Booking">Phone Booking</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            
+            <div className={!isWalkInSource ? "mt-4 pt-4 border-t border-gray-200" : "mt-2 pt-2 border-t border-gray-200"}>
+              <div className="flex justify-between items-center mb-1">
+                <p className="font-semibold flex items-center gap-2">
                   {customer.name}
                   {activeMembership && (
                     <Badge className="bg-gold-100 text-gold-800 border-gold-300 hover:bg-gold-200">
@@ -422,12 +441,20 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
                     </Badge>
                   )}
                 </p>
-                <p className="text-sm text-muted-foreground">{customer.phone}</p>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-6 text-xs text-blue-600 px-2"
+                  onClick={onChangeCustomer}
+                >
+                  Change
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">{customer.phone}</p>
                 {customer.email && <p className="text-sm text-muted-foreground">{customer.email}</p>}
-              </>
-            )}
-          </div>
 
+            </div>
+          </div>
           {/* Items */}
           <div className="space-y-3">
             <h4 className="font-medium">Items ({cartItems.length})</h4>
