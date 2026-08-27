@@ -101,6 +101,7 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
   
   // Customer Source State
   const [isWalkInSource, setIsWalkInSource] = useState<boolean>(true)
+  const [customerSource, setCustomerSource] = useState<string>("Online")
 
   const [customerLoyalty, setCustomerLoyalty] = useState<UiCustomerLoyalty | null>(null)
   const [loyaltySettings, setLoyaltySettings] = useState<LoyaltySettingsUI | null>(null)
