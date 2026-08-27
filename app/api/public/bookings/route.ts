@@ -4,11 +4,14 @@ import { sql } from "@/lib/db";
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { tenantId, service_ids, date, time, customer, staff_id } = body;
+    const { tenantId, service_ids, product_ids, package_ids, membership_ids, extra_notes, date, time, customer, staff_id } = body;
     // Support legacy single service_id for safety
     const servicesToBook = service_ids || (body.service_id ? [body.service_id] : []);
+    
+    // Allow booking if ANY item is present
+    const hasItems = servicesToBook.length > 0 || (product_ids && product_ids.length > 0) || (package_ids && package_ids.length > 0) || (membership_ids && membership_ids.length > 0);
 
-    if (!tenantId || servicesToBook.length === 0 || !date || !time || !customer || !customer.name || !customer.phone) {
+    if (!tenantId || !hasItems || !date || !time || !customer || !customer.name || !customer.phone) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
@@ -39,10 +42,14 @@ export async function POST(req: Request) {
 
     // Get service amount
     // Get service amounts
-    const serviceRows = await sql`SELECT id, price FROM services WHERE id = ANY(${servicesToBook}) AND tenant_id = ${tenantId}`;
-    const amount = serviceRows.reduce((sum, s) => sum + Number(s.price), 0);
+    let serviceRows: any[] = [];
+    if (servicesToBook && servicesToBook.length > 0) {
+      serviceRows = await sql`SELECT id, price FROM services WHERE id = ANY(${servicesToBook}) AND tenant_id = ${tenantId}`;
+    }
+    const serviceAmount = serviceRows.reduce((sum, s) => sum + Number(s.price), 0);
+    const amount = serviceAmount > 0 ? serviceAmount : (body.total_amount_client || 0);
+    const finalNotes = extra_notes || 'Online Booking';
 
-    // Create booking
     // Generate booking number
     const bookingNumber = "BKG-" + Math.floor(100000 + Math.random() * 900000);
 
@@ -51,7 +58,7 @@ export async function POST(req: Request) {
       INSERT INTO bookings (
         tenant_id, booking_number, customer_id, staff_id, booking_date, booking_time, status, total_amount, notes, payment_method
       ) VALUES (
-        ${tenantId}, ${bookingNumber}, ${customerId}, ${staff_id || null}, ${date}, ${time}, 'pending', ${amount}, 'Online Booking', 'unpaid'
+        ${tenantId}, ${bookingNumber}, ${customerId}, ${staff_id || null}, ${date}, ${time}, 'pending', ${amount}, ${finalNotes}, 'unpaid'
       )
       RETURNING id, booking_date, booking_time
     `;

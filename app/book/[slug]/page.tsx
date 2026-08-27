@@ -93,6 +93,9 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
 
   const [step, setStep] = useState(1) // 1: Main, 2: DateTime, 3: Details, 4: Success
   const [selectedServices, setSelectedServices] = useState<Service[]>([])
+  const [selectedProducts, setSelectedProducts] = useState<Product[]>([])
+  const [selectedPackages, setSelectedPackages] = useState<Package[]>([])
+  const [selectedMemberships, setSelectedMemberships] = useState<Membership[]>([])
   const [selectedStaff, setSelectedStaff] = useState<Staff | 'any' | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
@@ -169,14 +172,24 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   }, [categoriesMap, searchQuery, activeCategory])
 
   const handleAddService = (service: Service) => {
-    if (!selectedServices.some(s => s.id === service.id)) {
-      setSelectedServices(prev => [...prev, service])
-    }
+    if (!selectedServices.some(s => s.id === service.id)) setSelectedServices(prev => [...prev, service])
   }
+  const handleRemoveService = (id: number) => setSelectedServices(prev => prev.filter(s => s.id !== id))
 
-  const handleRemoveService = (id: number) => {
-    setSelectedServices(prev => prev.filter(s => s.id !== id))
+  const handleAddProduct = (product: Product) => {
+    if (!selectedProducts.some(p => p.id === product.id)) setSelectedProducts(prev => [...prev, product])
   }
+  const handleRemoveProduct = (id: number) => setSelectedProducts(prev => prev.filter(p => p.id !== id))
+
+  const handleAddPackage = (pkg: Package) => {
+    if (!selectedPackages.some(p => p.id === pkg.id)) setSelectedPackages(prev => [...prev, pkg])
+  }
+  const handleRemovePackage = (id: number) => setSelectedPackages(prev => prev.filter(p => p.id !== id))
+
+  const handleAddMembership = (membership: Membership) => {
+    if (!selectedMemberships.some(m => m.id === membership.id)) setSelectedMemberships(prev => [...prev, membership])
+  }
+  const handleRemoveMembership = (id: number) => setSelectedMemberships(prev => prev.filter(m => m.id !== id))
 
   const scrollCategories = (direction: 'left' | 'right') => {
     if (categoriesRef.current) {
@@ -209,16 +222,29 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   }
 
   const handleSubmitBooking = async () => {
-    if (selectedServices.length === 0 || !selectedDate || !selectedTime || !customerForm.name || !customerForm.phone) return
+    if (totalItems === 0 || !selectedDate || !selectedTime || !customerForm.name || !customerForm.phone) return
     
     setSubmitting(true)
     try {
+      const extraNotesParts = [];
+      if (selectedProducts.length > 0) extraNotesParts.push(`Products: ${selectedProducts.map(p => p.name).join(', ')}`);
+      if (selectedPackages.length > 0) extraNotesParts.push(`Packages: ${selectedPackages.map(p => p.name).join(', ')}`);
+      if (selectedMemberships.length > 0) extraNotesParts.push(`Memberships: ${selectedMemberships.map(m => m.name).join(', ')}`);
+      if (customerForm.message) extraNotesParts.push(`Note: ${customerForm.message}`);
+      
+      const extraNotes = extraNotesParts.join(' | ');
+
       const res = await fetch('/api/public/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenantId,
           service_ids: selectedServices.map(s => s.id),
+          product_ids: selectedProducts.map(p => p.id),
+          package_ids: selectedPackages.map(p => p.id),
+          membership_ids: selectedMemberships.map(m => m.id),
+          extra_notes: extraNotes,
+          total_amount_client: totalAmount, // Pass client calculated amount as hint
           date: format(selectedDate, "yyyy-MM-dd"),
           time: selectedTime,
           staff_id: selectedStaff === 'any' ? null : selectedStaff?.id,
@@ -272,8 +298,14 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     )
   }
 
-  const totalAmount = selectedServices.reduce((sum, s) => sum + Number(s.price), 0);
+  const totalAmount = 
+    selectedServices.reduce((sum, s) => sum + Number(s.price), 0) + 
+    selectedProducts.reduce((sum, p) => sum + Number(p.price), 0) + 
+    selectedPackages.reduce((sum, p) => sum + Number(p.price), 0) + 
+    selectedMemberships.reduce((sum, m) => sum + Number(m.price), 0);
+    
   const totalDuration = selectedServices.reduce((sum, s) => sum + Number(s.duration), 0);
+  const totalItems = selectedServices.length + selectedProducts.length + selectedPackages.length + selectedMemberships.length;
   
   const isOpen = () => {
     if (!business) return true;
@@ -533,19 +565,35 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                 {products.length === 0 ? (
                   <div className="text-center text-gray-500">No products available at this time.</div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {products.map(product => (
-                      <div key={product.id} className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex items-start gap-4">
-                        <div className="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center">
-                          <ShoppingCart className="w-8 h-8 text-gray-300" />
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {products.map(product => {
+                      const isSelected = selectedProducts.some(p => p.id === product.id);
+                      return (
+                        <div key={product.id} className={`bg-white p-4 rounded-2xl border transition-all ${isSelected ? 'border-gray-400 shadow-md' : 'border-gray-200 shadow-sm hover:border-gray-300'}`}>
+                          <div className="flex justify-between items-start gap-4">
+                            <div className="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center">
+                              <ShoppingCart className="w-8 h-8 text-gray-300" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-gray-900 leading-tight mb-1 truncate">{product.name}</h4>
+                              <div className="font-bold text-red-500 text-sm">{business.currency}{product.price}</div>
+                              {product.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{product.description}</p>}
+                            </div>
+                            <div className="shrink-0 pt-1">
+                              {isSelected ? (
+                                <Button variant="outline" className="bg-[#1a1a1a] text-white hover:bg-black border-transparent rounded-xl h-9 px-4 text-xs font-semibold shadow-sm" onClick={() => handleRemoveProduct(product.id)}>
+                                  Remove &minus;
+                                </Button>
+                              ) : (
+                                <Button variant="outline" className="bg-white border-gray-300 text-gray-900 hover:bg-gray-50 rounded-xl h-9 px-5 text-xs font-semibold shadow-sm" onClick={() => handleAddProduct(product)}>
+                                  Add +
+                                </Button>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="font-bold text-gray-900">{product.name}</h4>
-                          <div className="font-bold text-red-500 mt-1">{business.currency}{product.price}</div>
-                          {product.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{product.description}</p>}
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -556,19 +604,37 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                 {packages.length === 0 ? (
                   <div className="text-center text-gray-500">No packages available at this time.</div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {packages.map(pkg => (
-                      <div key={pkg.id} className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
-                        <h4 className="font-bold text-lg text-gray-900">{pkg.name}</h4>
-                        <div className="flex items-center gap-2 mt-2">
-                          <div className="font-bold text-xl text-green-600">{business.currency}{pkg.price}</div>
-                          {pkg.original_price && pkg.original_price > pkg.price && (
-                            <div className="text-sm text-gray-400 line-through">{business.currency}{pkg.original_price}</div>
-                          )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {packages.map(pkg => {
+                      const isSelected = selectedPackages.some(p => p.id === pkg.id);
+                      return (
+                        <div key={pkg.id} className={`bg-white p-4 rounded-2xl border transition-all ${isSelected ? 'border-gray-400 shadow-md' : 'border-gray-200 shadow-sm hover:border-gray-300'}`}>
+                          <div className="flex justify-between items-start gap-4">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-gray-900 leading-tight mb-1 truncate">{pkg.name}</h4>
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="font-bold text-red-500 text-sm">{business.currency}{pkg.price}</div>
+                                {pkg.original_price && pkg.original_price > pkg.price && (
+                                  <div className="text-[11px] text-gray-400 line-through">{business.currency}{pkg.original_price}</div>
+                                )}
+                              </div>
+                              {pkg.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{pkg.description}</p>}
+                            </div>
+                            <div className="shrink-0 pt-1">
+                              {isSelected ? (
+                                <Button variant="outline" className="bg-[#1a1a1a] text-white hover:bg-black border-transparent rounded-xl h-9 px-4 text-xs font-semibold shadow-sm" onClick={() => handleRemovePackage(pkg.id)}>
+                                  Remove &minus;
+                                </Button>
+                              ) : (
+                                <Button variant="outline" className="bg-white border-gray-300 text-gray-900 hover:bg-gray-50 rounded-xl h-9 px-5 text-xs font-semibold shadow-sm" onClick={() => handleAddPackage(pkg)}>
+                                  Add +
+                                </Button>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        {pkg.description && <p className="text-sm text-gray-500 mt-2">{pkg.description}</p>}
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -579,14 +645,32 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                 {memberships.length === 0 ? (
                   <div className="text-center text-gray-500">No memberships available at this time.</div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {memberships.map(mem => (
-                      <div key={mem.id} className="bg-gradient-to-br from-gray-900 to-gray-800 p-6 rounded-2xl shadow-md text-white">
-                        <h4 className="font-bold text-xl">{mem.name}</h4>
-                        <div className="font-black text-3xl mt-3">{business.currency}{mem.price}</div>
-                        {mem.description && <p className="text-sm text-gray-300 mt-3">{mem.description}</p>}
-                      </div>
-                    ))}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {memberships.map(mem => {
+                      const isSelected = selectedMemberships.some(m => m.id === mem.id);
+                      return (
+                        <div key={mem.id} className={`bg-gradient-to-br from-gray-900 to-gray-800 p-4 rounded-2xl border transition-all ${isSelected ? 'border-gray-400 shadow-[0_0_0_2px_black]' : 'border-transparent shadow-md'}`}>
+                          <div className="flex justify-between items-start gap-4">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-bold text-white leading-tight mb-1 truncate">{mem.name}</h4>
+                              <div className="font-bold text-gray-100 text-sm mt-1">{business.currency}{mem.price}</div>
+                              {mem.description && <p className="text-xs text-gray-300 mt-1 line-clamp-2">{mem.description}</p>}
+                            </div>
+                            <div className="shrink-0 pt-1">
+                              {isSelected ? (
+                                <Button variant="outline" className="bg-white text-black hover:bg-gray-100 border-transparent rounded-xl h-9 px-4 text-xs font-semibold shadow-sm" onClick={() => handleRemoveMembership(mem.id)}>
+                                  Remove &minus;
+                                </Button>
+                              ) : (
+                                <Button variant="outline" className="bg-transparent border-gray-600 text-white hover:bg-gray-800 rounded-xl h-9 px-5 text-xs font-semibold shadow-sm" onClick={() => handleAddMembership(mem)}>
+                                  Add +
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -643,16 +727,16 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
           </div>
           
           {/* Bottom Floating Cart Bar */}
-          {activeTab === 'Services' && (
+          {activeTab !== 'Enquiry' && (
             <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none p-4">
               <div className="max-w-3xl mx-auto flex justify-center w-full pointer-events-auto">
-                <div className={`w-full transition-all duration-300 transform ${selectedServices.length > 0 ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'}`}>
+                <div className={`w-full transition-all duration-300 transform ${totalItems > 0 ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'}`}>
                   <div className="bg-[#2a2a2a] rounded-2xl shadow-2xl flex items-center justify-between p-3 pl-4 pr-3 overflow-hidden relative">
                     <div className="flex items-center gap-4 text-white">
                       <div className="relative">
                         <ShoppingCart className="w-6 h-6 text-gray-300" />
                         <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-[#2a2a2a]">
-                          {selectedServices.length}
+                          {totalItems}
                         </span>
                       </div>
                       <div>
