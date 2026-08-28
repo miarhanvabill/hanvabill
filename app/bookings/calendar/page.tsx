@@ -4,8 +4,9 @@ import Link from "next/link"
 import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { format, addDays, subDays, isToday, parseISO, isSameDay } from "date-fns"
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, Loader2, RefreshCw, Clock, IndianRupee, Users, User, Package, FileText, CheckCircle, XCircle } from "lucide-react"
-import { getCalendarBookings, updateBookingStatus, type CalendarBooking } from "@/app/actions/bookings"
+import { getCalendarBookings, updateBookingStatus, updateBookingTime, type CalendarBooking } from "@/app/actions/bookings"
 import { getStaff } from "@/app/actions/staff"
+import { getAllResources } from "@/app/actions/resources"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -18,6 +19,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { toast } from "sonner"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
 const START_HOUR = 8 // 8:00 AM
 const END_HOUR = 21 // 9:00 PM
@@ -35,9 +37,11 @@ export default function BookingCalendarPage() {
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [bookings, setBookings] = useState<CalendarBooking[]>([])
   const [staffList, setStaffList] = useState<any[]>([])
+  const [resourcesList, setResourcesList] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedStaffId, setSelectedStaffId] = useState<string>("all")
+  const [groupBy, setGroupBy] = useState<"staff" | "resource">("staff")
   
   const [selectedBooking, setSelectedBooking] = useState<CalendarBooking | null>(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -50,13 +54,15 @@ export default function BookingCalendarPage() {
     
     try {
       const dateStr = format(date, "yyyy-MM-dd")
-      const [bookingsData, staffData] = await Promise.all([
+      const [bookingsData, staffData, resourcesData] = await Promise.all([
         getCalendarBookings(dateStr),
-        getStaff()
+        getStaff(),
+        getAllResources()
       ])
       
       setBookings(bookingsData)
       setStaffList(staffData)
+      setResourcesList(resourcesData)
     } catch (error) {
       console.error("Error fetching calendar data:", error)
       toast.error("Failed to load calendar data")
@@ -142,6 +148,56 @@ export default function BookingCalendarPage() {
     }
   }
 
+  const handleDragStart = (e: React.DragEvent, booking: CalendarBooking) => {
+    e.dataTransfer.setData("bookingId", booking.id.toString())
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault() // Allow drop
+  }
+
+  const handleDrop = async (e: React.DragEvent, id: number | string, hour: number, minute: number) => {
+    e.preventDefault()
+    const bookingIdStr = e.dataTransfer.getData("bookingId")
+    if (!bookingIdStr) return
+    const bookingId = parseInt(bookingIdStr, 10)
+    
+    // Format the new time correctly
+    const newTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`
+    const newDate = format(currentDate, "yyyy-MM-dd")
+
+    let newStaffId = groupBy === "staff" ? Number(id) : undefined
+    let newResourceId = groupBy === "resource" ? Number(id) : undefined
+
+    // Optimistic update
+    setBookings(prev => prev.map(b => {
+      if (b.id === bookingId) {
+        return {
+          ...b,
+          booking_time: newTime,
+          booking_date: newDate,
+          ...(newStaffId !== undefined ? { staff_id: newStaffId } : {}),
+          ...(newResourceId !== undefined ? { resource_id: newResourceId } : {})
+        }
+      }
+      return b
+    }))
+
+    try {
+      const res = await updateBookingTime(bookingId, newDate, newTime, newStaffId, newResourceId)
+      if (res.success) {
+        toast.success(res.message)
+      } else {
+        toast.error(res.message)
+        // Revert optimistic update on error by refetching
+        fetchCalendarData(currentDate, true)
+      }
+    } catch (error) {
+      toast.error("Failed to reschedule booking")
+      fetchCalendarData(currentDate, true)
+    }
+  }
+
   const filteredStaff = useMemo(() => {
     return selectedStaffId === "all" ? staffList : staffList.filter(s => s.id.toString() === selectedStaffId)
   }, [staffList, selectedStaffId])
@@ -166,18 +222,29 @@ export default function BookingCalendarPage() {
           <p className="text-muted-foreground">Manage your daily appointments and staff schedules.</p>
         </div>
         
-        <div className="flex items-center gap-2">
-          <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="All Staff" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Staff</SelectItem>
-              {staffList.map(staff => (
-                <SelectItem key={staff.id} value={staff.id.toString()}>{staff.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="flex items-center gap-2 flex-wrap">
+          <ToggleGroup type="single" value={groupBy} onValueChange={(v) => v && setGroupBy(v as any)} className="border rounded-md">
+            <ToggleGroupItem value="staff" aria-label="Group by Staff">
+              Staff
+            </ToggleGroupItem>
+            <ToggleGroupItem value="resource" aria-label="Group by Resources">
+              Rooms/Chairs
+            </ToggleGroupItem>
+          </ToggleGroup>
+
+          {groupBy === "staff" && (
+            <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="All Staff" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Staff</SelectItem>
+                {staffList.map(staff => (
+                  <SelectItem key={staff.id} value={staff.id.toString()}>{staff.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
 
           <div className="flex items-center rounded-md border p-1 bg-background">
             <Button variant="ghost" size="icon" onClick={handlePrevDay}>
@@ -287,19 +354,19 @@ export default function BookingCalendarPage() {
                 <div className="sticky left-0 z-20 bg-background border-r w-[200px] flex-shrink-0 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                   {/* Empty top left corner */}
                   <div className="h-[60px] border-b flex items-center justify-center bg-muted/30">
-                    <span className="text-xs font-medium text-muted-foreground">Staff \ Time</span>
+                    <span className="text-xs font-medium text-muted-foreground">{groupBy === "staff" ? "Staff" : "Resource"} \ Time</span>
                   </div>
                   
-                  {/* Staff Rows */}
-                  {filteredStaff.map((staff) => (
-                    <div key={staff.id} className="h-[80px] border-b flex items-center px-4 gap-3 bg-background">
+                  {/* Entity Rows */}
+                  {(groupBy === "staff" ? filteredStaff : resourcesList).map((entity) => (
+                    <div key={entity.id} className="h-[80px] border-b flex items-center px-4 gap-3 bg-background">
                       <Avatar className="h-8 w-8">
-                        <AvatarImage src={staff.image_url} alt={staff.name} />
-                        <AvatarFallback>{staff.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                        {groupBy === "staff" && <AvatarImage src={entity.image_url} alt={entity.name} />}
+                        <AvatarFallback>{entity.name.substring(0, 2).toUpperCase()}</AvatarFallback>
                       </Avatar>
                       <div className="truncate">
-                        <p className="font-medium text-sm truncate">{staff.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{staff.role || 'Stylist'}</p>
+                        <p className="font-medium text-sm truncate">{entity.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{groupBy === "staff" ? (entity.role || 'Stylist') : (entity.type || 'Resource')}</p>
                       </div>
                     </div>
                   ))}
@@ -324,7 +391,7 @@ export default function BookingCalendarPage() {
                     ))}
                   </div>
 
-                  {/* Staff Grid Rows */}
+                  {/* Staff or Resource Grid Rows */}
                   <div className="relative">
                     {/* Current Time Indicator */}
                     {currentTimePos >= 0 && (
@@ -338,22 +405,26 @@ export default function BookingCalendarPage() {
                       </div>
                     )}
 
-                    {filteredStaff.map((staff) => {
-                      const staffBookings = bookings.filter(b => b.staff_id === staff.id)
+                    {(groupBy === "staff" ? filteredStaff : resourcesList).map((entity) => {
+                      const entityBookings = groupBy === "staff" 
+                        ? bookings.filter(b => b.staff_id === entity.id)
+                        : bookings.filter(b => b.resource_id === entity.id)
                       
                       return (
-                        <div key={staff.id} className="h-[80px] border-b flex relative">
+                        <div key={entity.id} className="h-[80px] border-b flex relative">
                           {/* Empty Grid Cells */}
-                          {TIME_SLOTS.map((_, i) => (
+                          {TIME_SLOTS.map((slot, i) => (
                             <div 
                               key={i} 
                               className="flex-shrink-0 border-r border-dashed border-gray-200 h-full hover:bg-muted/50 transition-colors"
                               style={{ width: `${SLOT_WIDTH_PX}px` }}
+                              onDragOver={handleDragOver}
+                              onDrop={(e) => handleDrop(e, entity.id, slot.hour, slot.minute)}
                             />
                           ))}
 
                           {/* Booking Blocks */}
-                          {staffBookings.map((booking) => {
+                          {entityBookings.map((booking) => {
                             // Parse booking time
                             const [hours, minutes] = booking.booking_time.split(':').map(Number)
                             
@@ -380,14 +451,16 @@ export default function BookingCalendarPage() {
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <div 
-                                      className={`absolute top-2 bottom-2 rounded-md border shadow-sm p-2 overflow-hidden cursor-pointer hover:shadow-md transition-all ${colorClasses}`}
-                                      style={{ left: `${leftPos}px`, width: `${width - 4}px` }}
+                                      draggable={true}
+                                      onDragStart={(e) => handleDragStart(e, booking)}
+                                      className={`absolute top-2 bottom-2 rounded-md border shadow-sm p-2 overflow-hidden cursor-move hover:shadow-md transition-all ${colorClasses}`}
+                                      style={{ left: `${leftPos}px`, width: `${width - 4}px`, zIndex: 5 }}
                                       onClick={() => {
                                         setSelectedBooking(booking)
                                         setIsDrawerOpen(true)
                                       }}
                                     >
-                                      <div className="flex flex-col h-full justify-start">
+                                      <div className="flex flex-col h-full justify-start pointer-events-none">
                                         <div className="font-semibold text-xs truncate">
                                           {booking.customer_name}
                                         </div>
