@@ -49,10 +49,11 @@ export async function GET(request: Request) {
           cp.commission_type,
           cp.base_rate,
           COUNT(DISTINCT i.id) as bookings_count,
-          COALESCE(SUM(i.total), 0) as total_revenue
+          COALESCE(SUM(i.amount), 0) as total_revenue
         FROM staff s
         LEFT JOIN commission_profiles cp ON s.commission_profile_id = cp.id
-        LEFT JOIN invoices i ON i.staff_id = s.id 
+        LEFT JOIN bookings b ON b.staff_id = s.id AND b.tenant_id = ${tenantId}
+        LEFT JOIN invoices i ON i.booking_id = b.id 
           AND i.tenant_id = ${tenantId} 
           AND i.status = 'paid'
           AND i.created_at >= ${formattedStart} 
