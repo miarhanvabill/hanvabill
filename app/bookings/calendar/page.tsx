@@ -166,8 +166,8 @@ export default function BookingCalendarPage() {
     const newTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}:00`
     const newDate = format(currentDate, "yyyy-MM-dd")
 
-    let newStaffId = groupBy === "staff" ? Number(id) : undefined
-    let newResourceId = groupBy === "resource" ? Number(id) : undefined
+    let newStaffId = groupBy === "staff" ? (Number(id) === -1 ? null : Number(id)) : undefined
+    let newResourceId = groupBy === "resource" ? (Number(id) === -1 ? null : Number(id)) : undefined
 
     // Optimistic update
     setBookings(prev => prev.map(b => {
@@ -199,8 +199,22 @@ export default function BookingCalendarPage() {
   }
 
   const filteredStaff = useMemo(() => {
-    return selectedStaffId === "all" ? staffList : staffList.filter(s => s.id.toString() === selectedStaffId)
-  }, [staffList, selectedStaffId])
+    let list = selectedStaffId === "all" ? staffList : staffList.filter(s => s.id.toString() === selectedStaffId)
+    const hasUnassigned = bookings.some(b => !b.staff_id)
+    if (hasUnassigned && selectedStaffId === "all") {
+      list = [...list, { id: -1, name: "Unassigned", role: "none" } as any]
+    }
+    return list
+  }, [staffList, selectedStaffId, bookings])
+
+  const filteredResources = useMemo(() => {
+    let list = resourcesList
+    const hasUnassigned = bookings.some(b => !b.resource_id)
+    if (hasUnassigned) {
+      list = [...list, { id: -1, name: "Unassigned", type: "none" } as any]
+    }
+    return list
+  }, [resourcesList, bookings])
 
   const stats = useMemo(() => {
     const todayBookings = bookings.length
@@ -358,7 +372,7 @@ export default function BookingCalendarPage() {
                   </div>
                   
                   {/* Entity Rows */}
-                  {(groupBy === "staff" ? filteredStaff : resourcesList).map((entity) => (
+                  {(groupBy === "staff" ? filteredStaff : filteredResources).map((entity) => (
                     <div key={entity.id} className="h-[80px] border-b flex items-center px-4 gap-3 bg-background">
                       <Avatar className="h-8 w-8">
                         {groupBy === "staff" && <AvatarImage src={entity.image_url} alt={entity.name} />}
@@ -405,10 +419,10 @@ export default function BookingCalendarPage() {
                       </div>
                     )}
 
-                    {(groupBy === "staff" ? filteredStaff : resourcesList).map((entity) => {
+                    {(groupBy === "staff" ? filteredStaff : filteredResources).map((entity) => {
                       const entityBookings = groupBy === "staff" 
-                        ? bookings.filter(b => b.staff_id === entity.id)
-                        : bookings.filter(b => b.resource_id === entity.id)
+                        ? bookings.filter(b => entity.id === -1 ? !b.staff_id : b.staff_id === entity.id)
+                        : bookings.filter(b => entity.id === -1 ? !b.resource_id : b.resource_id === entity.id)
                       
                       return (
                         <div key={entity.id} className="h-[80px] border-b flex relative">
