@@ -467,6 +467,7 @@ export default function StaffRevenueGoalsPage() {
                     <span className="text-sm text-gray-600">
                       {staffLoading ? "Loading..." : `${staffMembers.length} active staff members`}
                     </span>
+                  </div>
                   <div className="text-xs text-gray-500" suppressHydrationWarning>Last updated: {lastUpdated.toLocaleTimeString()}</div>
                 </div>
                 <Button

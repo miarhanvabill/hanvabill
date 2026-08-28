@@ -13,9 +13,6 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
-  },
-  experimental: {
-    instrumentationHook: true,
   }
 }
 
