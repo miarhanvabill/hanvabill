@@ -1146,6 +1146,14 @@ export default function MembershipsPage() {
                 />
                 <Label htmlFor="edit_is_active">Active Plan</Label>
               </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="edit_is_multi_branch"
+                  checked={planFormData.is_multi_branch}
+                  onCheckedChange={(checked) => setPlanFormData({ ...planFormData, is_multi_branch: checked })}
+                />
+                <Label htmlFor="edit_is_multi_branch">Multi-branch</Label>
+              </div>
             </div>
 
             <div className="flex justify-end gap-3 pt-4">
