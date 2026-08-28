@@ -53,6 +53,7 @@ interface MembershipPlan {
   priority_booking: boolean
   free_services: number
   is_active: boolean
+  is_multi_branch: boolean
   created_at: string
 }
 
@@ -118,6 +119,7 @@ export default function MembershipsPage() {
     priority_booking: false,
     free_services: 0,
     is_active: true,
+    is_multi_branch: true,
   })
 
   useEffect(() => {
@@ -147,6 +149,7 @@ export default function MembershipsPage() {
           priority_booking: plan.discount_percentage > 15, // Derive from discount
           free_services: plan.discount_percentage > 15 ? 1 : 0, // Derive from discount
           is_active: plan.status === "active",
+          is_multi_branch: plan.is_multi_branch ?? true,
         }))
 
         setPlans(transformedPlans)
@@ -277,6 +280,7 @@ export default function MembershipsPage() {
         benefits: planFormData.benefits.filter((b) => b.trim() !== ""),
         discount_percentage: planFormData.discount_percentage,
         status: planFormData.is_active ? "active" : "inactive",
+        is_multi_branch: planFormData.is_multi_branch,
       }
 
       const response = await fetch(`/api/memberships?id=${selectedPlan.id}`, {
@@ -342,6 +346,7 @@ export default function MembershipsPage() {
       priority_booking: plan.priority_booking,
       free_services: plan.free_services,
       is_active: plan.is_active,
+      is_multi_branch: plan.is_multi_branch ?? true,
     })
     setIsEditPlanDialogOpen(true)
   }
@@ -409,6 +414,7 @@ export default function MembershipsPage() {
       priority_booking: false,
       free_services: 0,
       is_active: true,
+      is_multi_branch: true,
     })
   }
 
@@ -736,6 +742,14 @@ export default function MembershipsPage() {
                               />
                               <Label htmlFor="is_active">Active Plan</Label>
                             </div>
+                            <div className="flex items-center space-x-2">
+                              <Switch
+                                id="is_multi_branch"
+                                checked={planFormData.is_multi_branch}
+                                onCheckedChange={(checked) => setPlanFormData({ ...planFormData, is_multi_branch: checked })}
+                              />
+                              <Label htmlFor="is_multi_branch">Multi-branch</Label>
+                            </div>
                           </div>
 
                           <div className="flex justify-end gap-3 pt-4">
@@ -789,6 +803,10 @@ export default function MembershipsPage() {
                             <div className="flex justify-between text-sm">
                               <span className="text-gray-600">Priority Booking:</span>
                               <span className="font-medium">{plan.priority_booking ? "Yes" : "No"}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-600">Multi-branch:</span>
+                              <span className="font-medium">{plan.is_multi_branch ? "Yes" : "No"}</span>
                             </div>
                           </div>
 

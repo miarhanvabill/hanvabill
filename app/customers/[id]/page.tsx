@@ -5,6 +5,7 @@ import { getCustomer } from "@/app/actions/customers"
 import { getBookingsByCustomerId, getInvoicesByCustomerId } from "@/app/actions/bookings"
 import { getActiveCustomerMembership } from "@/app/actions/memberships"
 import { getStaff } from "@/app/actions/staff"
+import { getCustomerPackages } from "@/app/actions/customer-packages"
 import { CustomerProfileDisplay } from "@/components/customer-profile-display"
 
 async function CustomerDetailsContent({ id }: { id: string }) {
@@ -16,11 +17,12 @@ async function CustomerDetailsContent({ id }: { id: string }) {
     }
 
     // Fetch bookings, invoices, staff, and active membership in parallel for better performance
-    const [bookings, invoices, activeMembership, staffList] = await Promise.all([
+    const [bookings, invoices, activeMembership, staffList, packages] = await Promise.all([
       getBookingsByCustomerId(id),
       getInvoicesByCustomerId(id),
       getActiveCustomerMembership(Number(id)),
-      getStaff()
+      getStaff(),
+      getCustomerPackages(Number(id))
     ])
 
     // Serialize all data passing to the Client Component to avoid Date serialization errors
@@ -29,6 +31,7 @@ async function CustomerDetailsContent({ id }: { id: string }) {
     const serializedInvoices = JSON.parse(JSON.stringify(invoices))
     const serializedMembership = activeMembership ? JSON.parse(JSON.stringify(activeMembership)) : null
     const serializedStaffList = JSON.parse(JSON.stringify(staffList))
+    const serializedPackages = JSON.parse(JSON.stringify(packages))
 
     return <CustomerProfileDisplay 
       customer={serializedCustomer} 
@@ -36,6 +39,7 @@ async function CustomerDetailsContent({ id }: { id: string }) {
       invoices={serializedInvoices} 
       activeMembership={serializedMembership} 
       staffList={serializedStaffList}
+      packages={serializedPackages}
     />
   } catch (error) {
     console.error("Error loading customer details:", error)

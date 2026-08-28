@@ -138,6 +138,8 @@ export default function PackagesPage() {
       duration_minutes: pkg.duration_minutes.toString(),
       validity_days: pkg.validity_days.toString(),
       is_active: pkg.is_active,
+      is_transferable: pkg.is_transferable,
+      is_multi_branch: pkg.is_multi_branch,
     })
     setIsCreateModalOpen(true)
   }
@@ -318,13 +320,33 @@ export default function PackagesPage() {
                 )}
               </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="is_active"
-                  checked={formData.is_active}
-                  onCheckedChange={(checked) => setFormData({ ...formData, is_active: !!checked })}
-                />
-                <Label htmlFor="is_active">Active Package</Label>
+              <div className="flex flex-col space-y-4 pt-4 border-t">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="is_active"
+                    checked={formData.is_active}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_active: !!checked })}
+                  />
+                  <Label htmlFor="is_active">Active Package</Label>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="is_transferable"
+                    checked={formData.is_transferable}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_transferable: !!checked })}
+                  />
+                  <Label htmlFor="is_transferable">Is Transferable (can be transferred to another customer)</Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="is_multi_branch"
+                    checked={formData.is_multi_branch}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_multi_branch: !!checked })}
+                  />
+                  <Label htmlFor="is_multi_branch">Multi-branch Redemption</Label>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-4">

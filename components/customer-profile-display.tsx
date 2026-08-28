@@ -18,16 +18,22 @@ import {
   TrendingUp,
   Crown,
   Award,
+  Package,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsList, TabsContent, TabsTrigger } from "@/components/ui/tabs"
+import { useState } from "react"
 import type { Customer } from "@/app/actions/customers"
 import type { Booking, Invoice } from "@/app/actions/bookings"
 import type { Staff } from "@/app/actions/staff"
 import { formatCurrency } from "@/lib/currency"
+import { freezeMembership, unfreezeMembership } from "@/app/actions/memberships"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 
 interface CustomerProfileDisplayProps {
   customer: Customer
@@ -35,6 +41,7 @@ interface CustomerProfileDisplayProps {
   invoices: Invoice[]
   activeMembership?: any
   staffList?: Staff[]
+  packages?: any[]
 }
 
 const getStatusColor = (status: string) => {
@@ -50,8 +57,57 @@ const getStatusColor = (status: string) => {
   }
 }
 
-export function CustomerProfileDisplay({ customer, bookings, invoices, activeMembership, staffList = [] }: CustomerProfileDisplayProps) {
+export function CustomerProfileDisplay({ customer, bookings, invoices, activeMembership, staffList = [], packages = [] }: CustomerProfileDisplayProps) {
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString()
+
+  const [isFreezeDialogOpen, setIsFreezeDialogOpen] = useState(false)
+  const [freezeDate, setFreezeDate] = useState("")
+  const [freezeReason, setFreezeReason] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
+  const [transferPackageId, setTransferPackageId] = useState<number | null>(null)
+  const [transferToCustomerId, setTransferToCustomerId] = useState("")
+  
+  const handleTransferPackage = async () => {
+    if (!transferPackageId || !transferToCustomerId) return
+    setIsSubmitting(true)
+    try {
+      const { transferPackage } = await import("@/app/actions/customer-packages")
+      await transferPackage(transferPackageId, Number(transferToCustomerId))
+      setIsTransferDialogOpen(false)
+      window.location.reload()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleFreeze = async () => {
+    if (!freezeDate || !freezeReason) return
+    setIsSubmitting(true)
+    try {
+      await freezeMembership(activeMembership.id, freezeDate, freezeReason)
+      setIsFreezeDialogOpen(false)
+      window.location.reload()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleUnfreeze = async () => {
+    setIsSubmitting(true)
+    try {
+      await unfreezeMembership(activeMembership.id)
+      window.location.reload()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   const totalSpent = bookings.reduce(
     (sum, b) => sum + (b.status === "completed" || b.status === "confirmed" ? b.total_amount : 0),
@@ -175,12 +231,19 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
               </Card>
 
               {activeMembership ? (
-                <Card className="border-amber-200 bg-amber-50/50">
+                <Card className={`border-amber-200 ${activeMembership.frozen_until ? 'bg-blue-50/50' : 'bg-amber-50/50'}`}>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-base flex items-center text-amber-700">
-                      <Crown className="h-5 w-5 mr-2" />
-                      Active Membership
-                    </CardTitle>
+                    <div className="flex justify-between items-start">
+                      <CardTitle className="text-base flex items-center text-amber-700">
+                        <Crown className="h-5 w-5 mr-2" />
+                        Active Membership
+                      </CardTitle>
+                      {activeMembership.frozen_until ? (
+                        <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                          Frozen until {formatDate(activeMembership.frozen_until)}
+                        </Badge>
+                      ) : null}
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
@@ -214,6 +277,17 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
                             </Badge>
                           </div>
                         )}
+                        <div className="mt-4 flex gap-2">
+                          {activeMembership.frozen_until ? (
+                            <Button variant="outline" size="sm" onClick={handleUnfreeze} disabled={isSubmitting}>
+                              Unfreeze Membership
+                            </Button>
+                          ) : (
+                            <Button variant="outline" size="sm" onClick={() => setIsFreezeDialogOpen(true)}>
+                              Freeze Membership
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </CardContent>
@@ -296,7 +370,7 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
 
           <Card>
             <Tabs defaultValue="bookings" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="bookings" className="flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
                   Bookings
@@ -304,6 +378,10 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
                 <TabsTrigger value="invoices" className="flex items-center gap-2">
                   <CreditCard className="h-4 w-4" />
                   Invoices
+                </TabsTrigger>
+                <TabsTrigger value="packages" className="flex items-center gap-2">
+                  <Package className="h-4 w-4" />
+                  Packages
                 </TabsTrigger>
                 <TabsTrigger value="reviews" className="flex items-center gap-2">
                   <Star className="h-4 w-4" />
@@ -390,6 +468,55 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
                       ))
                     ) : (
                       <p className="text-center text-gray-500">No bookings found for this customer.</p>
+                    )}
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="packages" className="mt-6">
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Customer Packages</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {packages.length > 0 ? (
+                      packages.map((pkg) => (
+                        <Card key={pkg.id}>
+                          <CardContent className="p-4">
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <h4 className="font-semibold">{pkg.package_name || "Unknown Package"}</h4>
+                                <p className="text-sm text-gray-500">
+                                  Expires: {pkg.expires_at ? formatDate(pkg.expires_at) : "Never"}
+                                </p>
+                              </div>
+                              {pkg.is_transferable && (
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => {
+                                    setTransferPackageId(pkg.id)
+                                    setIsTransferDialogOpen(true)
+                                  }}
+                                >
+                                  Transfer
+                                </Button>
+                              )}
+                            </div>
+                            <div className="mt-4">
+                              <h5 className="text-sm font-medium mb-1">Services</h5>
+                              <ul className="text-sm space-y-1">
+                                {pkg.remaining_services?.map((rs: any, i: number) => (
+                                  <li key={i} className="flex justify-between">
+                                    <span>Service ID: {rs.service_id}</span>
+                                    <span>{rs.quantity} remaining</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    ) : (
+                      <p className="text-center text-gray-500 col-span-full">No packages found for this customer.</p>
                     )}
                   </div>
                 </div>
@@ -544,6 +671,67 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
           </Card>
         </div>
       </main>
+
+      <Dialog open={isFreezeDialogOpen} onOpenChange={setIsFreezeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Freeze Membership</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="freezeDate">Freeze Until</Label>
+              <Input
+                id="freezeDate"
+                type="date"
+                value={freezeDate}
+                onChange={(e) => setFreezeDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="freezeReason">Reason</Label>
+              <Input
+                id="freezeReason"
+                type="text"
+                placeholder="E.g., Traveling, Medical"
+                value={freezeReason}
+                onChange={(e) => setFreezeReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsFreezeDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleFreeze} disabled={isSubmitting || !freezeDate || !freezeReason}>
+              Confirm Freeze
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isTransferDialogOpen} onOpenChange={setIsTransferDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Transfer Package</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="transferToCustomerId">Transfer to Customer ID</Label>
+              <Input
+                id="transferToCustomerId"
+                type="number"
+                placeholder="Enter Customer ID"
+                value={transferToCustomerId}
+                onChange={(e) => setTransferToCustomerId(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsTransferDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleTransferPackage} disabled={isSubmitting || !transferToCustomerId}>
+              Transfer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
