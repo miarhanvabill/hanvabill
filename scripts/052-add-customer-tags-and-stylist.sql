@@ -1,0 +1,2 @@
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]';
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS preferred_staff_id INTEGER REFERENCES staff(id);

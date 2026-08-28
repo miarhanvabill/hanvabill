@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState } from "react"
-import { ArrowLeft, User, Phone, Mail, QrCode, Calendar, FileText, Instagram, Globe } from 'lucide-react'
+import { ArrowLeft, User, Phone, Mail, QrCode, Calendar, FileText, Instagram, Globe, Tag, UserSquare } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { createCustomer } from "@/app/actions/customers"
+import { getStaff, type Staff } from "@/app/actions/staff"
+import { useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { toast } from "@/hooks/use-toast"
@@ -19,6 +21,7 @@ export default function CreateCustomer() {
   const router = useRouter()
   const [selectedGender, setSelectedGender] = useState("")
   const [loading, setLoading] = useState(false)
+  const [staffList, setStaffList] = useState<Staff[]>([])
   const [formData, setFormData] = useState({
     phoneNumber: "",
     fullName: "",
@@ -30,7 +33,13 @@ export default function CreateCustomer() {
     dateOfBirth: "",
     dateOfAnniversary: "",
     notes: "",
+    tags: "",
+    preferredStaffId: "",
   })
+
+  useEffect(() => {
+    getStaff().then(setStaffList).catch(console.error)
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -53,6 +62,8 @@ export default function CreateCustomer() {
         submitData.append(snakeKey, value)
       })
       submitData.append("gender", selectedGender)
+      if (formData.tags) submitData.append("tags", formData.tags)
+      if (formData.preferredStaffId && formData.preferredStaffId !== "none") submitData.append("preferred_staff_id", formData.preferredStaffId)
 
       const result = await createCustomer(submitData)
 
@@ -271,6 +282,35 @@ export default function CreateCustomer() {
                         className="pl-10 border-gray-300 focus:ring-slate-500 text-sm"
                       />
                     </div>
+                  </div>
+
+                  
+                  <div className="space-y-2 pt-2">
+                    <Label className="text-sm font-medium text-slate-700">Tags</Label>
+                    <div className="relative">
+                      <Tag className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        value={formData.tags}
+                        onChange={(e) => handleInputChange("tags", e.target.value)}
+                        className="pl-10 border-gray-300 focus:ring-slate-500"
+                        placeholder="VIP, Regular, etc. (comma separated)"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <Label className="text-sm font-medium text-slate-700">Preferred Stylist</Label>
+                    <Select value={formData.preferredStaffId} onValueChange={(value) => handleInputChange("preferredStaffId", value)}>
+                      <SelectTrigger className="border-gray-300 focus:ring-slate-500">
+                        <SelectValue placeholder="Select preferred staff" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {staffList.map((staff) => (
+                          <SelectItem key={staff.id} value={staff.id.toString()}>{staff.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2 pt-2">

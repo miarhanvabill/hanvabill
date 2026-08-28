@@ -26,6 +26,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsList, TabsContent, TabsTrigger } from "@/components/ui/tabs"
 import type { Customer } from "@/app/actions/customers"
 import type { Booking, Invoice } from "@/app/actions/bookings"
+import type { Staff } from "@/app/actions/staff"
 import { formatCurrency } from "@/lib/currency"
 
 interface CustomerProfileDisplayProps {
@@ -33,6 +34,7 @@ interface CustomerProfileDisplayProps {
   bookings: Booking[]
   invoices: Invoice[]
   activeMembership?: any
+  staffList?: Staff[]
 }
 
 const getStatusColor = (status: string) => {
@@ -48,7 +50,7 @@ const getStatusColor = (status: string) => {
   }
 }
 
-export function CustomerProfileDisplay({ customer, bookings, invoices, activeMembership }: CustomerProfileDisplayProps) {
+export function CustomerProfileDisplay({ customer, bookings, invoices, activeMembership, staffList = [] }: CustomerProfileDisplayProps) {
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString()
 
   const totalSpent = bookings.reduce(
@@ -70,6 +72,7 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
   })
   const sortedServices = Object.entries(serviceCounts).sort(([, countA], [, countB]) => countB - countA)
   const preferredServices = sortedServices.slice(0, 3).map(([service]) => service)
+  const preferredStaffObj = staffList.find(s => s.id === customer.preferred_staff_id)
 
   return (
     <div className="flex-1 flex flex-col">
@@ -144,6 +147,26 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
                       )}
                     </div>
                   </div>
+                  
+                  <div className="pt-4 border-t">
+                    <h4 className="font-medium mb-2">Tags</h4>
+                    <div className="flex flex-wrap gap-1">
+                      {customer.tags && customer.tags.length > 0 ? (
+                        customer.tags.map((tag, index) => (
+                          <Badge key={index} variant="secondary" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))
+                      ) : (
+                        <p className="text-sm text-gray-600">No tags.</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="pt-4 border-t">
+                    <h4 className="font-medium mb-2">Preferred Stylist</h4>
+                    <p className="text-sm text-gray-600">{preferredStaffObj ? preferredStaffObj.name : "None"}</p>
+                  </div>
+
                   <div className="pt-4 border-t">
                     <h4 className="font-medium mb-2">Notes</h4>
                     <p className="text-sm text-gray-600">{customer.notes || "No notes"}</p>

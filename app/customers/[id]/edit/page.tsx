@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation"
 import { getCustomer, updateCustomer } from "@/app/actions/customers"
+import { getStaff } from "@/app/actions/staff"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -25,6 +26,8 @@ async function updateCustomerWithRevalidation(id: string, formData: FormData) {
     instagram_handle: (formData.get("instagram_handle") as string) || undefined,
     lead_source: (formData.get("lead_source") as string) || undefined,
     notes: (formData.get("notes") as string) || undefined,
+    tags: formData.get("tags") ? (formData.get("tags") as string).split(",").map(t => t.trim()).filter(Boolean) : undefined,
+    preferred_staff_id: formData.get("preferred_staff_id") && formData.get("preferred_staff_id") !== "none" ? Number(formData.get("preferred_staff_id")) : null,
   }
 
   const result = await updateCustomer(id, data)
@@ -58,6 +61,7 @@ export default async function EditCustomerPage({ params }: { params: Promise<{ i
   const resolvedParams = await params;
   const customerId = resolvedParams.id
   const customer = await getCustomer(customerId)
+  const staffList = await getStaff()
   
   if (!customer) notFound()
 

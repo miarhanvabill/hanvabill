@@ -102,6 +102,14 @@ export async function GET() {
       results.push('staff_goals error: ' + String(e));
     }
 
+    try {
+      await sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]';`;
+      await sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS preferred_staff_id INTEGER REFERENCES staff(id);`;
+      results.push('customer tags and preferred_staff_id ready');
+    } catch(e) {
+      results.push('customer tags error: ' + String(e));
+    }
+
     // Business Resources
     try {
       await sql`
@@ -143,6 +151,13 @@ export async function GET() {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `;
+      
+      try {
+        await sql`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS resource_id INTEGER REFERENCES business_resources(id);`;
+      } catch (e) {
+        results.push('bookings alter error: ' + String(e));
+      }
+
       results.push('resource_bookings ready');
     } catch(e) {
       results.push('resource_bookings error: ' + String(e));

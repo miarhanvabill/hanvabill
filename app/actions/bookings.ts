@@ -886,8 +886,11 @@ export async function getBookingsByStaffId(staffId: string): Promise<Booking[]> 
   })
 }
 
-export interface CalendarBooking extends Booking {
+
+
+export interface CalendarBooking extends Omit<Booking, 'rating'> {
   duration_minutes: number
+  resource_id?: number | null
 }
 
 export async function getCalendarBookings(date: string): Promise<CalendarBooking[]> {
@@ -895,7 +898,7 @@ export async function getCalendarBookings(date: string): Promise<CalendarBooking
     try {
       const bookings = await sql`
         SELECT 
-          b.id, b.booking_number, b.customer_id, b.staff_id, b.booking_date, b.booking_time,
+          b.id, b.booking_number, b.customer_id, b.staff_id, b.resource_id, b.booking_date, b.booking_time,
           b.total_amount, b.status, b.notes, b.created_at,
           c.full_name as customer_name,
           st.name as staff_name,
@@ -908,7 +911,7 @@ export async function getCalendarBookings(date: string): Promise<CalendarBooking
         LEFT JOIN services sv ON bs.service_id = sv.id AND sv.tenant_id = ${tenantId}
         LEFT JOIN (SELECT * FROM services WHERE tenant_id = ${tenantId}) s ON bs.service_id = s.id
         WHERE b.booking_date = ${date} AND b.tenant_id = ${tenantId}
-        GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, b.booking_date, b.booking_time, b.total_amount, b.status, b.notes, b.created_at, c.full_name, st.name
+        GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, b.resource_id, b.booking_date, b.booking_time, b.total_amount, b.status, b.notes, b.created_at, c.full_name, st.name
         ORDER BY b.booking_time ASC
       `
       
@@ -918,12 +921,87 @@ export async function getCalendarBookings(date: string): Promise<CalendarBooking
         id: Number(booking.id),
         customer_id: Number(booking.customer_id),
         staff_id: Number(booking.staff_id),
+        resource_id: booking.resource_id ? Number(booking.resource_id) : null,
         total_amount: Number(booking.total_amount),
         duration_minutes: Number(booking.duration_minutes)
       }))))
     } catch (error) {
       console.error("Error fetching calendar bookings:", error)
       return []
+    }
+  })
+}
+
+export async function updateBookingTime(
+  bookingId: number, 
+  newDate: string, 
+  newTime: string, 
+  newStaffId?: number | null,
+  newResourceId?: number | null
+) {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      if (!bookingId || isNaN(bookingId)) {
+        return { success: false, message: "Invalid booking ID" }
+      }
+
+      // Check if booking exists
+      const existing = await sql`
+        SELECT id, customer_id, staff_id FROM bookings 
+        WHERE id = ${bookingId} AND tenant_id = ${tenantId}
+      `
+      
+      if (existing.length === 0) {
+        return { success: false, message: "Booking not found" }
+      }
+
+      const currentBooking = existing[0]
+
+      // Determine fields to update
+      let staffUpdate = newStaffId !== undefined ? newStaffId : Number(currentBooking.staff_id)
+      
+      if (newResourceId !== undefined) {
+        // Also update resource_id if provided
+        await sql`
+          UPDATE bookings
+          SET 
+            booking_date = ${newDate},
+            booking_time = ${newTime},
+            staff_id = ${staffUpdate},
+            resource_id = ${newResourceId},
+            updated_at = NOW()
+          WHERE id = ${bookingId} AND tenant_id = ${tenantId}
+        `
+      } else {
+        await sql`
+          UPDATE bookings
+          SET 
+            booking_date = ${newDate},
+            booking_time = ${newTime},
+            staff_id = ${staffUpdate},
+            updated_at = NOW()
+          WHERE id = ${bookingId} AND tenant_id = ${tenantId}
+        `
+      }
+
+      await invalidateBookingCache(bookingId, Number(currentBooking.customer_id), Number(currentBooking.staff_id))
+      
+      if (staffUpdate && staffUpdate !== Number(currentBooking.staff_id)) {
+        await invalidateBookingCache(undefined, undefined, staffUpdate)
+      }
+
+      revalidatePath("/")
+      revalidatePath("/bookings")
+      revalidatePath("/appointments")
+      revalidatePath("/bookings/calendar")
+      
+      return { success: true, message: "Booking rescheduled successfully!" }
+    } catch (error) {
+      console.error("Error rescheduling booking:", error)
+      return {
+        success: false,
+        message: `Failed to reschedule booking: ${error instanceof Error ? error.message : "Unknown error"}`,
+      }
     }
   })
 }
