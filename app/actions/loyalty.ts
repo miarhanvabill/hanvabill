@@ -562,3 +562,69 @@ export async function adjustLoyaltyPoints(
     return { success: true }
   }, tenantId)
 }
+export interface LoyaltyTier {
+  id?: number
+  tenant_id?: string
+  name: string
+  min_points: number
+  earn_multiplier: number
+  badge_color?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export async function getLoyaltyTiers(tenantId?: string) {
+  return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
+    return await sql`
+      SELECT * FROM loyalty_tiers
+      WHERE tenant_id = ${resolvedTenantId}
+      ORDER BY min_points ASC
+    `
+  }, tenantId)
+}
+
+export async function createLoyaltyTier(tier: Omit<LoyaltyTier, 'id' | 'tenant_id' | 'created_at' | 'updated_at'>, tenantId?: string) {
+  return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
+    const result = await sql`
+      INSERT INTO loyalty_tiers (tenant_id, name, min_points, earn_multiplier, badge_color)
+      VALUES (${resolvedTenantId}, ${tier.name}, ${tier.min_points}, ${tier.earn_multiplier}, ${tier.badge_color})
+      RETURNING *
+    `
+    return result[0]
+  }, tenantId)
+}
+
+export async function updateLoyaltyTier(id: number, tier: Partial<LoyaltyTier>, tenantId?: string) {
+  return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
+    const result = await sql`
+      UPDATE loyalty_tiers
+      SET name = COALESCE(${tier.name ?? null}, name),
+          min_points = COALESCE(${tier.min_points ?? null}, min_points),
+          earn_multiplier = COALESCE(${tier.earn_multiplier ?? null}, earn_multiplier),
+          badge_color = COALESCE(${tier.badge_color ?? null}, badge_color),
+          updated_at = NOW()
+      WHERE id = ${id} AND tenant_id = ${resolvedTenantId}
+      RETURNING *
+    `
+    return result[0]
+  }, tenantId)
+}
+
+export async function deleteLoyaltyTier(id: number, tenantId?: string) {
+  return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
+    await sql`
+      DELETE FROM loyalty_tiers
+      WHERE id = ${id} AND tenant_id = ${resolvedTenantId}
+    `
+    return { success: true }
+  }, tenantId)
+}
+
+export async function processReferralReward(newCustomerId: number, referrerId: number, tenantId?: string) {
+  return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
+    // 500 for referrer, 250 for new customer
+    await adjustLoyaltyPoints(referrerId, 500, "bonus", "Referral reward", resolvedTenantId)
+    await adjustLoyaltyPoints(newCustomerId, 250, "bonus", "Referred bonus", resolvedTenantId)
+    return { success: true }
+  }, tenantId)
+}

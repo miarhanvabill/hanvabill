@@ -39,6 +39,8 @@ export default function PackagesPage() {
     duration_minutes: "",
     validity_days: "",
     is_active: true,
+    is_transferable: false,
+    is_multi_branch: true,
   })
 
   useEffect(() => {
@@ -78,6 +80,8 @@ export default function PackagesPage() {
       duration_minutes: "",
       validity_days: "",
       is_active: true,
+      is_transferable: false,
+      is_multi_branch: true,
     })
     setEditingPackage(null)
   }

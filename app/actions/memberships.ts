@@ -12,6 +12,7 @@ export interface MembershipPlan {
   benefits: string[]
   discount_percentage: number
   status: string
+  is_multi_branch?: boolean
   created_at: string
   updated_at: string
 }
@@ -29,6 +30,8 @@ export interface CustomerMembership {
   bookings_used: number
   max_bookings: number
   amount_paid: number
+  frozen_until?: string | null
+  freeze_reason?: string | null
   created_at: string
 }
 
@@ -46,6 +49,7 @@ export async function getActiveMemberships(): Promise<MembershipPlan[]> {
           benefits,
           discount_percentage,
           status,
+          is_multi_branch,
           created_at,
           updated_at
         FROM membership_plans 
@@ -93,6 +97,7 @@ export async function getAllMembershipPlans(): Promise<MembershipPlan[]> {
           benefits,
           discount_percentage,
           status,
+          is_multi_branch,
           created_at,
           updated_at
         FROM membership_plans 
@@ -146,6 +151,8 @@ export async function getCustomerMemberships(): Promise<CustomerMembership[]> {
           cm.bookings_used,
           cm.max_bookings_per_month as max_bookings,
           cm.amount_paid,
+          cm.frozen_until,
+          cm.freeze_reason,
           cm.created_at
         FROM customer_memberships cm
         JOIN customers c ON cm.customer_id = c.id AND c.tenant_id = ${tenantId}
@@ -179,6 +186,8 @@ export async function getCustomerMemberships(): Promise<CustomerMembership[]> {
         bookings_used: Number(row.bookings_used) || 0,
         max_bookings: Number(row.max_bookings) || 0,
         amount_paid: Number(row.amount_paid) || 0,
+        frozen_until: row.frozen_until ? row.frozen_until.toISOString().split("T")[0] : null,
+        freeze_reason: row.freeze_reason,
         created_at: row.created_at.toISOString(),
       }))
     } catch (error) {
@@ -195,7 +204,7 @@ export async function createMembershipPlan(
     try {
       await sql`
         INSERT INTO membership_plans (
-          tenant_id, name, description, price, duration_months, benefits, discount_percentage, status
+          tenant_id, name, description, price, duration_months, benefits, discount_percentage, status, is_multi_branch
         ) VALUES (
           ${tenantId},
           ${data.name}, 
@@ -204,7 +213,8 @@ export async function createMembershipPlan(
           ${data.duration_months}, 
           ${JSON.stringify(data.benefits)}, 
           ${data.discount_percentage}, 
-          ${data.status}
+          ${data.status},
+          ${data.is_multi_branch ?? true}
         )
       `
 
@@ -233,6 +243,7 @@ export async function updateMembershipPlan(
           benefits = COALESCE(${data.benefits ? JSON.stringify(data.benefits) : null}, benefits),
           discount_percentage = COALESCE(${data.discount_percentage ?? null}, discount_percentage),
           status = COALESCE(${data.status ?? null}, status),
+          is_multi_branch = COALESCE(${data.is_multi_branch ?? null}, is_multi_branch),
           updated_at = CURRENT_TIMESTAMP 
         WHERE id = ${id} AND tenant_id = ${tenantId}
       `
@@ -542,7 +553,9 @@ export async function getActiveCustomerMembership(customerId: number): Promise<a
           cm.start_date,
           cm.end_date,
           cm.status,
-          cm.bookings_used
+          cm.bookings_used,
+          cm.frozen_until,
+          cm.freeze_reason
         FROM customer_memberships cm
         JOIN membership_plans mp ON cm.membership_plan_id = mp.id AND mp.tenant_id = ${tenantId}
         WHERE cm.customer_id = ${customerId} 
@@ -559,11 +572,60 @@ export async function getActiveCustomerMembership(customerId: number): Promise<a
       return {
         ...row,
         discount_percentage: Number(row.discount_percentage) || 0,
-        benefits: typeof row.benefits === 'string' ? JSON.parse(row.benefits) : row.benefits
+        benefits: typeof row.benefits === 'string' ? JSON.parse(row.benefits) : row.benefits,
+        frozen_until: row.frozen_until ? row.frozen_until.toISOString().split("T")[0] : null,
       }
     } catch (error) {
       console.error("Error fetching active customer membership:", error)
       return null
+    }
+  })
+}
+
+export async function freezeMembership(
+  membershipId: string,
+  frozenUntil: string,
+  reason: string
+): Promise<{ success: boolean; error?: string }> {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      await sql`
+        UPDATE customer_memberships
+        SET 
+          frozen_until = ${frozenUntil},
+          freeze_reason = ${reason},
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${membershipId} AND tenant_id = ${tenantId}
+      `
+      revalidatePath("/manage/memberships")
+      revalidatePath("/customers/[id]", "page")
+      return { success: true }
+    } catch (error) {
+      console.error("Error freezing membership:", error)
+      return { success: false, error: "Failed to freeze membership" }
+    }
+  })
+}
+
+export async function unfreezeMembership(
+  membershipId: string
+): Promise<{ success: boolean; error?: string }> {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      await sql`
+        UPDATE customer_memberships
+        SET 
+          frozen_until = NULL,
+          freeze_reason = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${membershipId} AND tenant_id = ${tenantId}
+      `
+      revalidatePath("/manage/memberships")
+      revalidatePath("/customers/[id]", "page")
+      return { success: true }
+    } catch (error) {
+      console.error("Error unfreezing membership:", error)
+      return { success: false, error: "Failed to unfreeze membership" }
     }
   })
 }

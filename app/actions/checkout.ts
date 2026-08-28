@@ -230,6 +230,39 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
 
       const productItems = input.items.filter((item) => item.type === "product")
       const packageItems = input.items.filter((item) => item.type === "package")
+      
+      // Process customer packages
+      for (const pkgItem of packageItems) {
+        // Fetch package details
+        const [pkgDetails] = await sql`
+          SELECT id, services, validity_days FROM service_packages 
+          WHERE id = ${pkgItem.id} AND tenant_id = ${tenantId}
+        `
+        if (pkgDetails) {
+          const servicesArr = Array.isArray(pkgDetails.services) 
+            ? pkgDetails.services 
+            : JSON.parse(pkgDetails.services || "[]")
+          
+          // Assuming 1 quantity of each service in the package per package bought
+          // If the user bought multiple of the same package, we create multiple records or multiply
+          const totalServices = servicesArr.map((s: number) => ({ service_id: s, quantity: 1 * pkgItem.quantity }))
+          const remainingServices = totalServices;
+          
+          let expiresAt = null;
+          if (pkgDetails.validity_days) {
+            expiresAt = new Date(Date.now() + pkgDetails.validity_days * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+          }
+
+          await sql`
+            INSERT INTO customer_packages (
+              tenant_id, customer_id, package_id, total_services, remaining_services, expires_at
+            ) VALUES (
+              ${tenantId}, ${customerId}, ${pkgItem.id}, 
+              ${JSON.stringify(totalServices)}, ${JSON.stringify(remainingServices)}, ${expiresAt}
+            )
+          `
+        }
+      }
 
       // Create invoice with proper item categorization and tenant_id
       const [invoice] = await sql`

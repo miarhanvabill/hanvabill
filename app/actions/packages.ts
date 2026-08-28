@@ -13,6 +13,8 @@ export interface ServicePackage {
   duration_minutes: number
   validity_days: number
   is_active: boolean
+  is_transferable: boolean
+  is_multi_branch: boolean
   created_at: string
   updated_at: string | null
 }
@@ -62,7 +64,8 @@ export async function createPackage(packageData: Omit<ServicePackage, "id" | "cr
       const result = await sql`
         INSERT INTO service_packages (
           tenant_id, name, description, services, package_price, original_price, 
-          discount_percentage, duration_minutes, validity_days, is_active
+          discount_percentage, duration_minutes, validity_days, is_active,
+          is_transferable, is_multi_branch
         ) VALUES (
           ${tenantId},
           ${packageData.name}, 
@@ -73,7 +76,9 @@ export async function createPackage(packageData: Omit<ServicePackage, "id" | "cr
           ${packageData.discount_percentage}, 
           ${packageData.duration_minutes}, 
           ${packageData.validity_days}, 
-          ${packageData.is_active}
+          ${packageData.is_active ?? true},
+          ${packageData.is_transferable ?? false},
+          ${packageData.is_multi_branch ?? true}
         )
         RETURNING *
       `
@@ -100,6 +105,8 @@ export async function updatePackage(id: number, packageData: Partial<ServicePack
           duration_minutes = COALESCE(${packageData.duration_minutes}, duration_minutes),
           validity_days = COALESCE(${packageData.validity_days}, validity_days),
           is_active = COALESCE(${packageData.is_active}, is_active),
+          is_transferable = COALESCE(${packageData.is_transferable}, is_transferable),
+          is_multi_branch = COALESCE(${packageData.is_multi_branch}, is_multi_branch),
           updated_at = NOW()
         WHERE id = ${id} AND tenant_id = ${tenantId}
         RETURNING *

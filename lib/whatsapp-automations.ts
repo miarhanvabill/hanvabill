@@ -772,6 +772,22 @@ export async function runAutomationsCronForTenant(sql: any, tenantId: string): P
             LIMIT 1
           `
           if (alreadySent.length === 0) {
+            // Grant 1000 Loyalty Points for Birthday
+            try {
+              const settingsResult = await sql`
+                SELECT points_validity_days FROM loyalty_settings
+                WHERE tenant_id = ${tenantId} LIMIT 1
+              `
+              const validityDays = settingsResult.length > 0 ? settingsResult[0].points_validity_days : 45
+              
+              await sql`
+                INSERT INTO loyalty_transactions (tenant_id, customer_id, points, transaction_type, amount, description, created_at, expires_at)
+                VALUES (${tenantId}, ${customer.id}, 1000, 'bonus', 0, 'Birthday Bonus', NOW(), NOW() + (${validityDays}::text || ' days')::interval)
+              `
+            } catch (err) {
+              console.error(`[WhatsApp Cron] Error granting birthday points to customer ${customer.id}:`, err)
+            }
+
             const res = await triggerWhatsAppAutomation({
               tenantId,
               eventType: "birthday",
@@ -781,6 +797,7 @@ export async function runAutomationsCronForTenant(sql: any, tenantId: string): P
               variables: {
                 customer_name: customer.full_name,
                 coupon_code: "BDAYTREAT",
+                points: "1000",
               },
               sql,
             })
