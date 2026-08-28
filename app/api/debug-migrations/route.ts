@@ -283,7 +283,7 @@ export async function GET() {
       await sql`
         CREATE TABLE IF NOT EXISTS customer_packages (
             id SERIAL PRIMARY KEY,
-            tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
+            tenant_id UUID NOT NULL,
             customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
             package_id INTEGER REFERENCES service_packages(id) ON DELETE CASCADE,
             total_services JSONB NOT NULL,
@@ -304,7 +304,7 @@ export async function GET() {
       await sql`
         CREATE TABLE IF NOT EXISTS loyalty_tiers (
             id SERIAL PRIMARY KEY,
-            tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+            tenant_id UUID NOT NULL,
             name VARCHAR(255) NOT NULL,
             min_points INTEGER NOT NULL DEFAULT 0,
             earn_multiplier DECIMAL(5,2) NOT NULL DEFAULT 1.00,
