@@ -11,7 +11,6 @@ export async function GET() {
           stock_quantity,
           min_stock_level,
           price,
-          supplier,
           updated_at,
           (stock_quantity * price) as stock_value,
           CASE 
