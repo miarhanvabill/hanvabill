@@ -263,6 +263,61 @@ export async function GET() {
       results.push('form_submissions error: ' + String(e));
     }
 
+    // Phase 2: Memberships
+    try {
+      await sql`ALTER TABLE customer_memberships ADD COLUMN IF NOT EXISTS frozen_until DATE`;
+      await sql`ALTER TABLE customer_memberships ADD COLUMN IF NOT EXISTS freeze_reason VARCHAR(255)`;
+      await sql`ALTER TABLE membership_plans ADD COLUMN IF NOT EXISTS is_multi_branch BOOLEAN DEFAULT true`;
+      results.push('memberships phase 2 ready');
+    } catch(e) {
+      results.push('memberships phase 2 error: ' + String(e));
+    }
+
+    // Phase 2: Packages
+    try {
+      await sql`ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS is_transferable BOOLEAN DEFAULT false`;
+      await sql`ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS is_multi_branch BOOLEAN DEFAULT true`;
+      
+      await sql`
+        CREATE TABLE IF NOT EXISTS customer_packages (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
+            customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+            package_id INTEGER REFERENCES service_packages(id) ON DELETE CASCADE,
+            total_services JSONB NOT NULL,
+            remaining_services JSONB NOT NULL,
+            expires_at DATE,
+            is_active BOOLEAN DEFAULT true,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `;
+      results.push('packages phase 2 ready');
+    } catch(e) {
+      results.push('packages phase 2 error: ' + String(e));
+    }
+
+    // Phase 2: Loyalty
+    try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS loyalty_tiers (
+            id SERIAL PRIMARY KEY,
+            tenant_id INTEGER NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+            name VARCHAR(255) NOT NULL,
+            min_points INTEGER NOT NULL DEFAULT 0,
+            earn_multiplier DECIMAL(5,2) NOT NULL DEFAULT 1.00,
+            badge_color VARCHAR(50),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        );
+      `;
+      await sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS tier_id INTEGER REFERENCES loyalty_tiers(id) ON DELETE SET NULL`;
+      await sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS referred_by_customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL`;
+      results.push('loyalty phase 2 ready');
+    } catch(e) {
+      results.push('loyalty phase 2 error: ' + String(e));
+    }
+
     return NextResponse.json({ success: true, results });
   } catch (error) {
     return NextResponse.json({ success: false, error: String(error) });
