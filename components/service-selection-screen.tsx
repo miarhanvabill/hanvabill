@@ -348,7 +348,6 @@ export function ServiceSelectionScreen({
   const [loading, setLoading] = useState(true)
 
   // Per-card staff selection
-  const [staffChoice, setStaffChoice] = useState<Record<string, string>>({})
   const [selectedStaffMembers, setSelectedStaffMembers] = useState<Record<string, Array<{id: number; name: string; split_percentage: number}>>>({})
 
   const equalizeSplits = (members: Array<{id: number; name: string; split_percentage: number}>) => {
@@ -523,24 +522,21 @@ export function ServiceSelectionScreen({
     let staffName: string | undefined
     let staffMembersArray = undefined
 
-    if (kind === "service") {
-      const selected = selectedStaffMembers[key] || []
-      if (selected.length > 0) {
-        selectedStaffId = selected[0].id
-        staffName = selected.map(s => s.name).join(", ")
-        staffMembersArray = selected
-      } else {
-        selectedStaffId = undefined
-        staffName = undefined
-      }
-    } else {
-      const stored = staffChoice[key]
-      selectedStaffId = typeof forcedStaffId === "number" ? forcedStaffId : stored && stored !== "any" ? Number(stored) : undefined
-      const staffMember = selectedStaffId ? staff.find((st) => st.id === selectedStaffId) : undefined
+    const selected = selectedStaffMembers[key] || []
+    if (selected.length > 0) {
+      selectedStaffId = selected[0].id
+      staffName = selected.map(s => s.name).join(", ")
+      staffMembersArray = selected
+    } else if (typeof forcedStaffId === "number") {
+      selectedStaffId = forcedStaffId
+      const staffMember = staff.find((st) => st.id === selectedStaffId)
       staffName = staffMember?.name
       if (staffMember) {
         staffMembersArray = [{ id: staffMember.id, name: staffMember.name, split_percentage: 100 }]
       }
+    } else {
+      selectedStaffId = undefined
+      staffName = undefined
     }
 
     const lineType: "service" | "product" | "package" | "membership" = kind
@@ -586,117 +582,96 @@ export function ServiceSelectionScreen({
 
   const renderStaffSelect = (kind: ItemKind, item: any) => {
     const key = `${kind}-${item.id}`
+    let itemPrice = 0
+    if (kind === "package") {
+      itemPrice = Number(item.package_price) || 0
+    } else {
+      itemPrice = Number(item.price) || 0
+    }
     
-    if (kind === "service") {
-      const selected = selectedStaffMembers[key] || []
-      return (
-        <div className="space-y-3">
-          <div className="flex flex-col gap-1.5">
-            <Label className="text-xs">Select Staff (Multi-select)</Label>
-            <div className="flex flex-wrap gap-2">
-              {staff.map((st) => {
-                const isSelected = selected.some(s => s.id === st.id)
+    const selected = selectedStaffMembers[key] || []
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs">Select Staff (Multi-select)</Label>
+          <div className="flex flex-wrap gap-2">
+            {staff.map((st) => {
+              const isSelected = selected.some(s => s.id === st.id)
+              return (
+                <Badge
+                  key={st.id}
+                  variant={isSelected ? "default" : "outline"}
+                  className="cursor-pointer py-1 px-2 text-xs transition-colors hover:bg-primary/90"
+                  onClick={() => toggleStaffMember(key, st)}
+                >
+                  <Avatar className="w-4 h-4 mr-1.5 inline-block">
+                    <AvatarFallback className="text-[8px] bg-primary-foreground text-primary">
+                      {st.name.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  {st.name}
+                  {st.attendance_status === 'present' && !st.check_out_time && (
+                    <span className="w-2 h-2 rounded-full bg-green-500 ml-1.5 inline-block" title="Checked In Today" />
+                  )}
+                </Badge>
+              )
+            })}
+          </div>
+        </div>
+        
+        {selected.length === 0 ? (
+          <div className="text-xs text-muted-foreground italic">Any Staff</div>
+        ) : (
+          <div className="space-y-2 bg-muted/30 p-2 rounded-md border text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Split Setup</span>
+              {selected.length > 1 && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-5 px-2 text-[10px]"
+                  onClick={() => setSelectedStaffMembers(prev => ({ ...prev, [key]: equalizeSplits(selected) }))}
+                >
+                  Reset Equal
+                </Button>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              {selected.map(st => {
+                const amt = (itemPrice * st.split_percentage) / 100
                 return (
-                  <Badge
-                    key={st.id}
-                    variant={isSelected ? "default" : "outline"}
-                    className="cursor-pointer py-1 px-2 text-xs transition-colors hover:bg-primary/90"
-                    onClick={() => toggleStaffMember(key, st)}
-                  >
-                    <Avatar className="w-4 h-4 mr-1.5 inline-block">
-                      <AvatarFallback className="text-[8px] bg-primary-foreground text-primary">
-                        {st.name.substring(0, 2).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    {st.name}
-                    {st.attendance_status === 'present' && !st.check_out_time && (
-                      <span className="w-2 h-2 rounded-full bg-green-500 ml-1.5 inline-block" title="Checked In Today" />
-                    )}
-                  </Badge>
+                  <div key={st.id} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <Avatar className="w-5 h-5">
+                        <AvatarFallback className="text-[9px] bg-primary/10">
+                          {st.name.substring(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="font-medium truncate max-w-[80px]">{st.name}</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      {selected.length > 1 ? (
+                        <div className="flex items-center gap-1">
+                          <Input 
+                            type="number" 
+                            className="w-12 h-6 text-xs px-1 text-center" 
+                            value={st.split_percentage}
+                            onChange={(e) => handleManualSplitChange(key, st.id, Number(e.target.value))}
+                          />
+                          <span className="text-muted-foreground">%</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground w-12 text-right">100%</span>
+                      )}
+                      <span className="font-semibold text-primary w-14 text-right">₹{amt.toFixed(2)}</span>
+                    </div>
+                  </div>
                 )
               })}
             </div>
           </div>
-          
-          {selected.length === 0 ? (
-            <div className="text-xs text-muted-foreground italic">Any Staff</div>
-          ) : (
-            <div className="space-y-2 bg-muted/30 p-2 rounded-md border text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-muted-foreground">Split Setup</span>
-                {selected.length > 1 && (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-5 px-2 text-[10px]"
-                    onClick={() => setSelectedStaffMembers(prev => ({ ...prev, [key]: equalizeSplits(selected) }))}
-                  >
-                    Reset Equal
-                  </Button>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                {selected.map(st => {
-                  const amt = (Number(item.price) * st.split_percentage) / 100
-                  return (
-                    <div key={st.id} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <Avatar className="w-5 h-5">
-                          <AvatarFallback className="text-[9px] bg-primary/10">
-                            {st.name.substring(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="font-medium truncate max-w-[80px]">{st.name}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        {selected.length > 1 ? (
-                          <div className="flex items-center gap-1">
-                            <Input 
-                              type="number" 
-                              className="w-12 h-6 text-xs px-1 text-center" 
-                              value={st.split_percentage}
-                              onChange={(e) => handleManualSplitChange(key, st.id, Number(e.target.value))}
-                            />
-                            <span className="text-muted-foreground">%</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground w-12 text-right">100%</span>
-                        )}
-                        <span className="font-semibold text-primary w-14 text-right">₹{amt.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )
-    }
-
-    const value = String(staffChoice[key] ?? "any")
-    return (
-      <div className="space-y-1">
-        <Label className="text-xs">Select Staff</Label>
-        <Select value={value} onValueChange={(v) => setStaffChoice((prev) => ({ ...prev, [key]: v }))}>
-          <SelectTrigger className="h-8">
-            <SelectValue placeholder="Any Staff" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="any">Any Staff</SelectItem>
-            {staff.map((st) => (
-              <SelectItem key={st.id} value={String(st.id)}>
-                <div className="flex items-center gap-2">
-                  {st.name}
-                  {st.attendance_status === 'present' && !st.check_out_time && (
-                    <span className="w-2 h-2 rounded-full bg-green-500 inline-block" title="Checked In Today" />
-                  )}
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        )}
       </div>
     )
   }

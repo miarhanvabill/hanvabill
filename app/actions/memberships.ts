@@ -65,7 +65,8 @@ export async function getActiveMemberships(): Promise<MembershipPlan[]> {
       return rows.map((row: any) => ({
         ...row,
         id: row.id.toString(),
-        benefits: row.benefits ? JSON.parse(row.benefits) : [],
+        benefits: typeof row.benefits === 'string' ? JSON.parse(row.benefits) : (row.benefits || []),
+        features: typeof row.benefits === 'string' ? JSON.parse(row.benefits) : (row.benefits || []),
         price: Number.parseFloat(row.price),
         discount_percentage: Number.parseFloat(row.discount_percentage),
         created_at: row.created_at.toISOString(),

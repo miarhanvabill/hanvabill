@@ -13,7 +13,32 @@ export async function GET() {
         AND tenant_id = ${tenantId}
         ORDER BY name
       `
-      return NextResponse.json(packages)
+      
+      // Fetch all services to map IDs to names
+      const services = await sql`
+        SELECT id, name FROM services WHERE tenant_id = ${tenantId}
+      `
+      const serviceMap = new Map(services.map(s => [s.id, s.name]))
+      
+      const enrichedPackages = packages.map(pkg => {
+        let features: string[] = []
+        try {
+          const serviceIds = typeof pkg.services === 'string' ? JSON.parse(pkg.services) : pkg.services || [];
+          if (Array.isArray(serviceIds)) {
+            features = serviceIds.map(id => serviceMap.get(id) || `Service #${id}`)
+          }
+        } catch(e) {
+          console.error("Failed to parse package services:", e)
+        }
+        
+        return {
+          ...pkg,
+          features,
+          servicesCount: features.length
+        }
+      })
+      
+      return NextResponse.json(enrichedPackages)
     })
   } catch (error) {
     console.error("GET /api/packages error:", error)
