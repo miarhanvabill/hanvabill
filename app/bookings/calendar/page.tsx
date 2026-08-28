@@ -216,18 +216,18 @@ export default function BookingCalendarPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-4rem)] space-y-4 p-4 sm:p-6 overflow-hidden">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 mb-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Booking Calendar</h1>
           <p className="text-muted-foreground">Manage your daily appointments and staff schedules.</p>
         </div>
         
-        <div className="flex items-center gap-2 flex-wrap">
-          <ToggleGroup type="single" value={groupBy} onValueChange={(v) => v && setGroupBy(v as any)} className="border rounded-md">
-            <ToggleGroupItem value="staff" aria-label="Group by Staff">
+        <div className="flex items-center gap-2 flex-wrap lg:flex-nowrap justify-end">
+          <ToggleGroup type="single" value={groupBy} onValueChange={(v) => v && setGroupBy(v as any)} className="bg-muted/50 p-1 rounded-lg border">
+            <ToggleGroupItem value="staff" aria-label="Group by Staff" className="rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm px-3 py-1.5 h-auto text-sm">
               Staff
             </ToggleGroupItem>
-            <ToggleGroupItem value="resource" aria-label="Group by Resources">
+            <ToggleGroupItem value="resource" aria-label="Group by Resources" className="rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm px-3 py-1.5 h-auto text-sm">
               Rooms/Chairs
             </ToggleGroupItem>
           </ToggleGroup>
