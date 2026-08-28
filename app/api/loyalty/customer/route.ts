@@ -23,17 +23,15 @@ export async function GET(request: NextRequest) {
         const limit = p.get("limit") ? Number(p.get("limit")) : 50
         const offset = p.get("offset") ? Number(p.get("offset")) : 0
 
-        const [{ rows, total }, stats] = await Promise.all([
-          getLoyaltyTransactions({ 
+        const stats = await getLoyaltyDashboardStats(tenantId)
+        const { rows, total } = await getLoyaltyTransactions({ 
             customer_id: customerId, 
             type, 
             from, 
             to, 
             limit, 
             offset 
-          }, tenantId),
-          getLoyaltyDashboardStats(tenantId)
-        ])
+        }, tenantId)
         return NextResponse.json({ success: true, rows, total, stats })
       }
 
@@ -43,10 +41,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: false, error: "Valid id is required" }, { status: 400 })
       }
 
-      const [data, settings] = await Promise.all([
-        getCustomerLoyalty(id, tenantId), 
-        getLoyaltySettings(tenantId)
-      ])
+      const settings = await getLoyaltySettings(tenantId)
+      const data = await getCustomerLoyalty(id, tenantId)
       const days = Number(p.get("expDays") || 7)
       const expiringSoon = data ? await getExpiringSoon(id, days, tenantId) : 0
 
