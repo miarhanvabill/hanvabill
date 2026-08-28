@@ -309,7 +309,7 @@ export async function getLoyaltyDashboardStats(tenantId?: string): Promise<Loyal
           COALESCE(SUM(CASE WHEN transaction_type = 'earned' OR points > 0 THEN ABS(points) ELSE 0 END), 0) AS total_points_issued,
           COALESCE(SUM(CASE WHEN transaction_type = 'redeemed' OR points < 0 THEN ABS(points) ELSE 0 END), 0) AS total_points_redeemed,
           COUNT(DISTINCT customer_id) AS active_loyalty_members,
-          COALESCE(SUM(CASE WHEN (transaction_type = 'earned' OR points > 0) AND expires_at IS NOT NULL AND expires_at > NOW() AND expires_at <= NOW() + INTERVAL '7 days' THEN ABS(points) ELSE 0 END), 0) AS points_expiring_this_week
+          COALESCE(SUM(CASE WHEN (transaction_type = 'earned' OR points > 0) AND expires_at IS NOT NULL AND expires_at::timestamptz > NOW() AND expires_at::timestamptz <= NOW() + INTERVAL '7 days' THEN ABS(points) ELSE 0 END), 0) AS points_expiring_this_week
         FROM loyalty_transactions
         WHERE tenant_id = ${resolvedTenantId}
       `
@@ -356,10 +356,10 @@ export async function getCustomerLoyalty(id: string | number, tenantId?: string)
             CASE 
               WHEN cumulative_earned <= (SELECT total_redeemed FROM redeemed) THEN 0
               WHEN cumulative_earned - points < (SELECT total_redeemed FROM redeemed) THEN 
-                   CASE WHEN expires_at < NOW() THEN 0 
+                   CASE WHEN expires_at::timestamptz < NOW() THEN 0 
                         ELSE cumulative_earned - (SELECT total_redeemed FROM redeemed) 
                    END
-              ELSE CASE WHEN expires_at < NOW() THEN 0 ELSE points END
+              ELSE CASE WHEN expires_at::timestamptz < NOW() THEN 0 ELSE points END
             END
           ), 0)
           FROM earned
@@ -405,10 +405,10 @@ export async function getExpiringSoon(customerId: number, days = 7, tenantId?: s
         CASE 
           WHEN cumulative_earned <= (SELECT total_redeemed FROM redeemed) THEN 0
           WHEN cumulative_earned - points < (SELECT total_redeemed FROM redeemed) THEN 
-               CASE WHEN expires_at > NOW() AND expires_at <= NOW() + (${days}::text || ' days')::interval THEN cumulative_earned - (SELECT total_redeemed FROM redeemed)
+               CASE WHEN expires_at::timestamptz > NOW() AND expires_at::timestamptz <= NOW() + (${days}::text || ' days')::interval THEN cumulative_earned - (SELECT total_redeemed FROM redeemed)
                     ELSE 0 
                END
-          ELSE CASE WHEN expires_at > NOW() AND expires_at <= NOW() + (${days}::text || ' days')::interval THEN points ELSE 0 END
+          ELSE CASE WHEN expires_at::timestamptz > NOW() AND expires_at::timestamptz <= NOW() + (${days}::text || ' days')::interval THEN points ELSE 0 END
         END
       ), 0) AS expiring
       FROM earned
