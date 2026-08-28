@@ -20,7 +20,7 @@
   --accent: #f8f8f8;
   --accent-foreground: #343434;
   --destructive: #dc2626;
-  --destructive-foreground: #dc2626;
+  --destructive-foreground: #ffffff;
   --border: #ebebeb;
   --input: #ebebeb;
   --ring: #b5b5b5;
@@ -62,7 +62,7 @@
   --accent: #454545;
   --accent-foreground: #fafafa;
   --destructive: #991b1b;
-  --destructive-foreground: #dc2626;
+  --destructive-foreground: #ffffff;
   --border: #454545;
   --input: #454545;
   --ring: #707070;
