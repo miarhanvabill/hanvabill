@@ -306,7 +306,7 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
                   <div className="space-y-3">
                     {bookings.length > 0 ? (
                       bookings.map((booking) => (
-                        <Link key={booking.id} href={`/bookings/${booking.id}`}>
+                        <Link key={booking.id} href={`/bookings/details/${booking.id}`}>
                           <Card className="hover:shadow-md transition-shadow cursor-pointer">
                             <CardContent className="p-4">
                               <div className="flex items-center justify-between">
@@ -402,7 +402,7 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
                               </td>
                               <td className="p-4">
                                 <Button variant="ghost" size="sm" asChild>
-                                  <Link href={`/bookings/${invoice.booking_id}`}>{invoice.booking_id}</Link>
+                                  <Link href={`/bookings/details/${invoice.booking_id}`}>{invoice.booking_id}</Link>
                                 </Button>
                               </td>
                             </tr>
