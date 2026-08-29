@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
         r.platform,
         r.created_at,
         -- Return only first name for privacy
-        SPLIT_PART(COALESCE(c.full_name, 'Anonymous'), ' ', 1) AS customer_first_name
+        SPLIT_PART(COALESCE(c.full_name, 'Anonymous'), ' ', 1) AS first_name
       FROM reviews r
       LEFT JOIN customers c ON r.customer_id = c.id AND c.tenant_id = ${tenantId}
       WHERE r.tenant_id = ${tenantId}

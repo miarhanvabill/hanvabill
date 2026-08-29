@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Normalize times to HH:MM strings
-    const bookedTimes = bookedSlots.map((row: any) => {
+    const booked_slots = bookedSlots.map((row: any) => {
       const t = row.booking_time;
       if (typeof t === "string") return t.substring(0, 5); // trim seconds if present
       return t;
@@ -72,8 +72,8 @@ export async function GET(request: NextRequest) {
       success: true,
       date,
       staffId: staffId || null,
-      bookedTimes,
-      total: bookedTimes.length,
+      booked_slots,
+      total: booked_slots.length,
     });
   } catch (error) {
     console.error("Error fetching public availability:", error);
