@@ -12,7 +12,7 @@ export async function GET() {
       await sql`
         CREATE TABLE IF NOT EXISTS auto_consumption_rules (
           id SERIAL PRIMARY KEY,
-          tenant_id UUID NOT NULL,
+          tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
           name VARCHAR(255) NOT NULL,
           service_id INTEGER NOT NULL,
           product_id INTEGER NOT NULL,
@@ -34,7 +34,7 @@ export async function GET() {
       await sql`
         CREATE TABLE IF NOT EXISTS auto_consumption_logs (
           id SERIAL PRIMARY KEY,
-          tenant_id UUID NOT NULL,
+          tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
           rule_id INTEGER NOT NULL,
           service_booking_id INTEGER NOT NULL,
           product_id INTEGER NOT NULL,
@@ -56,7 +56,7 @@ export async function GET() {
       await sql`
         CREATE TABLE IF NOT EXISTS commission_profiles (
           id SERIAL PRIMARY KEY,
-          tenant_id UUID NOT NULL,
+          tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
           name VARCHAR(255) NOT NULL,
           description TEXT,
           commission_type VARCHAR(50) NOT NULL,
@@ -86,7 +86,7 @@ export async function GET() {
       await sql`
         CREATE TABLE IF NOT EXISTS staff_goals (
           id SERIAL PRIMARY KEY,
-          tenant_id UUID NOT NULL,
+          tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
           staff_id INTEGER NOT NULL,
           goal_type VARCHAR(50) NOT NULL,
           target_value DECIMAL(10,2) NOT NULL,
@@ -117,7 +117,7 @@ export async function GET() {
       await sql`
         CREATE TABLE IF NOT EXISTS business_resources (
           id SERIAL PRIMARY KEY,
-          tenant_id UUID NOT NULL,
+          tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
           name VARCHAR(255) NOT NULL,
           type VARCHAR(100) NOT NULL, 
           status VARCHAR(50) DEFAULT 'available', 
@@ -141,7 +141,7 @@ export async function GET() {
       await sql`
         CREATE TABLE IF NOT EXISTS resource_bookings (
           id SERIAL PRIMARY KEY,
-          tenant_id UUID NOT NULL,
+          tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
           resource_id INTEGER NOT NULL,
           booking_id INTEGER,
           staff_id INTEGER,
@@ -170,7 +170,7 @@ export async function GET() {
       await sql`
         CREATE TABLE IF NOT EXISTS staff_availability (
           id SERIAL PRIMARY KEY,
-          tenant_id UUID NOT NULL,
+          tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
           staff_id INTEGER NOT NULL,
           day_of_week INTEGER NOT NULL,
           is_available BOOLEAN DEFAULT true,
@@ -193,7 +193,7 @@ export async function GET() {
       await sql`
         CREATE TABLE IF NOT EXISTS notifications (
           id SERIAL PRIMARY KEY,
-          tenant_id UUID NOT NULL,
+          tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
           type VARCHAR(50) NOT NULL,
           title VARCHAR(255) NOT NULL,
           message TEXT NOT NULL,
@@ -283,7 +283,7 @@ export async function GET() {
       await sql`
         CREATE TABLE IF NOT EXISTS customer_packages (
             id SERIAL PRIMARY KEY,
-            tenant_id UUID NOT NULL,
+            tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
             customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
             package_id INTEGER REFERENCES service_packages(id) ON DELETE CASCADE,
             total_services JSONB NOT NULL,
@@ -304,7 +304,7 @@ export async function GET() {
       await sql`
         CREATE TABLE IF NOT EXISTS loyalty_tiers (
             id SERIAL PRIMARY KEY,
-            tenant_id UUID NOT NULL,
+            tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
             name VARCHAR(255) NOT NULL,
             min_points INTEGER NOT NULL DEFAULT 0,
             earn_multiplier DECIMAL(5,2) NOT NULL DEFAULT 1.00,
