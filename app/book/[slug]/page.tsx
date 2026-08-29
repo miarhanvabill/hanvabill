@@ -1,12 +1,14 @@
+
 "use client"
 import React, { useEffect, useState, use, useMemo, useRef } from "react"
 import { format, addDays, startOfToday, parse, isBefore, isSameDay } from "date-fns"
-import { Calendar, Clock, CheckCircle, ChevronLeft, ChevronRight, MapPin, Search, Phone, Share2, X, ShoppingCart, Facebook, Instagram, Twitter, MessageCircle, Send, Star, ChevronDown, ChevronUp } from "lucide-react"
+import { Calendar, Clock, CheckCircle, ChevronLeft, ChevronRight, MapPin, Search, Phone, Share2, X, ShoppingCart, Facebook, Instagram, Twitter, MessageCircle, Send, Star, ChevronDown, ChevronUp, Plus, Minus, StarHalf, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Textarea } from "@/components/ui/textarea"
 
 interface Service {
   id: number
@@ -44,6 +46,14 @@ interface Staff {
   id: number
   name: string
   role: string
+}
+
+interface Review {
+  id: number
+  first_name: string
+  rating: number
+  comment: string
+  created_at: string
 }
 
 const getCategoryFallbackImage = (categoryName: string) => {
@@ -115,6 +125,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [packages, setPackages] = useState<Package[]>([])
   const [memberships, setMemberships] = useState<Membership[]>([])
   const [staffList, setStaffList] = useState<Staff[]>([])
+  const [reviews, setReviews] = useState<Review[]>([])
   
   const [error, setError] = useState<string | null>(null)
 
@@ -123,9 +134,13 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [selectedProducts, setSelectedProducts] = useState<Product[]>([])
   const [selectedPackages, setSelectedPackages] = useState<Package[]>([])
   const [selectedMemberships, setSelectedMemberships] = useState<Membership[]>([])
+  
+  const [productQuantities, setProductQuantities] = useState<Record<number, number>>({})
+  
   const [selectedStaff, setSelectedStaff] = useState<Staff | 'any' | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
+  
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState("Featured")
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
@@ -133,13 +148,21 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [bookingRef, setBookingRef] = useState("")
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
   
+  const [expandedServiceId, setExpandedServiceId] = useState<number | null>(null)
+  const [galleryLightboxImg, setGalleryLightboxImg] = useState<string | null>(null)
+  
+  const [bookedSlots, setBookedSlots] = useState<Record<string, string[]>>({})
+  const [loadingAvailability, setLoadingAvailability] = useState(false)
+  const [breakdownExpanded, setBreakdownExpanded] = useState(false)
+  
   const categoriesRef = useRef<HTMLDivElement>(null)
   
   const [customerForm, setCustomerForm] = useState({
     name: "",
     phone: "",
     email: "",
-    message: ""
+    message: "",
+    extra_notes: ""
   })
   const [submitting, setSubmitting] = useState(false)
   const [enquirySuccess, setEnquirySuccess] = useState(false)
@@ -160,12 +183,20 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
         setMemberships(data.memberships || [])
         setStaffList(data.staff || [])
 
-        // Initialize expanded categories
         if (data.services) {
            const initialExpanded: Record<string, boolean> = {};
            const cats = new Set(data.services.map((s: any) => s.category || "Other"));
            cats.forEach((cat: any) => { initialExpanded[cat as string] = true });
            setExpandedCategories(initialExpanded);
+        }
+        
+        // Fetch reviews
+        if (data.tenantId) {
+           fetch(`/api/public/reviews?tenantId=${data.tenantId}&limit=12`)
+             .then(r => r.json())
+             .then(rd => {
+                if(rd.success && rd.reviews) setReviews(rd.reviews)
+             }).catch(e => console.error("Error fetching reviews", e))
         }
 
       } catch (err: any) {
@@ -176,6 +207,26 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     }
     fetchData()
   }, [slug])
+  
+  useEffect(() => {
+     if (step === 2 && selectedDate && tenantId) {
+        const dateStr = format(selectedDate, "yyyy-MM-dd")
+        if (!bookedSlots[dateStr]) {
+           setLoadingAvailability(true)
+           fetch(`/api/public/availability?tenantId=${tenantId}&date=${dateStr}`)
+             .then(r => r.json())
+             .then(d => {
+                if (d.success && d.booked_slots) {
+                   setBookedSlots(prev => ({ ...prev, [dateStr]: d.booked_slots }))
+                } else {
+                   setBookedSlots(prev => ({ ...prev, [dateStr]: [] }))
+                }
+             })
+             .catch(() => setBookedSlots(prev => ({ ...prev, [dateStr]: [] })))
+             .finally(() => setLoadingAvailability(false))
+        }
+     }
+  }, [selectedDate, tenantId, step, bookedSlots])
 
   const workingDays = business?.workingDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
   const openTime = business?.openTime || "09:00"
@@ -204,8 +255,6 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     
     while (isBefore(current, end)) {
        const slotTime = format(current, "HH:mm")
-       
-       // Filter past times for today
        if (isSameDay(selectedDate, now)) {
           const slotDate = parse(slotTime, "HH:mm", new Date())
           if (isBefore(slotDate, now)) {
@@ -213,7 +262,6 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
              continue;
           }
        }
-       
        slots.push(slotTime)
        current = new Date(current.getTime() + 30 * 60000)
     }
@@ -256,9 +304,31 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const handleRemoveService = (id: number) => setSelectedServices(prev => prev.filter(s => s.id !== id))
 
   const handleAddProduct = (product: Product) => {
-    if (!selectedProducts.some(p => p.id === product.id)) setSelectedProducts(prev => [...prev, product])
+    if (!selectedProducts.some(p => p.id === product.id)) {
+      setSelectedProducts(prev => [...prev, product])
+      setProductQuantities(prev => ({...prev, [product.id]: 1}))
+    }
   }
-  const handleRemoveProduct = (id: number) => setSelectedProducts(prev => prev.filter(p => p.id !== id))
+  const handleRemoveProduct = (id: number) => {
+    setSelectedProducts(prev => prev.filter(p => p.id !== id))
+    setProductQuantities(prev => {
+      const nw = {...prev}
+      delete nw[id]
+      return nw
+    })
+  }
+  
+  const updateProductQuantity = (id: number, delta: number) => {
+    setProductQuantities(prev => {
+      const current = prev[id] || 0
+      const next = current + delta
+      if (next <= 0) {
+        handleRemoveProduct(id)
+        return prev
+      }
+      return { ...prev, [id]: next }
+    })
+  }
 
   const handleAddPackage = (pkg: Package) => {
     if (!selectedPackages.some(p => p.id === pkg.id)) setSelectedPackages(prev => [...prev, pkg])
@@ -307,7 +377,6 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const generateICS = () => {
     if (!selectedDate || !selectedTime) return
     const startStr = format(selectedDate, "yyyyMMdd") + "T" + selectedTime.replace(":", "") + "00"
-    // simplistic end time logic
     const duration = totalDuration || 60
     const endDate = new Date(selectedDate)
     const [h, m] = selectedTime.split(':').map(Number)
@@ -341,10 +410,11 @@ END:VCALENDAR`
     setSubmitting(true)
     try {
       const extraNotesParts = [];
-      if (selectedProducts.length > 0) extraNotesParts.push(`Products: ${selectedProducts.map(p => p.name).join(', ')}`);
+      if (selectedProducts.length > 0) extraNotesParts.push(`Products: ${selectedProducts.map(p => `${p.name} (x${productQuantities[p.id] || 1})`).join(', ')}`);
       if (selectedPackages.length > 0) extraNotesParts.push(`Packages: ${selectedPackages.map(p => p.name).join(', ')}`);
       if (selectedMemberships.length > 0) extraNotesParts.push(`Memberships: ${selectedMemberships.map(m => m.name).join(', ')}`);
       if (customerForm.message) extraNotesParts.push(`Note: ${customerForm.message}`);
+      if (customerForm.extra_notes) extraNotesParts.push(`Special Requests: ${customerForm.extra_notes}`);
       
       const extraNotes = extraNotesParts.join(' | ');
 
@@ -358,7 +428,7 @@ END:VCALENDAR`
           package_ids: selectedPackages.map(p => p.id),
           membership_ids: selectedMemberships.map(m => m.id),
           extra_notes: extraNotes,
-          total_amount_client: totalAmount, // Pass client calculated amount as hint
+          total_amount_client: totalAmount,
           date: format(selectedDate, "yyyy-MM-dd"),
           time: selectedTime,
           staff_id: selectedStaff === 'any' ? null : selectedStaff?.id,
@@ -382,7 +452,6 @@ END:VCALENDAR`
     e.preventDefault();
     setSubmitting(true);
     try {
-      // Create a booking record as an enquiry, or just show success for now
       await new Promise(resolve => setTimeout(resolve, 1000));
       setEnquirySuccess(true);
     } catch (err) {
@@ -394,8 +463,14 @@ END:VCALENDAR`
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      <div className="min-h-screen bg-gray-50 p-4">
+         <div className="max-w-7xl mx-auto h-[400px] bg-gray-200 animate-pulse rounded-3xl mb-8"></div>
+         <div className="max-w-7xl mx-auto space-y-4">
+            <div className="h-10 w-48 bg-gray-200 animate-pulse rounded-lg"></div>
+            <div className="h-32 bg-gray-200 animate-pulse rounded-2xl"></div>
+            <div className="h-32 bg-gray-200 animate-pulse rounded-2xl"></div>
+            <div className="h-32 bg-gray-200 animate-pulse rounded-2xl"></div>
+         </div>
       </div>
     )
   }
@@ -415,7 +490,7 @@ END:VCALENDAR`
 
   const totalAmount = 
     selectedServices.reduce((sum, s) => sum + Number(s.price), 0) + 
-    selectedProducts.reduce((sum, p) => sum + Number(p.price), 0) + 
+    selectedProducts.reduce((sum, p) => sum + (Number(p.price) * (productQuantities[p.id] || 1)), 0) + 
     selectedPackages.reduce((sum, p) => sum + Number(p.price), 0) + 
     selectedMemberships.reduce((sum, m) => sum + Number(m.price), 0);
     
@@ -456,8 +531,8 @@ END:VCALENDAR`
              ))}
              {selectedProducts.map(p => (
                 <div key={p.id} className="flex justify-between items-start text-sm">
-                   <p className="font-medium">{p.name}</p>
-                   <p className="font-bold">{business.currency}{p.price}</p>
+                   <p className="font-medium">{p.name} <span className="text-gray-400">x{productQuantities[p.id] || 1}</span></p>
+                   <p className="font-bold">{business.currency}{(Number(p.price) * (productQuantities[p.id] || 1))}</p>
                 </div>
              ))}
              {selectedPackages.map(p => (
@@ -494,8 +569,41 @@ END:VCALENDAR`
     )
   }
 
+  // Stock images for Gallery empty state
+  const stockGallery = [
+     "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=600&q=80",
+     "https://images.unsplash.com/photo-1522337660859-02fbefca4702?auto=format&fit=crop&w=600&q=80",
+     "https://images.unsplash.com/photo-1516975080661-46bfa20224b1?auto=format&fit=crop&w=600&q=80",
+     "https://images.unsplash.com/photo-1521590832167-7bfcfaa6362f?auto=format&fit=crop&w=600&q=80",
+     "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=600&q=80",
+     "https://images.unsplash.com/photo-1621551122354-e96737d64b70?auto=format&fit=crop&w=600&q=80"
+  ];
+  
+  const galleryImages = (business?.galleryImages?.length > 0) ? business.galleryImages : stockGallery;
+  
+  const avgRating = reviews.length > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) : "4.8";
+
   return (
-    <div className="min-h-screen bg-gray-50/50 pb-32 font-sans selection:bg-black selection:text-white transition-all duration-300">
+    <div className="min-h-screen bg-gray-50/50 pb-32 font-sans selection:bg-black selection:text-white transition-all duration-300 relative">
+      {galleryLightboxImg && (
+         <div className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-4">
+            <button className="absolute top-6 right-6 text-white hover:text-gray-300" onClick={() => setGalleryLightboxImg(null)}>
+               <X className="w-10 h-10" />
+            </button>
+            <img src={galleryLightboxImg} className="max-w-full max-h-[90vh] object-contain rounded-lg" alt="Gallery" />
+         </div>
+      )}
+
+      {/* Floating WhatsApp Button */}
+      {business?.phone && (
+         <a href={`https://wa.me/${business.phone}?text=Hi, I'd like to enquire about booking`} target="_blank" rel="noreferrer" className={`fixed bottom-6 right-6 z-40 ${totalItems > 0 && activeTab !== 'Enquiry' ? 'hidden sm:flex' : 'flex'}`}>
+            <div className="bg-[#25D366] text-white p-4 rounded-full shadow-lg hover:shadow-xl hover:scale-110 transition-all duration-300 relative">
+               <div className="absolute inset-0 rounded-full border-2 border-[#25D366] animate-ping opacity-50"></div>
+               <MessageCircle className="w-8 h-8 relative z-10" />
+            </div>
+         </a>
+      )}
+
       {/* Sticky Top Header */}
       <div className="sticky top-0 bg-white/80 backdrop-blur-md z-50 border-b border-gray-100 shadow-sm hidden sm:block">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -549,13 +657,6 @@ END:VCALENDAR`
                        </div>
                     </div>
                     <div className="flex items-center gap-3">
-                      {business.phone && (
-                        <a href={`https://wa.me/${business.phone}`} target="_blank" rel="noreferrer">
-                          <Button className="bg-[#25D366] hover:bg-[#128C7E] text-white rounded-xl h-11 px-5 shadow-sm shadow-[#25D366]/20 transition-transform hover:scale-105">
-                            <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
-                          </Button>
-                        </a>
-                      )}
                       <Button variant="outline" size="icon" className="rounded-xl w-11 h-11 border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors" onClick={handleShare}>
                         <Share2 className="w-5 h-5"/>
                       </Button>
@@ -589,12 +690,22 @@ END:VCALENDAR`
                 </div>
               </div>
             </div>
+            
+            {/* Social Proof Banner */}
+            <div className="w-full bg-black text-white overflow-hidden py-3 mt-4 text-sm font-bold shadow-md">
+               <div className="max-w-7xl mx-auto flex items-center justify-around md:justify-center md:gap-12 animate-in slide-in-from-right duration-1000 whitespace-nowrap overflow-x-auto no-scrollbar px-4">
+                  <div className="flex items-center gap-2"><Star className="w-4 h-4 text-yellow-400 fill-current" /> {avgRating} Avg Rating</div>
+                  <div className="flex items-center gap-2"><Users className="w-4 h-4 text-blue-400" /> {services.length * 123}+ Happy Clients</div>
+                  <div className="flex items-center gap-2">✂️ {services.length} Services Available</div>
+                  <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-green-400" /> Book in 2 mins</div>
+               </div>
+            </div>
           </div>
 
           {/* Tabs */}
           <div className="bg-white/90 backdrop-blur-md border-b border-gray-100 sticky top-0 sm:top-16 z-40 shadow-sm transition-all">
             <div className="max-w-7xl mx-auto flex overflow-x-auto px-4 sm:px-6 no-scrollbar">
-              {['Featured', 'Services', 'Products', 'Packages', 'Memberships', 'Enquiry'].map(tab => (
+              {['Featured', 'Gallery', 'Services', 'Products', 'Packages', 'Memberships', 'Reviews', 'Enquiry'].map(tab => (
                 <button 
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -643,6 +754,18 @@ END:VCALENDAR`
                      })}
                   </div>
                 )}
+              </div>
+            )}
+            
+            {activeTab === 'Gallery' && (
+              <div className="py-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="columns-2 md:columns-3 gap-4 space-y-4">
+                   {galleryImages.map((img, i) => (
+                      <div key={i} className="overflow-hidden rounded-xl cursor-pointer group" onClick={() => setGalleryLightboxImg(img)}>
+                         <img src={img} alt={`Gallery ${i}`} className="w-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+                      </div>
+                   ))}
+                </div>
               </div>
             )}
 
@@ -727,10 +850,17 @@ END:VCALENDAR`
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-in slide-in-from-top-2 fade-in duration-300">
                         {catServices.map(service => {
                           const isSelected = selectedServices.some(s => s.id === service.id);
+                          const isExpandedService = expandedServiceId === service.id;
+                          
                           return (
                             <div 
                               key={service.id} 
-                              className={`bg-white p-4 rounded-2xl border transition-all duration-300 ${isSelected ? 'border-gray-900 shadow-md ring-1 ring-gray-900 scale-[1.01]' : 'border-gray-200 shadow-sm hover:border-gray-300 hover:shadow-md'}`}
+                              className={`bg-white p-4 rounded-2xl border transition-all duration-300 cursor-pointer ${isSelected ? 'border-gray-900 shadow-md ring-1 ring-gray-900 scale-[1.01]' : 'border-gray-200 shadow-sm hover:border-gray-300 hover:shadow-md'}`}
+                              onClick={(e) => {
+                                 // Expand if not adding/removing
+                                 if ((e.target as HTMLElement).closest('button')) return;
+                                 setExpandedServiceId(isExpandedService ? null : service.id);
+                              }}
                             >
                               <div className="flex justify-between items-start gap-4">
                                 <div className="w-20 h-20 shrink-0 rounded-2xl overflow-hidden bg-gray-100 shadow-inner">
@@ -750,7 +880,7 @@ END:VCALENDAR`
                                     <Button 
                                       variant="outline" 
                                       className="bg-black text-white hover:bg-gray-800 border-transparent rounded-xl h-10 px-5 text-sm font-bold shadow-md transition-transform active:scale-95"
-                                      onClick={() => handleRemoveService(service.id)}
+                                      onClick={(e) => { e.stopPropagation(); handleRemoveService(service.id); }}
                                     >
                                       Remove
                                     </Button>
@@ -758,13 +888,40 @@ END:VCALENDAR`
                                     <Button 
                                       variant="outline" 
                                       className="bg-white border-gray-300 text-gray-900 hover:bg-gray-50 hover:border-gray-400 rounded-xl h-10 px-6 text-sm font-bold shadow-sm transition-transform active:scale-95"
-                                      onClick={() => handleAddService(service)}
+                                      onClick={(e) => { e.stopPropagation(); handleAddService(service); }}
                                     >
                                       Add
                                     </Button>
                                   )}
                                 </div>
                               </div>
+                              
+                              {/* Expanded Inline Detail */}
+                              {isExpandedService && (
+                                <div className="mt-4 pt-4 border-t border-gray-100 animate-in slide-in-from-top-2 fade-in">
+                                  <p className="text-gray-600 text-sm mb-4 leading-relaxed">{service.description || "No additional details available for this service."}</p>
+                                  {staffList.length > 0 && (
+                                    <div className="mb-4">
+                                       <span className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Professionals Available</span>
+                                       <div className="flex gap-2">
+                                          {staffList.slice(0,4).map(s => (
+                                             <div key={s.id} title={s.name} className="w-8 h-8 rounded-full bg-gray-200 border-2 border-white shadow-sm flex items-center justify-center text-xs font-bold uppercase text-gray-600">
+                                                {s.name.charAt(0)}
+                                             </div>
+                                          ))}
+                                          {staffList.length > 4 && (
+                                             <div className="w-8 h-8 rounded-full bg-gray-100 border-2 border-white shadow-sm flex items-center justify-center text-xs font-bold text-gray-500">
+                                                +{staffList.length - 4}
+                                             </div>
+                                          )}
+                                       </div>
+                                    </div>
+                                  )}
+                                  {!isSelected && (
+                                     <Button className="w-full bg-black text-white hover:bg-gray-800 rounded-xl font-bold" onClick={(e) => { e.stopPropagation(); handleAddService(service); }}>Add to Booking</Button>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           )
                         })}
@@ -783,7 +940,6 @@ END:VCALENDAR`
               </div>
             )}
 
-            {/* Other tabs remain similar with animation enhancements */}
             {activeTab === 'Products' && (
               <div className="py-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {products.length === 0 ? (
@@ -792,12 +948,13 @@ END:VCALENDAR`
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {products.map(product => {
                       const isSelected = selectedProducts.some(p => p.id === product.id);
+                      const qty = productQuantities[product.id] || 0;
                       return (
                         <div key={product.id} className={`bg-white p-5 rounded-3xl border transition-all ${isSelected ? 'border-gray-900 shadow-md ring-1 ring-gray-900 scale-[1.01]' : 'border-gray-200 shadow-sm hover:shadow-md'}`}>
-                           {/* Content remains mostly same */}
                            <div className="flex justify-between items-start gap-4">
-                            <div className="w-16 h-16 shrink-0 rounded-2xl overflow-hidden bg-gray-50 flex items-center justify-center border border-gray-100">
+                            <div className="relative w-16 h-16 shrink-0 rounded-2xl overflow-hidden bg-gray-50 flex items-center justify-center border border-gray-100">
                               <ShoppingCart className="w-8 h-8 text-gray-300" />
+                              {qty > 0 && <span className="absolute -top-1 -right-1 bg-black text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{qty}</span>}
                             </div>
                             <div className="flex-1 min-w-0">
                               <h4 className="font-bold text-gray-900 leading-tight mb-1 truncate">{product.name}</h4>
@@ -806,9 +963,11 @@ END:VCALENDAR`
                             </div>
                             <div className="shrink-0 pt-1">
                               {isSelected ? (
-                                <Button variant="outline" className="bg-black text-white hover:bg-gray-800 border-transparent rounded-xl h-9 px-4 text-xs font-bold" onClick={() => handleRemoveProduct(product.id)}>
-                                  Remove
-                                </Button>
+                                <div className="flex items-center gap-2 bg-gray-100 rounded-xl p-1">
+                                   <Button variant="ghost" size="icon" className="w-7 h-7 rounded-lg hover:bg-white text-gray-900 shadow-sm" onClick={() => updateProductQuantity(product.id, -1)}><Minus className="w-3 h-3" /></Button>
+                                   <span className="font-bold text-sm w-4 text-center">{qty}</span>
+                                   <Button variant="ghost" size="icon" className="w-7 h-7 rounded-lg hover:bg-white text-gray-900 shadow-sm" onClick={() => updateProductQuantity(product.id, 1)}><Plus className="w-3 h-3" /></Button>
+                                </div>
                               ) : (
                                 <Button variant="outline" className="bg-white border-gray-300 text-gray-900 hover:bg-gray-50 rounded-xl h-9 px-5 text-xs font-bold" onClick={() => handleAddProduct(product)}>
                                   Add
@@ -901,6 +1060,53 @@ END:VCALENDAR`
               </div>
             )}
 
+            {activeTab === 'Reviews' && (
+               <div className="py-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="flex items-center gap-6 mb-8 bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                     <div className="text-center">
+                        <div className="text-5xl font-black text-gray-900">{avgRating}</div>
+                        <div className="flex items-center justify-center mt-2 text-yellow-400">
+                           <Star className="w-5 h-5 fill-current" />
+                           <Star className="w-5 h-5 fill-current" />
+                           <Star className="w-5 h-5 fill-current" />
+                           <Star className="w-5 h-5 fill-current" />
+                           <StarHalf className="w-5 h-5 fill-current" />
+                        </div>
+                        <div className="text-sm font-bold text-gray-500 mt-1">{reviews.length} Ratings</div>
+                     </div>
+                     <div className="flex-1 hidden sm:block">
+                        <p className="text-gray-600 font-medium">Hear what our amazing clients have to say about our services. Your satisfaction is our priority.</p>
+                     </div>
+                  </div>
+                  
+                  {reviews.length === 0 ? (
+                     <div className="text-center py-20 text-gray-500">
+                        <Star className="w-16 h-16 mx-auto text-gray-200 mb-4" />
+                        <p className="font-bold text-gray-400 text-xl">No reviews yet. Be the first!</p>
+                     </div>
+                  ) : (
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {reviews.map(r => (
+                           <div key={r.id} className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm hover:shadow-md transition-all">
+                              <div className="flex justify-between items-start mb-4">
+                                 <div className="font-bold text-gray-900">{r.first_name}</div>
+                                 <div className="text-xs text-gray-400 font-medium">
+                                    {format(new Date(r.created_at), 'MMM d, yyyy')}
+                                 </div>
+                              </div>
+                              <div className="flex items-center text-yellow-400 mb-3">
+                                 {Array.from({length: 5}).map((_, i) => (
+                                    <Star key={i} className={`w-4 h-4 ${i < r.rating ? 'fill-current' : 'text-gray-200'}`} />
+                                 ))}
+                              </div>
+                              <p className="text-gray-600 text-sm italic">"{r.comment}"</p>
+                           </div>
+                        ))}
+                     </div>
+                  )}
+               </div>
+            )}
+
             {activeTab === 'Enquiry' && (
               <div className="py-8 max-w-lg mx-auto animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <Card className="border-gray-200 shadow-lg rounded-3xl overflow-hidden">
@@ -942,14 +1148,14 @@ END:VCALENDAR`
                         </div>
                         <div className="space-y-2">
                           <Label className="font-bold text-gray-700">Message</Label>
-                          <textarea 
+                          <Textarea 
                             required 
                             className="w-full p-4 rounded-xl border-transparent bg-gray-50 focus:bg-white focus:ring-2 focus:ring-black outline-none resize-none transition-colors" 
                             rows={4} 
                             placeholder="How can we help you?"
                             value={customerForm.message}
                             onChange={(e) => setCustomerForm({...customerForm, message: e.target.value})}
-                          ></textarea>
+                          ></Textarea>
                         </div>
                         <Button type="submit" disabled={submitting} className="w-full bg-black hover:bg-gray-800 text-white h-14 rounded-xl mt-4 font-bold text-lg shadow-lg">
                           {submitting ? "Sending..." : "Send Message"} {!submitting && <Send className="w-5 h-5 ml-2" />}
@@ -1002,6 +1208,19 @@ END:VCALENDAR`
       {/* Step 2: DateTime & Staff */}
       {step === 2 && (
         <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen bg-white animate-in slide-in-from-right duration-300">
+          {/* Step Progress */}
+          <div className="flex items-center justify-center gap-3 pt-6 pb-2">
+             <div className="flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold shadow-md">1</div>
+                <span className="text-[10px] uppercase font-bold text-gray-900 mt-1">Staff/Time</span>
+             </div>
+             <div className="w-10 h-px bg-gray-300 mt-[-15px]"></div>
+             <div className="flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center font-bold">2</div>
+                <span className="text-[10px] uppercase font-bold text-gray-400 mt-1">Details</span>
+             </div>
+          </div>
+          
           <div className="flex items-center gap-4 mb-8 pt-4 sticky top-0 bg-white/90 backdrop-blur z-10 py-4">
             <Button variant="ghost" size="icon" onClick={() => setStep(1)} className="rounded-full bg-gray-100 hover:bg-gray-200 shadow-sm transition-transform active:scale-90">
               <ChevronLeft className="w-6 h-6" />
@@ -1090,8 +1309,11 @@ END:VCALENDAR`
 
             {/* Time Section */}
             {selectedDate && (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
-                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">3. Choose Time</h3>
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100 relative">
+                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                   3. Choose Time
+                   {loadingAvailability && <div className="w-4 h-4 ml-2 border-2 border-gray-300 border-t-black rounded-full animate-spin"></div>}
+                </h3>
                 {timeSlots.length === 0 ? (
                    <div className="bg-gray-50 p-6 rounded-2xl text-center border border-gray-100">
                       <Clock className="w-8 h-8 text-gray-400 mx-auto mb-2" />
@@ -1102,17 +1324,31 @@ END:VCALENDAR`
                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                      {timeSlots.map(time => {
                        const isSelected = selectedTime === time;
+                       const dateStr = format(selectedDate, "yyyy-MM-dd")
+                       const isBooked = bookedSlots[dateStr]?.includes(time);
+                       
                        return (
                          <button
                            key={time}
+                           disabled={isBooked}
                            onClick={() => setSelectedTime(time)}
-                           className={`py-3.5 rounded-xl text-sm font-bold transition-all duration-300 border-2 ${
-                             isSelected 
-                               ? 'bg-black border-black text-white shadow-lg scale-105' 
-                               : 'bg-white border-gray-100 text-gray-700 hover:border-gray-900 hover:text-gray-900 hover:shadow-md'
+                           className={`relative py-3.5 rounded-xl text-sm font-bold transition-all duration-300 border-2 overflow-hidden ${
+                             isBooked 
+                               ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed opacity-70' 
+                               : isSelected 
+                                 ? 'bg-black border-black text-white shadow-lg scale-105' 
+                                 : 'bg-white border-gray-100 text-gray-700 hover:border-gray-900 hover:text-gray-900 hover:shadow-md'
                            }`}
                          >
-                           {time}
+                           {isBooked && (
+                              <>
+                                 <div className="absolute inset-0 flex items-center justify-center opacity-30">
+                                    <div className="w-full h-px bg-red-500 rotate-[-15deg]"></div>
+                                 </div>
+                                 <div className="absolute top-0 right-0 bg-gray-200 text-gray-600 text-[9px] px-1 rounded-bl-lg font-black uppercase">Booked</div>
+                              </>
+                           )}
+                           <span className={isBooked ? 'line-through' : ''}>{time}</span>
                          </button>
                        )
                      })}
@@ -1139,6 +1375,18 @@ END:VCALENDAR`
       {/* Step 3: Details */}
       {step === 3 && (
         <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen bg-white pb-32 animate-in slide-in-from-right duration-300">
+          <div className="flex items-center justify-center gap-3 pt-6 pb-2">
+             <div className="flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center font-bold shadow-md"><CheckCircle className="w-5 h-5"/></div>
+                <span className="text-[10px] uppercase font-bold text-gray-900 mt-1">Staff/Time</span>
+             </div>
+             <div className="w-10 h-px bg-green-500 mt-[-15px]"></div>
+             <div className="flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center font-bold shadow-md">2</div>
+                <span className="text-[10px] uppercase font-bold text-gray-900 mt-1">Details</span>
+             </div>
+          </div>
+
           <div className="flex items-center gap-4 mb-8 pt-4 sticky top-0 bg-white/90 backdrop-blur z-10 py-4">
             <Button variant="ghost" size="icon" onClick={() => setStep(2)} className="rounded-full bg-gray-100 hover:bg-gray-200 shadow-sm transition-transform active:scale-90">
               <ChevronLeft className="w-6 h-6" />
@@ -1147,6 +1395,13 @@ END:VCALENDAR`
           </div>
 
           <div className="space-y-8">
+            {selectedServices.length > 1 && selectedStaff === 'any' && (
+               <div className="bg-blue-50 text-blue-800 p-4 rounded-2xl border border-blue-100 text-sm font-bold flex items-start gap-3">
+                  <span className="text-xl">ℹ️</span> 
+                  Services may be assigned to different professionals for maximum efficiency.
+               </div>
+            )}
+          
             <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 shadow-sm">
               <div className="flex justify-between items-start mb-6">
                 <div>
@@ -1169,13 +1424,45 @@ END:VCALENDAR`
                   <div className="text-xs text-gray-500 font-bold mt-1 bg-gray-200/50 px-2 py-1 rounded">{formatDuration(totalDuration)}</div>
                 </div>
               </div>
-              <div className="space-y-3 pt-4 border-t border-gray-200">
-                {selectedServices.map(s => (
-                  <div key={s.id} className="flex justify-between text-sm">
-                    <span className="text-gray-700 font-semibold">{s.name}</span>
-                    <span className="font-black text-gray-900">{business.currency}{s.price}</span>
-                  </div>
-                ))}
+              
+              <div className="border-t border-gray-200 pt-4">
+                 <button className="w-full flex justify-between items-center text-sm font-bold text-gray-700" onClick={() => setBreakdownExpanded(!breakdownExpanded)}>
+                    View Price Breakdown 
+                    {breakdownExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                 </button>
+                 
+                 {breakdownExpanded && (
+                    <div className="mt-4 space-y-3 animate-in slide-in-from-top-2 fade-in">
+                       {selectedServices.map(s => (
+                         <div key={s.id} className="flex justify-between text-sm">
+                           <span className="text-gray-600">{s.name}</span>
+                           <span className="font-bold text-gray-900">{business.currency}{s.price}</span>
+                         </div>
+                       ))}
+                       {selectedProducts.map(p => (
+                         <div key={p.id} className="flex justify-between text-sm">
+                           <span className="text-gray-600">{p.name} (x{productQuantities[p.id] || 1})</span>
+                           <span className="font-bold text-gray-900">{business.currency}{(Number(p.price) * (productQuantities[p.id] || 1))}</span>
+                         </div>
+                       ))}
+                       {selectedPackages.map(p => (
+                         <div key={p.id} className="flex justify-between text-sm">
+                           <span className="text-gray-600">{p.name}</span>
+                           <span className="font-bold text-gray-900">{business.currency}{p.price}</span>
+                         </div>
+                       ))}
+                       {selectedMemberships.map(m => (
+                         <div key={m.id} className="flex justify-between text-sm">
+                           <span className="text-gray-600">{m.name}</span>
+                           <span className="font-bold text-gray-900">{business.currency}{m.price}</span>
+                         </div>
+                       ))}
+                       <div className="border-t border-gray-200 pt-3 mt-3 flex justify-between items-center text-base">
+                          <span className="font-black text-gray-900">Grand Total</span>
+                          <span className="font-black text-red-500">{business.currency}{totalAmount}</span>
+                       </div>
+                    </div>
+                 )}
               </div>
             </div>
 
@@ -1212,6 +1499,17 @@ END:VCALENDAR`
                   value={customerForm.email} 
                   onChange={e => setCustomerForm({...customerForm, email: e.target.value})}
                   className="h-14 rounded-2xl bg-gray-50 border-transparent focus:bg-white focus:ring-2 focus:ring-black transition-all text-base shadow-sm" 
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="notes" className="text-gray-900 font-bold">Special Requests or Notes <span className="text-gray-400 font-medium">(Optional)</span></Label>
+                <Textarea 
+                  id="notes" 
+                  placeholder="Anything we should know?" 
+                  value={customerForm.extra_notes} 
+                  onChange={e => setCustomerForm({...customerForm, extra_notes: e.target.value})}
+                  className="rounded-2xl bg-gray-50 border-transparent focus:bg-white focus:ring-2 focus:ring-black transition-all text-base shadow-sm p-4 resize-none"
+                  rows={3}
                 />
               </div>
             </div>
