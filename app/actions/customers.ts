@@ -32,6 +32,7 @@ export interface Customer {
   notes?: string | null
   tags?: string[] | null
   preferred_staff_id?: number | null
+  referred_by_customer_id?: number | null
   created_at: string
   updated_at: string
   total_bookings?: number
@@ -75,6 +76,7 @@ export async function getCustomers(): Promise<Customer[]> {
             c.notes,
             c.tags,
             c.preferred_staff_id,
+        referred_by_customer_id,
             c.created_at,
             c.updated_at,
             COUNT(b.id) as total_bookings,
@@ -82,7 +84,8 @@ export async function getCustomers(): Promise<Customer[]> {
           FROM customers c
           LEFT JOIN bookings b ON c.id = b.customer_id
           WHERE c.tenant_id = ${tenantId}
-          GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.tags, c.preferred_staff_id, c.created_at, c.updated_at
+          GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.tags, c.preferred_staff_id,
+        referred_by_customer_id, c.created_at, c.updated_at
           ORDER BY c.created_at DESC
         `
 
@@ -127,6 +130,7 @@ export async function getCustomer(id: string): Promise<Customer | null> {
             c.notes,
             c.tags,
             c.preferred_staff_id,
+        referred_by_customer_id,
             c.created_at,
             c.updated_at,
             COUNT(b.id) as total_bookings,
@@ -134,7 +138,8 @@ export async function getCustomer(id: string): Promise<Customer | null> {
           FROM customers c
           LEFT JOIN bookings b ON c.id = b.customer_id
           WHERE c.id = ${id} AND c.tenant_id = ${tenantId}
-          GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.tags, c.preferred_staff_id, c.created_at, c.updated_at
+          GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.tags, c.preferred_staff_id,
+        referred_by_customer_id, c.created_at, c.updated_at
         `
 
         if (customers.length === 0) return null
@@ -181,6 +186,7 @@ export async function searchCustomers(query: string): Promise<Customer[]> {
             c.notes,
             c.tags,
             c.preferred_staff_id,
+        referred_by_customer_id,
             c.created_at,
             c.updated_at,
             COUNT(b.id) as total_bookings,
@@ -191,7 +197,8 @@ export async function searchCustomers(query: string): Promise<Customer[]> {
             AND (c.full_name ILIKE ${`%${searchQuery}%`} 
                  OR c.phone_number ILIKE ${`%${searchQuery}%`}
                  OR c.email ILIKE ${`%${searchQuery}%`})
-          GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.tags, c.preferred_staff_id, c.created_at, c.updated_at
+          GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.tags, c.preferred_staff_id,
+        referred_by_customer_id, c.created_at, c.updated_at
           ORDER BY c.full_name
           LIMIT 20
         `
@@ -249,6 +256,8 @@ export async function createCustomer(formData: FormData) {
     const tags = tagsStr ? tagsStr.split(",").map(t => t.trim()).filter(Boolean) : []
     const preferredStaffIdStr = formData.get("preferred_staff_id") as string
     const preferredStaffId = preferredStaffIdStr ? Number(preferredStaffIdStr) : null
+    const referredByStr = formData.get("referred_by_customer_id") as string
+    const referredByCustomerId = referredByStr ? Number(referredByStr) : null
 
     if (!phoneNumber || !fullName) {
       return {
@@ -291,6 +300,8 @@ export async function createCustomer(formData: FormData) {
         notes,
         tags,
         preferred_staff_id,
+        referred_by_customer_id,
+        referred_by_customer_id,
         tenant_id,
         created_at,
         updated_at
@@ -309,6 +320,7 @@ export async function createCustomer(formData: FormData) {
         ${notes || null},
         ${JSON.stringify(tags)},
         ${preferredStaffId},
+        ${referredByCustomerId || null},
         ${tenantId},
         NOW(),
         NOW()
@@ -351,6 +363,7 @@ export async function createCustomerData(customerData: {
   notes?: string
   tags?: string[]
   preferred_staff_id?: number | null
+  referred_by_customer_id?: number | null
 }): Promise<Customer> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     if (!customerData.full_name || !customerData.phone_number) {
@@ -373,6 +386,7 @@ export async function createCustomerData(customerData: {
         notes,
         tags,
         preferred_staff_id,
+        referred_by_customer_id,
         tenant_id,
         created_at,
         updated_at
@@ -392,6 +406,7 @@ export async function createCustomerData(customerData: {
         ${customerData.notes || null},
         ${JSON.stringify(customerData.tags || [])},
         ${customerData.preferred_staff_id || null},
+        ${customerData.referred_by_customer_id || null},
         ${tenantId},
         NOW(),
         NOW()
@@ -432,6 +447,7 @@ export async function updateCustomer(
     notes?: string
     tags?: string[]
     preferred_staff_id?: number | null
+  referred_by_customer_id?: number | null
   },
 ): Promise<UpdateCustomerState> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
@@ -459,6 +475,7 @@ export async function updateCustomer(
         notes = COALESCE(${customerData.notes}, notes),
         tags = COALESCE(${customerData.tags ? JSON.stringify(customerData.tags) : null}::jsonb, tags),
         preferred_staff_id = COALESCE(${customerData.preferred_staff_id}, preferred_staff_id),
+        referred_by_customer_id = COALESCE(${customerData.referred_by_customer_id}, referred_by_customer_id),
         updated_at = NOW()
       WHERE id = ${id} AND tenant_id = ${tenantId}
       RETURNING *

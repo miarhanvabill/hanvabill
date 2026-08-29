@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState } from "react"
-import { ArrowLeft, User, Phone, Mail, QrCode, Calendar, FileText, Instagram, Globe, Tag, UserSquare } from 'lucide-react'
+import { ArrowLeft, User, Phone, Mail, QrCode, Calendar, FileText, Instagram, Globe, Tag, UserSquare, Trash2 } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { createCustomer } from "@/app/actions/customers"
 import { getStaff, type Staff } from "@/app/actions/staff"
+import { CustomerSelectionModal } from "@/components/customer-selection-modal"
+
 import { useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -22,6 +24,8 @@ export default function CreateCustomer() {
   const [selectedGender, setSelectedGender] = useState("")
   const [loading, setLoading] = useState(false)
   const [staffList, setStaffList] = useState<Staff[]>([])
+  const [showCustomerModal, setShowCustomerModal] = useState(false)
+
   const [formData, setFormData] = useState({
     phoneNumber: "",
     fullName: "",
@@ -35,6 +39,8 @@ export default function CreateCustomer() {
     notes: "",
     tags: "",
     preferredStaffId: "",
+    referredByCustomerId: "",
+    referredByCustomerName: "",
   })
 
   useEffect(() => {
@@ -64,6 +70,8 @@ export default function CreateCustomer() {
       submitData.append("gender", selectedGender)
       if (formData.tags) submitData.append("tags", formData.tags)
       if (formData.preferredStaffId && formData.preferredStaffId !== "none") submitData.append("preferred_staff_id", formData.preferredStaffId)
+      if (formData.referredByCustomerId) submitData.append("referred_by_customer_id", formData.referredByCustomerId)
+
 
       const result = await createCustomer(submitData)
 
@@ -314,6 +322,34 @@ export default function CreateCustomer() {
                   </div>
 
                   <div className="space-y-2 pt-2">
+                    <Label className="text-sm font-medium text-slate-700">Referred By</Label>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full justify-start border-gray-300 text-gray-700"
+                        onClick={() => setShowCustomerModal(true)}
+                      >
+                        <User className="mr-2 h-4 w-4" />
+                        {formData.referredByCustomerName || "Select Referrer"}
+                      </Button>
+                      {formData.referredByCustomerId && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            handleInputChange("referredByCustomerId", "")
+                            handleInputChange("referredByCustomerName", "")
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-500" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
                     <Label className="text-sm font-medium text-slate-700">Customer Code</Label>
                     <div className="relative">
                       <QrCode className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -365,6 +401,16 @@ export default function CreateCustomer() {
           </div>
         </form>
       </div>
+
+      <CustomerSelectionModal
+        isOpen={showCustomerModal}
+        onClose={() => setShowCustomerModal(false)}
+        onSelect={(customer) => {
+          handleInputChange("referredByCustomerId", customer.id.toString())
+          handleInputChange("referredByCustomerName", customer.full_name)
+          setShowCustomerModal(false)
+        }}
+      />
     </div>
   )
 }
