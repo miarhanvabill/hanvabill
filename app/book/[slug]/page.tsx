@@ -1420,7 +1420,11 @@ const ProfileDrawer = () => (
                         <div key={product.id} className={`bg-white p-5 rounded-3xl border transition-all ${isSelected ? 'border-gray-900 shadow-md ring-1 ring-gray-900 scale-[1.01]' : 'border-gray-200 shadow-sm hover:shadow-md'}`}>
                            <div className="flex justify-between items-start gap-4">
                             <div className="relative w-16 h-16 shrink-0 rounded-2xl overflow-hidden bg-gray-50 flex items-center justify-center border border-gray-100">
-                              <ShoppingCart className="w-8 h-8 text-gray-300" />
+                              {(product as any).image_url ? (
+                                <img src={(product as any).image_url} alt={product.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <ShoppingCart className="w-8 h-8 text-gray-300" />
+                              )}
                               {qty > 0 && <span className="absolute -top-1 -right-1 bg-black text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{qty}</span>}
                             </div>
                             <div className="flex-1 min-w-0">
@@ -1461,6 +1465,11 @@ const ProfileDrawer = () => (
                         return (
                            <div key={pkg.id} className={`bg-white p-5 rounded-3xl border transition-all ${isSelected ? 'border-gray-900 shadow-md ring-1 ring-gray-900 scale-[1.01]' : 'border-gray-200 shadow-sm hover:shadow-md'}`}>
                               <div className="flex justify-between items-start gap-4">
+                                {(pkg as any).image_url && (
+                                  <div className="w-16 h-16 shrink-0 rounded-2xl overflow-hidden shadow-inner bg-gray-50 border border-gray-100">
+                                    <img src={(pkg as any).image_url} alt={pkg.name} className="w-full h-full object-cover" />
+                                  </div>
+                                )}
                                 <div className="flex-1 min-w-0">
                                   <h4 className="font-bold text-gray-900 leading-tight mb-1 truncate text-lg">{pkg.name}</h4>
                                   <div className="flex items-center gap-2 mt-1">
@@ -1502,6 +1511,11 @@ const ProfileDrawer = () => (
                       return (
                         <div key={mem.id} className={`bg-gradient-to-br from-gray-900 to-black p-5 rounded-3xl border transition-all ${isSelected ? 'border-gray-400 shadow-[0_0_0_3px_black] scale-[1.01]' : 'border-transparent shadow-lg'}`}>
                           <div className="flex justify-between items-start gap-4">
+                            {(mem as any).image_url && (
+                              <div className="w-16 h-16 shrink-0 rounded-2xl overflow-hidden border border-white/20 bg-gray-800">
+                                <img src={(mem as any).image_url} alt={mem.name} className="w-full h-full object-cover opacity-90 hover:opacity-100 transition-opacity" />
+                              </div>
+                            )}
                             <div className="flex-1 min-w-0">
                               <h4 className="font-bold text-white leading-tight mb-1 truncate text-lg">{mem.name}</h4>
                               <div className="font-black text-yellow-400 text-base mt-1">{business.currency}{mem.price}</div>

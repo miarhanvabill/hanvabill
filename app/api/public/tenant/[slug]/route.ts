@@ -64,7 +64,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
 
     // Fetch products
     const products = await sql`
-      SELECT p.id, p.name, p.description, p.price, p.stock_quantity as stock, c.name as category 
+      SELECT p.id, p.name, p.description, p.price, p.stock_quantity as stock, c.name as category, p.image_url
       FROM products p
       LEFT JOIN categories c ON p.category_id = c.id
       WHERE p.tenant_id = ${tenantId} AND p.is_active = true
@@ -75,7 +75,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
 
     // Fetch packages
     const packages = await sql`
-      SELECT id, name, description, package_price as price, original_price, validity_days 
+      SELECT id, name, description, package_price as price, original_price, validity_days, image_url
       FROM service_packages 
       WHERE tenant_id = ${tenantId} AND is_active = true
     `.catch((e) => {
@@ -85,7 +85,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
 
     // Fetch memberships
     const memberships = await sql`
-      SELECT id, name, description, price, duration_months as validity_days 
+      SELECT id, name, description, price, duration_months as validity_days, image_url
       FROM membership_plans 
       WHERE tenant_id = ${tenantId} AND status = 'active'
     `.catch((e) => {
