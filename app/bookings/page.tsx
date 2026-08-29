@@ -482,27 +482,11 @@ function AppointmentsSection({
                               </Button>
                             </>
                           )}
-              {hasMore && bookings.length > 0 && (
-                <div className="flex justify-center mt-6">
-                  <Button variant="outline" onClick={handleLoadMore} disabled={loadingMore}>
-                    {loadingMore ? "Loading..." : "Load More Bookings"}
-                  </Button>
-                </div>
-              )}
-
                           {appointment.status === "confirmed" && (
                             <Button size="sm" onClick={() => onStatusUpdate(appointment.id, "completed")}>
                               Complete
                             </Button>
                           )}
-              {hasMore && bookings.length > 0 && (
-                <div className="flex justify-center mt-6">
-                  <Button variant="outline" onClick={handleLoadMore} disabled={loadingMore}>
-                    {loadingMore ? "Loading..." : "Load More Bookings"}
-                  </Button>
-                </div>
-              )}
-
                         </div>
                       </div>
                     </CardContent>
@@ -772,14 +756,6 @@ function BookingsContent({ searchParams }: BookingsPageProps) {
                 {searchParams.status && searchParams.status !== 'all' && (
                   <input type="hidden" name="status" value={searchParams.status} />
                 )}
-              {hasMore && bookings.length > 0 && (
-                <div className="flex justify-center mt-6">
-                  <Button variant="outline" onClick={handleLoadMore} disabled={loadingMore}>
-                    {loadingMore ? "Loading..." : "Load More Bookings"}
-                  </Button>
-                </div>
-              )}
-
                 <div className="flex-1">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
@@ -841,14 +817,6 @@ function BookingsContent({ searchParams }: BookingsPageProps) {
                                   <strong>Notes:</strong> {booking.notes}
                                 </p>
                               )}
-              {hasMore && bookings.length > 0 && (
-                <div className="flex justify-center mt-6">
-                  <Button variant="outline" onClick={handleLoadMore} disabled={loadingMore}>
-                    {loadingMore ? "Loading..." : "Load More Bookings"}
-                  </Button>
-                </div>
-              )}
-
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -876,8 +844,15 @@ function BookingsContent({ searchParams }: BookingsPageProps) {
                         ? "Try adjusting your filters to see more results."
                         : "Get started by creating your first booking."}
                     </p>
-                  </div>
               </div>
+              
+              {hasMore && bookings.length > 0 && (
+                <div className="flex justify-center mt-6 mb-4">
+                  <Button variant="outline" onClick={handleLoadMore} disabled={loadingMore}>
+                    {loadingMore ? "Loading..." : "Load More Bookings"}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
