@@ -5,7 +5,17 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const results = [];
+    const results: string[] = [];
+
+    // Add image columns for products, packages, memberships
+    try {
+      await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;`
+      await sql`ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS image_url TEXT;`
+      await sql`ALTER TABLE membership_plans ADD COLUMN IF NOT EXISTS image_url TEXT;`
+      results.push('Added image_url columns successfully');
+    } catch(e) {
+      results.push('image_url error: ' + String(e));
+    }
     
     // Auto-consumption
     try {
