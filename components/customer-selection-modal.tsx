@@ -116,12 +116,6 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
     }
   }
 
-      console.error("Error setting Walk In customer:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const handleSelectCustomer = (customer: Customer) => {
     onSelect(customer)
   }
