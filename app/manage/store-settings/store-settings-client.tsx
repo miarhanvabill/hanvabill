@@ -188,9 +188,43 @@ export function StoreSettingsClient({ initialSettings }: { initialSettings: any 
               <Input
                 id="gmbUrl"
                 type="url"
-                value={profile.googleMyBusinessUrl || ""}
+                                value={profile.googleMyBusinessUrl || ""}
                 onChange={(e) => handleProfileChange("googleMyBusinessUrl", e.target.value)}
                 placeholder="https://g.page/r/.../review"
+              />
+            </div>
+            
+            <div className="grid gap-2">
+              <Label htmlFor="logo">Logo URL</Label>
+              <Input
+                id="logo"
+                value={profile.logo || ""}
+                onChange={(e) => handleProfileChange("logo", e.target.value)}
+                placeholder="https://example.com/logo.png"
+              />
+            </div>
+            
+                        <div className="grid gap-2">
+              <Label htmlFor="coverImage">Cover Image URL</Label>
+              <Input
+                id="coverImage"
+                value={profile.coverImage || ""}
+                onChange={(e) => handleProfileChange("coverImage", e.target.value)}
+                placeholder="https://example.com/cover.jpg"
+              />
+            </div>
+            
+            <div className="grid gap-2 sm:col-span-2">
+              <Label htmlFor="galleryImages">Gallery Image URLs (Comma-separated)</Label>
+              <Textarea
+                id="galleryImages"
+                value={profile.galleryImages?.join(', ') || ""}
+                onChange={(e) => {
+                  const urls = e.target.value.split(',').map(u => u.trim()).filter(Boolean);
+                  handleProfileChange("galleryImages", urls);
+                }}
+                placeholder="https://example.com/img1.jpg, https://example.com/img2.jpg"
+                rows={3}
               />
             </div>
           </CardContent>
