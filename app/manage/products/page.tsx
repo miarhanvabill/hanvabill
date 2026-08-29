@@ -57,6 +57,7 @@ export default function ProductsPage() {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
+    image_url: "",
     category_id: "",
     price: "",
     cost: "",
@@ -138,7 +139,8 @@ export default function ProductsPage() {
       cost: product.cost.toString(),
       stock_quantity: product.stock_quantity.toString(),
       min_stock_level: product.min_stock_level.toString(),
-      barcode: product.barcode,
+      barcode: product.barcode || "",
+      image_url: product.image_url || "",
       is_active: product.is_active,
     })
     setIsDialogOpen(true)
@@ -256,6 +258,15 @@ export default function ProductsPage() {
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 />
               </div>
+              <div>
+                <Label htmlFor="image_url">Image URL</Label>
+                <Input
+                  id="image_url"
+                  value={formData.image_url}
+                  onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="price">Selling Price</Label>

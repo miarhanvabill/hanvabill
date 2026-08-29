@@ -111,6 +111,7 @@ export default function MembershipsPage() {
   const [planFormData, setPlanFormData] = useState({
     name: "",
     description: "",
+    image_url: "",
     price: 0,
     duration_months: 12,
     benefits: [""],

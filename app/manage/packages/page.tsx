@@ -32,6 +32,7 @@ export default function PackagesPage() {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
+    image_url: "",
     services: [] as number[],
     package_price: "",
     original_price: "",
@@ -139,7 +140,8 @@ export default function PackagesPage() {
       validity_days: pkg.validity_days.toString(),
       is_active: pkg.is_active,
       is_transferable: pkg.is_transferable,
-      is_multi_branch: pkg.is_multi_branch,
+      is_multi_branch: pkg.is_multi_branch ?? true,
+      image_url: pkg.image_url || "",
     })
     setIsCreateModalOpen(true)
   }
@@ -254,6 +256,15 @@ export default function PackagesPage() {
                   rows={3}
                 />
               </div>
+              <div>
+                <Label htmlFor="image_url">Image URL</Label>
+                <Input
+                  id="image_url"
+                  value={formData.image_url}
+                  onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                />
+              </div>
+
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">

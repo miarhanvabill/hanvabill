@@ -15,6 +15,7 @@ export interface ServicePackage {
   is_active: boolean
   is_transferable: boolean
   is_multi_branch: boolean
+  image_url?: string
   created_at: string
   updated_at: string | null
 }

@@ -50,18 +50,19 @@ export async function createProduct(data: {
   stock_quantity: number
   min_stock_level: number
   barcode: string
+    image_url?: string
   is_active: boolean
 }) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     const result = await sql`
       INSERT INTO products (
         tenant_id, name, description, category_id, price, cost,
-        stock_quantity, min_stock_level, barcode, is_active
+        stock_quantity, min_stock_level, barcode, is_active, image_url
       )
       VALUES (
         ${tenantId}, ${data.name}, ${data.description}, ${data.category_id},
         ${data.price}, ${data.cost}, ${data.stock_quantity},
-        ${data.min_stock_level}, ${data.barcode}, ${data.is_active}
+        ${data.min_stock_level}, ${data.barcode}, ${data.is_active}, ${data.image_url || null}
       )
       RETURNING *
     `
@@ -80,7 +81,9 @@ export async function updateProduct(
     stock_quantity: number
     min_stock_level: number
     barcode: string
+    image_url?: string
     is_active: boolean
+    image_url?: string
   },
 ) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
@@ -96,6 +99,7 @@ export async function updateProduct(
         min_stock_level = ${data.min_stock_level},
         barcode = ${data.barcode},
         is_active = ${data.is_active},
+        image_url = ${data.image_url || null},
         updated_at = NOW()
       WHERE id = ${id} AND tenant_id = ${tenantId}
       RETURNING *
