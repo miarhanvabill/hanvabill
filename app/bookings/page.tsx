@@ -844,6 +844,8 @@ function BookingsContent({ searchParams }: BookingsPageProps) {
                         ? "Try adjusting your filters to see more results."
                         : "Get started by creating your first booking."}
                     </p>
+                  </div>
+                )}
               </div>
               
               {hasMore && bookings.length > 0 && (
