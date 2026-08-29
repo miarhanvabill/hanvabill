@@ -3,8 +3,9 @@ import { getAuthenticatedSql } from "@/lib/db";
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: Request, { params }: { params: { slug: string } }) {
+export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   try {
+    // Next.js 15: params must be awaited
     const { slug } = await params;
     const { sql, tenantId } = await getAuthenticatedSql(slug);
 
@@ -32,14 +33,27 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
       settings[row.setting_key] = value;
     });
 
+    // workingDays may be stored as a JSON string or already parsed array
+    let workingDays = settings["business.workingDays"] ||
+      ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    if (typeof workingDays === "string") {
+      try { workingDays = JSON.parse(workingDays); } catch (e) {}
+    }
+
     const business = {
       name: settings["profile.salonName"] || "Salon",
       address: settings["profile.address"] || "",
-      phone: settings["profile.contactNumber"] || "",
-      currency: settings["financial.currencySymbol"] || "₹",
+      phone: settings["profile.phone"] || settings["profile.contactNumber"] || "",
+      email: settings["profile.email"] || "",
+      website: settings["profile.website"] || "",
+      description: settings["profile.description"] || "",
+      currency: settings["financial.currencySymbol"] || settings["financial.currency"] || "₹",
       openTime: settings["business.openTime"] || "09:00",
       closeTime: settings["business.closeTime"] || "20:00",
-      workingDays: settings["business.workingDays"] || ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+      workingDays,
+      // Logo & cover image stored via profile.logo / profile.coverImage keys
+      logo_url: settings["profile.logo"] || null,
+      cover_image_url: settings["profile.coverImage"] || null,
       socials: {
         facebook: settings["profile.socialMedia.facebook"] || "",
         instagram: settings["profile.socialMedia.instagram"] || "",
@@ -79,10 +93,9 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
       return [];
     });
 
-    
-    // Fetch staff
+    // Fetch staff — include avatar_url if available
     const staff = await sql`
-      SELECT id, name, role 
+      SELECT id, name, role, avatar_url 
       FROM staff 
       WHERE tenant_id = ${tenantId} AND status = 'active'
     `.catch((e) => {
@@ -90,13 +103,42 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
       return [];
     });
 
-    // Get active services
+    // Get active services — include image_url if available
     const services = await sql`
-      SELECT id, name, description, duration_minutes as duration, price, category 
+      SELECT id, name, description, duration_minutes as duration, price, category, image_url 
       FROM services 
       WHERE tenant_id = ${tenantId} AND is_active = true
       ORDER BY category, name
-    `;
+    `.catch((e) => {
+      console.error("Services error:", e);
+      return [];
+    });
+
+    // Fetch business rating summary from approved reviews
+    const ratingRows = await sql`
+      SELECT 
+        ROUND(AVG(rating)::numeric, 1) as avg_rating,
+        COUNT(*) as reviews_count
+      FROM reviews
+      WHERE tenant_id = ${tenantId} AND status = 'approved'
+    `.catch(() => []);
+
+    const ratingData = ratingRows[0] || {};
+    const rating = {
+      avg: ratingData.avg_rating ? Number(ratingData.avg_rating) : null,
+      count: ratingData.reviews_count ? Number(ratingData.reviews_count) : 0
+    };
+
+    // Fetch gallery images (store_settings key: profile.galleryImages, type: json)
+    let galleryImages: string[] = [];
+    const galleryRaw = settings["profile.galleryImages"];
+    if (galleryRaw) {
+      if (Array.isArray(galleryRaw)) {
+        galleryImages = galleryRaw;
+      } else if (typeof galleryRaw === "string") {
+        try { galleryImages = JSON.parse(galleryRaw); } catch (e) {}
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -106,7 +148,9 @@ export async function GET(req: Request, { params }: { params: { slug: string } }
       products,
       packages,
       memberships,
-      staff
+      staff,
+      rating,
+      galleryImages
     });
   } catch (error) {
     console.error("Error fetching public tenant info:", error);
