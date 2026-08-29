@@ -1,7 +1,7 @@
 "use client"
 import React, { useEffect, useState, use, useMemo, useRef } from "react"
-import { format, addDays, startOfToday } from "date-fns"
-import { Calendar, Clock, CheckCircle, ChevronLeft, ChevronRight, MapPin, Search, Phone, Share2, X, ShoppingCart, Facebook, Instagram, Twitter, MessageCircle, Send } from "lucide-react"
+import { format, addDays, startOfToday, parse, isBefore, isSameDay } from "date-fns"
+import { Calendar, Clock, CheckCircle, ChevronLeft, ChevronRight, MapPin, Search, Phone, Share2, X, ShoppingCart, Facebook, Instagram, Twitter, MessageCircle, Send, Star, ChevronDown, ChevronUp } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -76,6 +76,33 @@ const formatDuration = (mins: number) => {
   return `0h ${m}m`;
 }
 
+// Confetti CSS
+const ConfettiStyles = () => (
+  <style dangerouslySetInnerHTML={{__html: `
+    .confetti {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background-color: #f2d74e;
+      animation: confetti-fall 3s ease-in-out infinite;
+      transform-origin: center bottom;
+    }
+    @keyframes confetti-fall {
+      0% { transform: translateY(-100vh) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+    }
+    .confetti:nth-child(1) { left: 10%; animation-delay: 0s; background-color: #95c3de; }
+    .confetti:nth-child(2) { left: 20%; animation-delay: 0.2s; background-color: #ff9a91; }
+    .confetti:nth-child(3) { left: 30%; animation-delay: 0.4s; background-color: #f2d74e; }
+    .confetti:nth-child(4) { left: 40%; animation-delay: 0.1s; background-color: #95c3de; }
+    .confetti:nth-child(5) { left: 50%; animation-delay: 0.3s; background-color: #ff9a91; }
+    .confetti:nth-child(6) { left: 60%; animation-delay: 0.5s; background-color: #f2d74e; }
+    .confetti:nth-child(7) { left: 70%; animation-delay: 0.2s; background-color: #95c3de; }
+    .confetti:nth-child(8) { left: 80%; animation-delay: 0.4s; background-color: #ff9a91; }
+    .confetti:nth-child(9) { left: 90%; animation-delay: 0.1s; background-color: #f2d74e; }
+  `}} />
+)
+
 export default function PublicBookingPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   
@@ -91,7 +118,7 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   
   const [error, setError] = useState<string | null>(null)
 
-  const [step, setStep] = useState(1) // 1: Main, 2: DateTime, 3: Details, 4: Success
+  const [step, setStep] = useState(1) // 1: Main, 2: DateTime/Staff, 3: Details, 4: Success
   const [selectedServices, setSelectedServices] = useState<Service[]>([])
   const [selectedProducts, setSelectedProducts] = useState<Product[]>([])
   const [selectedPackages, setSelectedPackages] = useState<Package[]>([])
@@ -100,8 +127,11 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [selectedTime, setSelectedTime] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [activeTab, setActiveTab] = useState("Services")
+  const [activeTab, setActiveTab] = useState("Featured")
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
+  const [showHours, setShowHours] = useState(false)
+  const [bookingRef, setBookingRef] = useState("")
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
   
   const categoriesRef = useRef<HTMLDivElement>(null)
   
@@ -129,6 +159,15 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
         setPackages(data.packages || [])
         setMemberships(data.memberships || [])
         setStaffList(data.staff || [])
+
+        // Initialize expanded categories
+        if (data.services) {
+           const initialExpanded: Record<string, boolean> = {};
+           const cats = new Set(data.services.map((s: any) => s.category || "Other"));
+           cats.forEach((cat: any) => { initialExpanded[cat as string] = true });
+           setExpandedCategories(initialExpanded);
+        }
+
       } catch (err: any) {
         setError(err.message || "Failed to load booking page")
       } finally {
@@ -138,12 +177,48 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     fetchData()
   }, [slug])
 
-  const availableDates = Array.from({ length: 14 }).map((_, i) => addDays(startOfToday(), i))
-  const timeSlots = Array.from({ length: 18 }).map((_, i) => {
-    const hour = Math.floor(i / 2) + 9
-    const minute = i % 2 === 0 ? "00" : "30"
-    return `${hour.toString().padStart(2, "0")}:${minute}`
-  })
+  const workingDays = business?.workingDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+  const openTime = business?.openTime || "09:00"
+  const closeTime = business?.closeTime || "18:00"
+
+  const availableDates = useMemo(() => {
+    const dates = []
+    for (let i = 0; i < 30; i++) {
+      const d = addDays(startOfToday(), i)
+      const dayName = format(d, 'EEEE').toLowerCase()
+      if (workingDays.includes(dayName)) {
+        dates.push(d)
+      }
+    }
+    return dates
+  }, [workingDays])
+
+  const timeSlots = useMemo(() => {
+    if (!selectedDate) return []
+    const slots = []
+    const start = parse(openTime, "HH:mm", new Date())
+    const end = parse(closeTime, "HH:mm", new Date())
+    
+    let current = start
+    const now = new Date()
+    
+    while (isBefore(current, end)) {
+       const slotTime = format(current, "HH:mm")
+       
+       // Filter past times for today
+       if (isSameDay(selectedDate, now)) {
+          const slotDate = parse(slotTime, "HH:mm", new Date())
+          if (isBefore(slotDate, now)) {
+             current = new Date(current.getTime() + 30 * 60000)
+             continue;
+          }
+       }
+       
+       slots.push(slotTime)
+       current = new Date(current.getTime() + 30 * 60000)
+    }
+    return slots
+  }, [openTime, closeTime, selectedDate])
 
   const categoriesMap = useMemo(() => {
     const map = new Map<string, Service[]>()
@@ -170,6 +245,10 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     }
     return map
   }, [categoriesMap, searchQuery, activeCategory])
+
+  const topServices = useMemo(() => {
+      return [...services].sort(() => 0.5 - Math.random()).slice(0, 6)
+  }, [services])
 
   const handleAddService = (service: Service) => {
     if (!selectedServices.some(s => s.id === service.id)) setSelectedServices(prev => [...prev, service])
@@ -205,6 +284,10 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     setActiveCategory(categoryName === activeCategory ? null : categoryName)
   }
 
+  const toggleCategory = (cat: string) => {
+    setExpandedCategories(prev => ({...prev, [cat]: !prev[cat]}))
+  }
+
   const handleShare = async () => {
     try {
       if (navigator.share) {
@@ -219,6 +302,37 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     } catch (err) {
       console.log("Error sharing:", err);
     }
+  }
+
+  const generateICS = () => {
+    if (!selectedDate || !selectedTime) return
+    const startStr = format(selectedDate, "yyyyMMdd") + "T" + selectedTime.replace(":", "") + "00"
+    // simplistic end time logic
+    const duration = totalDuration || 60
+    const endDate = new Date(selectedDate)
+    const [h, m] = selectedTime.split(':').map(Number)
+    endDate.setHours(h)
+    endDate.setMinutes(m + duration)
+    const endStr = format(endDate, "yyyyMMdd'T'HHmmss")
+    
+    const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+SUMMARY:Appointment at ${business?.name}
+DTSTART:${startStr}
+DTEND:${endStr}
+LOCATION:${business?.address || ''}
+DESCRIPTION:Booking Reference: ${bookingRef}
+END:VEVENT
+END:VCALENDAR`
+    
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' })
+    const link = document.createElement('a')
+    link.href = window.URL.createObjectURL(blob)
+    link.setAttribute('download', 'appointment.ics')
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   const handleSubmitBooking = async () => {
@@ -255,7 +369,8 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
       const data = await res.json()
       if (!res.ok || !data.success) throw new Error(data.error || "Failed to book")
       
-      setStep(5)
+      setBookingRef(data.booking?.id ? `BK-${data.booking.id}` : `BK-${Math.floor(Math.random()*10000)}`)
+      setStep(4)
     } catch (err: any) {
       alert(err.message || "Something went wrong. Please try again.")
     } finally {
@@ -321,12 +436,68 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
     return true;
   }
   
-  const currentDayName = format(new Date(), 'EEEE'); // Dynamically get today's name (e.g. Saturday)
+  const currentDayName = format(new Date(), 'EEEE');
+
+  const SummarySidebar = () => {
+    if (totalItems === 0) return null;
+    return (
+      <div className="hidden lg:block w-80 shrink-0 ml-8">
+        <div className="sticky top-24 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+          <h3 className="font-bold text-lg border-b pb-4 mb-4">Booking Summary</h3>
+          <div className="space-y-4 max-h-[50vh] overflow-y-auto no-scrollbar pb-4">
+             {selectedServices.map(s => (
+                <div key={s.id} className="flex justify-between items-start text-sm">
+                   <div>
+                     <p className="font-medium">{s.name}</p>
+                     <p className="text-gray-500 text-xs">{formatDuration(s.duration)}</p>
+                   </div>
+                   <p className="font-bold">{business.currency}{s.price}</p>
+                </div>
+             ))}
+             {selectedProducts.map(p => (
+                <div key={p.id} className="flex justify-between items-start text-sm">
+                   <p className="font-medium">{p.name}</p>
+                   <p className="font-bold">{business.currency}{p.price}</p>
+                </div>
+             ))}
+             {selectedPackages.map(p => (
+                <div key={p.id} className="flex justify-between items-start text-sm">
+                   <p className="font-medium">{p.name}</p>
+                   <p className="font-bold">{business.currency}{p.price}</p>
+                </div>
+             ))}
+             {selectedMemberships.map(m => (
+                <div key={m.id} className="flex justify-between items-start text-sm">
+                   <p className="font-medium">{m.name}</p>
+                   <p className="font-bold">{business.currency}{m.price}</p>
+                </div>
+             ))}
+          </div>
+          <div className="border-t pt-4 mt-2">
+             <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-600">Total Duration</span>
+                <span className="font-medium">{formatDuration(totalDuration)}</span>
+             </div>
+             <div className="flex justify-between items-center mb-6">
+                <span className="font-bold text-lg">Total</span>
+                <span className="font-black text-xl text-red-500">{business.currency}{totalAmount}</span>
+             </div>
+             <Button 
+                onClick={() => setStep(2)} 
+                className="w-full bg-black text-white hover:bg-gray-800 rounded-xl h-12 font-bold"
+             >
+                Proceed to Book
+             </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50/50 pb-32 font-sans selection:bg-black selection:text-white">
+    <div className="min-h-screen bg-gray-50/50 pb-32 font-sans selection:bg-black selection:text-white transition-all duration-300">
       {/* Sticky Top Header */}
-      <div className="sticky top-0 bg-white z-40 border-b border-gray-100 shadow-sm hidden sm:block">
+      <div className="sticky top-0 bg-white/80 backdrop-blur-md z-50 border-b border-gray-100 shadow-sm hidden sm:block">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-black text-white font-bold flex items-center justify-center rounded uppercase text-sm">
@@ -334,92 +505,103 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
             </div>
             <h1 className="font-bold text-gray-900 uppercase tracking-tight">{business.name}</h1>
           </div>
-          <Button className="bg-black text-white hover:bg-gray-800 rounded-lg h-9 px-6 font-medium text-sm">
+          <Button className="bg-black text-white hover:bg-gray-800 rounded-lg h-9 px-6 font-medium text-sm shadow-sm transition-transform hover:scale-105">
             Login
           </Button>
         </div>
       </div>
 
       {step === 1 && (
-        <div className="animate-in fade-in">
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           {/* Cover & Business Card */}
           <div className="bg-white pb-6 border-b border-gray-100">
-            <div className="max-w-7xl mx-auto">
-              <div className="h-48 sm:h-64 md:h-80 bg-[#151921] w-full relative overflow-hidden">
-                {/* We use a dark color like the screenshot if no cover image is provided */}
+            <div className="max-w-7xl mx-auto relative">
+              <div className="h-48 sm:h-64 md:h-80 w-full relative overflow-hidden bg-gradient-to-r from-gray-900 to-black rounded-b-3xl sm:rounded-none">
+                <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] mix-blend-overlay"></div>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
               </div>
               
-              <div className="px-4 sm:px-6 -mt-10 relative z-10">
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 sm:p-6 w-full">
-                  <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        {isOpen() ? (
-                          <Badge className="bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 font-medium px-3">Open Now</Badge>
-                        ) : (
-                          <Badge className="bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 font-medium px-3">Closed</Badge>
-                        )}
-                        <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200 font-medium px-3 text-xs">{currentDayName}</Badge>
-                      </div>
-                      <h1 className="text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-tight text-gray-900 mt-2">
-                        {business.name}
-                      </h1>
-                      <p className="text-gray-500 text-sm mt-1">{business.address || "Bengaluru, Karnataka, India"}</p>
+              <div className="px-4 sm:px-6 -mt-16 sm:-mt-20 relative z-10">
+                <div className="bg-white rounded-3xl shadow-xl shadow-black/5 border border-gray-100 p-5 sm:p-8 w-full transition-transform hover:-translate-y-1 duration-300">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                    <div className="flex items-center gap-5">
+                       <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-black to-gray-800 text-white font-bold flex items-center justify-center rounded-2xl shadow-lg border-4 border-white shrink-0 text-3xl uppercase">
+                         {business?.name?.substring(0,2) || "CB"}
+                       </div>
+                       <div>
+                         <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                           {isOpen() ? (
+                             <Badge className="bg-green-100/50 text-green-700 hover:bg-green-100 border border-green-200 font-medium px-2.5 py-0.5 rounded-full">Open Now</Badge>
+                           ) : (
+                             <Badge className="bg-red-100/50 text-red-700 hover:bg-red-100 border border-red-200 font-medium px-2.5 py-0.5 rounded-full">Closed</Badge>
+                           )}
+                           <Badge className="bg-blue-50 text-blue-700 border border-blue-200 font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                              <Star className="w-3 h-3 fill-current" /> New
+                           </Badge>
+                         </div>
+                         <h1 className="text-2xl sm:text-3xl md:text-4xl font-black uppercase tracking-tight text-gray-900 leading-none">
+                           {business.name}
+                         </h1>
+                         <p className="text-gray-500 text-sm mt-2 flex items-center gap-1.5 font-medium">
+                           <MapPin className="w-4 h-4 text-gray-400" />
+                           {business.address || "Bengaluru, Karnataka, India"}
+                         </p>
+                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <a href={`tel:${business.phone}`}>
-                        <Button variant="outline" size="icon" className="rounded-full w-10 h-10 border-gray-200 text-gray-600 hover:bg-gray-50">
-                          <Phone className="w-4 h-4"/>
-                        </Button>
-                      </a>
-                      <Button variant="outline" size="icon" className="rounded-full w-10 h-10 border-gray-200 text-gray-600 hover:bg-gray-50" onClick={handleShare}>
-                        <Share2 className="w-4 h-4"/>
+                    <div className="flex items-center gap-3">
+                      {business.phone && (
+                        <a href={`https://wa.me/${business.phone}`} target="_blank" rel="noreferrer">
+                          <Button className="bg-[#25D366] hover:bg-[#128C7E] text-white rounded-xl h-11 px-5 shadow-sm shadow-[#25D366]/20 transition-transform hover:scale-105">
+                            <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
+                          </Button>
+                        </a>
+                      )}
+                      <Button variant="outline" size="icon" className="rounded-xl w-11 h-11 border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors" onClick={handleShare}>
+                        <Share2 className="w-5 h-5"/>
                       </Button>
                     </div>
                   </div>
                   
-                  {/* Social Links */}
-                  {(business?.socials?.facebook || business?.socials?.instagram || business?.socials?.twitter || business?.socials?.google) && (
-                    <div className="flex items-center gap-3 mt-5 pt-4 border-t border-gray-100">
-                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Follow us</span>
-                      {business.socials.facebook && (
-                        <a href={business.socials.facebook} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-blue-600">
-                          <Facebook className="w-4 h-4" />
-                        </a>
-                      )}
-                      {business.socials.instagram && (
-                        <a href={business.socials.instagram} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-pink-600">
-                          <Instagram className="w-4 h-4" />
-                        </a>
-                      )}
-                      {business.socials.twitter && (
-                        <a href={business.socials.twitter} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-sky-500">
-                          <Twitter className="w-4 h-4" />
-                        </a>
-                      )}
-                      {business.socials.whatsapp && (
-                        <a href={business.socials.whatsapp} target="_blank" rel="noreferrer" className="text-gray-400 hover:text-red-500">
-                          <MessageCircle className="w-4 h-4" />
-                        </a>
-                      )}
-                    </div>
-                  )}
+                  {/* Expandable Hours */}
+                  <div className="mt-6 border-t border-gray-100 pt-4">
+                     <button onClick={() => setShowHours(!showHours)} className="flex items-center gap-2 text-sm font-semibold text-gray-700 hover:text-black transition-colors w-full sm:w-auto">
+                        <Clock className="w-4 h-4 text-gray-400" />
+                        Business Hours 
+                        {showHours ? <ChevronUp className="w-4 h-4 ml-auto sm:ml-1 text-gray-400" /> : <ChevronDown className="w-4 h-4 ml-auto sm:ml-1 text-gray-400" />}
+                     </button>
+                     {showHours && (
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm animate-in slide-in-from-top-2 fade-in">
+                           {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => {
+                              const isWorking = workingDays.includes(day);
+                              const isToday = currentDayName.toLowerCase() === day;
+                              return (
+                                 <div key={day} className={`flex justify-between items-center p-2.5 rounded-lg ${isToday ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-600'}`}>
+                                    <span className="capitalize font-medium">{day}</span>
+                                    <span className={`font-semibold ${isWorking ? (isToday ? 'text-gray-200' : 'text-gray-900') : 'text-red-400'}`}>
+                                       {isWorking ? `${openTime} - ${closeTime}` : 'Closed'}
+                                    </span>
+                                 </div>
+                              )
+                           })}
+                        </div>
+                     )}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="bg-white border-b border-gray-100 sticky top-0 sm:top-16 z-30">
+          <div className="bg-white/90 backdrop-blur-md border-b border-gray-100 sticky top-0 sm:top-16 z-40 shadow-sm transition-all">
             <div className="max-w-7xl mx-auto flex overflow-x-auto px-4 sm:px-6 no-scrollbar">
               {['Featured', 'Services', 'Products', 'Packages', 'Memberships', 'Enquiry'].map(tab => (
                 <button 
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`whitespace-nowrap px-4 py-4 text-sm font-semibold transition-colors border-b-2 ${
+                  className={`whitespace-nowrap px-5 py-4 text-sm font-bold transition-all border-b-[3px] ${
                     activeTab === tab 
                       ? 'border-black text-black' 
-                      : 'border-transparent text-gray-500 hover:text-gray-900'
+                      : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
                   }`}
                 >
                   {tab}
@@ -429,20 +611,53 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
           </div>
 
           {/* Main Content Area */}
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-6">
-            
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-8 flex">
+            <div className="flex-1 w-full">
+               
+            {activeTab === 'Featured' && (
+              <div className="py-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <div className="flex items-center justify-between mb-6">
+                   <h2 className="text-2xl font-black text-gray-900">Best Sellers 🔥</h2>
+                </div>
+                {topServices.length === 0 ? (
+                  <div className="text-gray-500">No featured services at this time.</div>
+                ) : (
+                  <div className="flex overflow-x-auto gap-4 sm:grid sm:grid-cols-2 lg:grid-cols-3 sm:gap-6 pb-6 no-scrollbar snap-x">
+                     {topServices.map(service => {
+                        return (
+                           <Card key={service.id} className="min-w-[280px] sm:min-w-0 snap-start rounded-3xl overflow-hidden border-0 shadow-lg shadow-black/5 hover:shadow-xl transition-all duration-300 group">
+                              <div className="h-40 overflow-hidden relative">
+                                 <img src={getServiceFallbackImage(service.name, service.category || '')} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt={service.name} />
+                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                                 <Badge className="absolute bottom-3 left-3 bg-white/20 backdrop-blur-md text-white border-white/30"><Clock className="w-3 h-3 mr-1" /> {formatDuration(service.duration)}</Badge>
+                              </div>
+                              <CardContent className="p-5">
+                                 <h3 className="font-bold text-lg leading-tight mb-2 truncate text-gray-900 group-hover:text-black transition-colors">{service.name}</h3>
+                                 <div className="flex items-center justify-between mt-4">
+                                    <div className="font-black text-xl text-red-500">{business.currency}{service.price}</div>
+                                    <Button onClick={() => { handleAddService(service); setActiveTab('Services') }} className="bg-black hover:bg-gray-800 text-white rounded-xl shadow-md transition-transform hover:scale-105">Book Now</Button>
+                                 </div>
+                              </CardContent>
+                           </Card>
+                        )
+                     })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {activeTab === 'Services' && (
-              <>
+              <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {/* Horizontal Categories Row */}
-                <div className="mb-8">
+                <div className="mb-10">
                   <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold text-gray-900">Categories</h2>
+                    <h2 className="text-xl font-black text-gray-900">Categories</h2>
                     <div className="flex gap-2 hidden sm:flex">
-                      <Button variant="outline" size="icon" className="w-8 h-8 rounded-full border-gray-200 bg-white" onClick={() => scrollCategories('left')}>
-                        <ChevronLeft className="w-4 h-4 text-gray-600" />
+                      <Button variant="outline" size="icon" className="w-9 h-9 rounded-full border-gray-200 bg-white shadow-sm hover:shadow-md transition-shadow" onClick={() => scrollCategories('left')}>
+                        <ChevronLeft className="w-5 h-5 text-gray-600" />
                       </Button>
-                      <Button variant="outline" size="icon" className="w-8 h-8 rounded-full bg-black text-white hover:bg-gray-800 border-black" onClick={() => scrollCategories('right')}>
-                        <ChevronRight className="w-4 h-4" />
+                      <Button variant="outline" size="icon" className="w-9 h-9 rounded-full bg-black text-white hover:bg-gray-800 border-black shadow-sm hover:shadow-md transition-shadow" onClick={() => scrollCategories('right')}>
+                        <ChevronRight className="w-5 h-5" />
                       </Button>
                     </div>
                   </div>
@@ -452,93 +667,100 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                       ref={categoriesRef}
                       className="flex overflow-x-auto gap-4 sm:gap-6 pb-4 no-scrollbar snap-x"
                     >
-                      {Array.from(categoriesMap.keys()).map(cat => (
+                      {Array.from(categoriesMap.keys()).map(cat => {
+                        const catCount = categoriesMap.get(cat)?.length || 0;
+                        return (
                         <div 
                           key={cat} 
-                          className="flex flex-col items-center gap-2 cursor-pointer snap-start shrink-0 w-[72px] sm:w-[88px]" 
+                          className="flex flex-col items-center gap-2 cursor-pointer snap-start shrink-0 w-[80px] sm:w-[96px] group" 
                           onClick={() => scrollToCategory(cat)}
                         >
-                          <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-[28px] overflow-hidden shadow-sm transition-all border-[3px] ${
+                          <div className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-[28px] overflow-hidden shadow-md transition-all duration-300 border-[3px] ${
                             activeCategory === cat || (!activeCategory && categoriesMap.size > 0 && Array.from(categoriesMap.keys())[0] === cat)
-                              ? 'border-gray-900 p-0.5' 
-                              : 'border-transparent hover:border-gray-200 p-0'
+                              ? 'border-gray-900 p-0.5 scale-105' 
+                              : 'border-transparent group-hover:border-gray-300 p-0'
                           }`}>
                             <div className="w-full h-full rounded-[24px] overflow-hidden">
-                              <img src={getCategoryFallbackImage(cat)} alt={cat} className="w-full h-full object-cover" />
+                              <img src={getCategoryFallbackImage(cat)} alt={cat} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                             </div>
+                            <div className="absolute -top-1 -right-1 bg-black text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border border-white shadow-sm">{catCount}</div>
                           </div>
-                          <span className="text-[11px] sm:text-xs text-center font-medium text-gray-700 line-clamp-1 w-full px-1">
+                          <span className="text-[11px] sm:text-xs text-center font-bold text-gray-700 line-clamp-1 w-full px-1 group-hover:text-black transition-colors">
                             {cat}
                           </span>
                         </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 </div>
 
                 {/* Search */}
-                <div className="relative mb-8">
+                <div className="relative mb-10">
                   <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                   <Input 
                     placeholder="Search for any services..." 
-                    className="pl-12 bg-white border-gray-200 rounded-2xl h-14 text-base focus-visible:ring-gray-200 shadow-sm"
+                    className="pl-12 bg-white border-gray-200 rounded-2xl h-14 text-base focus-visible:ring-black shadow-sm transition-all hover:border-gray-300"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
 
                 {/* Services List */}
-                <div className="space-y-10">
-                  {Array.from(filteredCategories.entries()).map(([cat, catServices]) => (
-                    <div id={`category-${cat.replace(/\s+/g, '-')}`} key={cat} className="scroll-mt-40">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-xl font-bold text-gray-900">{cat}</h3>
-                        <span className="text-sm font-medium text-gray-500">{catServices.length}</span>
+                <div className="space-y-6 pb-20">
+                  {Array.from(filteredCategories.entries()).map(([cat, catServices]) => {
+                    const isExpanded = expandedCategories[cat] !== false; // Default true
+                    return (
+                    <div id={`category-${cat.replace(/\s+/g, '-')}`} key={cat} className="scroll-mt-40 bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+                      <div 
+                         className="flex items-center justify-between mb-4 cursor-pointer group"
+                         onClick={() => toggleCategory(cat)}
+                      >
+                        <div className="flex items-center gap-3">
+                           <h3 className="text-xl font-black text-gray-900 group-hover:text-gray-700 transition-colors">{cat}</h3>
+                           <Badge variant="secondary" className="bg-gray-100 text-gray-600 rounded-lg">{catServices.length}</Badge>
+                        </div>
+                        {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {isExpanded && (
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 animate-in slide-in-from-top-2 fade-in duration-300">
                         {catServices.map(service => {
                           const isSelected = selectedServices.some(s => s.id === service.id);
                           return (
                             <div 
                               key={service.id} 
-                              className={`bg-white p-4 rounded-2xl border transition-all ${isSelected ? 'border-gray-400 shadow-md' : 'border-gray-200 shadow-sm hover:border-gray-300'}`}
+                              className={`bg-white p-4 rounded-2xl border transition-all duration-300 ${isSelected ? 'border-gray-900 shadow-md ring-1 ring-gray-900 scale-[1.01]' : 'border-gray-200 shadow-sm hover:border-gray-300 hover:shadow-md'}`}
                             >
                               <div className="flex justify-between items-start gap-4">
-                                <div className="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-gray-100">
+                                <div className="w-20 h-20 shrink-0 rounded-2xl overflow-hidden bg-gray-100 shadow-inner">
                                   <img src={getServiceFallbackImage(service.name, cat)} className="w-full h-full object-cover" alt={service.name} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <h4 className="font-bold text-gray-900 leading-tight mb-1 truncate">{service.name}</h4>
+                                  <h4 className="font-bold text-gray-900 leading-tight mb-1 truncate text-lg">{service.name}</h4>
                                   <div className="flex items-baseline gap-1.5 flex-wrap">
-                                    <span className="font-bold text-red-500 text-sm">{business.currency}{service.price}</span>
-                                    <span className="text-[10px] text-gray-500 font-medium">({service.price > 500 ? 'Member Price' : 'Regular Price'})</span>
+                                    <span className="font-black text-red-500 text-base">{business.currency}{service.price}</span>
                                   </div>
-                                  {service.price > 500 && (
-                                    <div className="text-[11px] text-gray-400 line-through">
-                                      {business.currency}{service.price + (service.price * 0.1)} (Regular Price)
-                                    </div>
-                                  )}
-                                  <div className="flex items-center gap-1 text-[11px] text-gray-500 font-medium mt-1.5">
-                                    <Clock className="w-3 h-3" /> {formatDuration(service.duration)}
+                                  <div className="flex items-center gap-1 text-xs text-gray-500 font-medium mt-2 bg-gray-50 w-fit px-2 py-1 rounded-md">
+                                    <Clock className="w-3.5 h-3.5" /> {formatDuration(service.duration)}
                                   </div>
                                 </div>
-                                <div className="shrink-0 pt-1">
+                                <div className="shrink-0 flex flex-col items-end">
                                   {isSelected ? (
                                     <Button 
                                       variant="outline" 
-                                      className="bg-[#1a1a1a] text-white hover:bg-black border-transparent rounded-xl h-9 px-4 text-xs font-semibold shadow-sm"
+                                      className="bg-black text-white hover:bg-gray-800 border-transparent rounded-xl h-10 px-5 text-sm font-bold shadow-md transition-transform active:scale-95"
                                       onClick={() => handleRemoveService(service.id)}
                                     >
-                                      Remove &minus;
+                                      Remove
                                     </Button>
                                   ) : (
                                     <Button 
                                       variant="outline" 
-                                      className="bg-white border-gray-300 text-gray-900 hover:bg-gray-50 rounded-xl h-9 px-5 text-xs font-semibold shadow-sm"
+                                      className="bg-white border-gray-300 text-gray-900 hover:bg-gray-50 hover:border-gray-400 rounded-xl h-10 px-6 text-sm font-bold shadow-sm transition-transform active:scale-95"
                                       onClick={() => handleAddService(service)}
                                     >
-                                      Add +
+                                      Add
                                     </Button>
                                   )}
                                 </div>
@@ -547,46 +769,49 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                           )
                         })}
                       </div>
+                      )}
                     </div>
-                  ))}
+                  )})}
                   
                   {filteredCategories.size === 0 && (
-                    <div className="text-center py-16 text-gray-500">
-                      <Search className="w-12 h-12 mx-auto text-gray-300 mb-4" />
-                      <p className="font-medium text-gray-600 text-lg">No services found</p>
+                    <div className="text-center py-20 text-gray-500 animate-in fade-in">
+                      <Search className="w-16 h-16 mx-auto text-gray-200 mb-4" />
+                      <p className="font-bold text-gray-400 text-xl">No services found</p>
                     </div>
                   )}
                 </div>
-              </>
+              </div>
             )}
 
+            {/* Other tabs remain similar with animation enhancements */}
             {activeTab === 'Products' && (
-              <div className="py-8">
+              <div className="py-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {products.length === 0 ? (
-                  <div className="text-center text-gray-500">No products available at this time.</div>
+                  <div className="text-center text-gray-500 py-10 font-medium">No products available at this time.</div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {products.map(product => {
                       const isSelected = selectedProducts.some(p => p.id === product.id);
                       return (
-                        <div key={product.id} className={`bg-white p-4 rounded-2xl border transition-all ${isSelected ? 'border-gray-400 shadow-md' : 'border-gray-200 shadow-sm hover:border-gray-300'}`}>
-                          <div className="flex justify-between items-start gap-4">
-                            <div className="w-16 h-16 shrink-0 rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center">
+                        <div key={product.id} className={`bg-white p-5 rounded-3xl border transition-all ${isSelected ? 'border-gray-900 shadow-md ring-1 ring-gray-900 scale-[1.01]' : 'border-gray-200 shadow-sm hover:shadow-md'}`}>
+                           {/* Content remains mostly same */}
+                           <div className="flex justify-between items-start gap-4">
+                            <div className="w-16 h-16 shrink-0 rounded-2xl overflow-hidden bg-gray-50 flex items-center justify-center border border-gray-100">
                               <ShoppingCart className="w-8 h-8 text-gray-300" />
                             </div>
                             <div className="flex-1 min-w-0">
                               <h4 className="font-bold text-gray-900 leading-tight mb-1 truncate">{product.name}</h4>
-                              <div className="font-bold text-red-500 text-sm">{business.currency}{product.price}</div>
-                              {product.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{product.description}</p>}
+                              <div className="font-black text-red-500 text-base">{business.currency}{product.price}</div>
+                              {product.description && <p className="text-xs text-gray-500 mt-2 line-clamp-2">{product.description}</p>}
                             </div>
                             <div className="shrink-0 pt-1">
                               {isSelected ? (
-                                <Button variant="outline" className="bg-[#1a1a1a] text-white hover:bg-black border-transparent rounded-xl h-9 px-4 text-xs font-semibold shadow-sm" onClick={() => handleRemoveProduct(product.id)}>
-                                  Remove &minus;
+                                <Button variant="outline" className="bg-black text-white hover:bg-gray-800 border-transparent rounded-xl h-9 px-4 text-xs font-bold" onClick={() => handleRemoveProduct(product.id)}>
+                                  Remove
                                 </Button>
                               ) : (
-                                <Button variant="outline" className="bg-white border-gray-300 text-gray-900 hover:bg-gray-50 rounded-xl h-9 px-5 text-xs font-semibold shadow-sm" onClick={() => handleAddProduct(product)}>
-                                  Add +
+                                <Button variant="outline" className="bg-white border-gray-300 text-gray-900 hover:bg-gray-50 rounded-xl h-9 px-5 text-xs font-bold" onClick={() => handleAddProduct(product)}>
+                                  Add
                                 </Button>
                               )}
                             </div>
@@ -600,70 +825,70 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
             )}
 
             {activeTab === 'Packages' && (
-              <div className="py-8">
-                {packages.length === 0 ? (
-                  <div className="text-center text-gray-500">No packages available at this time.</div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {packages.map(pkg => {
-                      const isSelected = selectedPackages.some(p => p.id === pkg.id);
-                      return (
-                        <div key={pkg.id} className={`bg-white p-4 rounded-2xl border transition-all ${isSelected ? 'border-gray-400 shadow-md' : 'border-gray-200 shadow-sm hover:border-gray-300'}`}>
-                          <div className="flex justify-between items-start gap-4">
-                            <div className="flex-1 min-w-0">
-                              <h4 className="font-bold text-gray-900 leading-tight mb-1 truncate">{pkg.name}</h4>
-                              <div className="flex items-center gap-2 mt-1">
-                                <div className="font-bold text-red-500 text-sm">{business.currency}{pkg.price}</div>
-                                {pkg.original_price && pkg.original_price > pkg.price && (
-                                  <div className="text-[11px] text-gray-400 line-through">{business.currency}{pkg.original_price}</div>
-                                )}
+              <div className="py-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                 {packages.length === 0 ? (
+                  <div className="text-center text-gray-500 py-10 font-medium">No packages available.</div>
+                 ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                     {packages.map(pkg => {
+                        const isSelected = selectedPackages.some(p => p.id === pkg.id);
+                        return (
+                           <div key={pkg.id} className={`bg-white p-5 rounded-3xl border transition-all ${isSelected ? 'border-gray-900 shadow-md ring-1 ring-gray-900 scale-[1.01]' : 'border-gray-200 shadow-sm hover:shadow-md'}`}>
+                              <div className="flex justify-between items-start gap-4">
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="font-bold text-gray-900 leading-tight mb-1 truncate text-lg">{pkg.name}</h4>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <div className="font-black text-red-500 text-base">{business.currency}{pkg.price}</div>
+                                    {pkg.original_price && pkg.original_price > pkg.price && (
+                                      <div className="text-xs text-gray-400 line-through font-semibold">{business.currency}{pkg.original_price}</div>
+                                    )}
+                                  </div>
+                                  {pkg.description && <p className="text-sm text-gray-500 mt-2 line-clamp-2">{pkg.description}</p>}
+                                </div>
+                                <div className="shrink-0 pt-1">
+                                  {isSelected ? (
+                                    <Button variant="outline" className="bg-black text-white hover:bg-gray-800 border-transparent rounded-xl h-9 px-4 text-xs font-bold" onClick={() => handleRemovePackage(pkg.id)}>
+                                      Remove
+                                    </Button>
+                                  ) : (
+                                    <Button variant="outline" className="bg-white border-gray-300 text-gray-900 hover:bg-gray-50 rounded-xl h-9 px-5 text-xs font-bold" onClick={() => handleAddPackage(pkg)}>
+                                      Add
+                                    </Button>
+                                  )}
+                                </div>
                               </div>
-                              {pkg.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{pkg.description}</p>}
-                            </div>
-                            <div className="shrink-0 pt-1">
-                              {isSelected ? (
-                                <Button variant="outline" className="bg-[#1a1a1a] text-white hover:bg-black border-transparent rounded-xl h-9 px-4 text-xs font-semibold shadow-sm" onClick={() => handleRemovePackage(pkg.id)}>
-                                  Remove &minus;
-                                </Button>
-                              ) : (
-                                <Button variant="outline" className="bg-white border-gray-300 text-gray-900 hover:bg-gray-50 rounded-xl h-9 px-5 text-xs font-semibold shadow-sm" onClick={() => handleAddPackage(pkg)}>
-                                  Add +
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
+                           </div>
+                        )
+                     })}
                   </div>
-                )}
+                 )}
               </div>
             )}
 
             {activeTab === 'Memberships' && (
-              <div className="py-8">
+              <div className="py-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 {memberships.length === 0 ? (
-                  <div className="text-center text-gray-500">No memberships available at this time.</div>
+                  <div className="text-center text-gray-500 py-10 font-medium">No memberships available.</div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {memberships.map(mem => {
                       const isSelected = selectedMemberships.some(m => m.id === mem.id);
                       return (
-                        <div key={mem.id} className={`bg-gradient-to-br from-gray-900 to-gray-800 p-4 rounded-2xl border transition-all ${isSelected ? 'border-gray-400 shadow-[0_0_0_2px_black]' : 'border-transparent shadow-md'}`}>
+                        <div key={mem.id} className={`bg-gradient-to-br from-gray-900 to-black p-5 rounded-3xl border transition-all ${isSelected ? 'border-gray-400 shadow-[0_0_0_3px_black] scale-[1.01]' : 'border-transparent shadow-lg'}`}>
                           <div className="flex justify-between items-start gap-4">
                             <div className="flex-1 min-w-0">
-                              <h4 className="font-bold text-white leading-tight mb-1 truncate">{mem.name}</h4>
-                              <div className="font-bold text-gray-100 text-sm mt-1">{business.currency}{mem.price}</div>
-                              {mem.description && <p className="text-xs text-gray-300 mt-1 line-clamp-2">{mem.description}</p>}
+                              <h4 className="font-bold text-white leading-tight mb-1 truncate text-lg">{mem.name}</h4>
+                              <div className="font-black text-yellow-400 text-base mt-1">{business.currency}{mem.price}</div>
+                              {mem.description && <p className="text-sm text-gray-400 mt-2 line-clamp-2">{mem.description}</p>}
                             </div>
                             <div className="shrink-0 pt-1">
                               {isSelected ? (
-                                <Button variant="outline" className="bg-white text-black hover:bg-gray-100 border-transparent rounded-xl h-9 px-4 text-xs font-semibold shadow-sm" onClick={() => handleRemoveMembership(mem.id)}>
-                                  Remove &minus;
+                                <Button variant="outline" className="bg-white text-black hover:bg-gray-100 border-transparent rounded-xl h-9 px-4 text-xs font-bold shadow-sm" onClick={() => handleRemoveMembership(mem.id)}>
+                                  Remove
                                 </Button>
                               ) : (
-                                <Button variant="outline" className="bg-transparent border-gray-600 text-white hover:bg-gray-800 rounded-xl h-9 px-5 text-xs font-semibold shadow-sm" onClick={() => handleAddMembership(mem)}>
-                                  Add +
+                                <Button variant="outline" className="bg-transparent border-gray-500 text-white hover:bg-gray-800 rounded-xl h-9 px-5 text-xs font-bold shadow-sm" onClick={() => handleAddMembership(mem)}>
+                                  Add
                                 </Button>
                               )}
                             </div>
@@ -677,40 +902,57 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
             )}
 
             {activeTab === 'Enquiry' && (
-              <div className="py-8 max-w-lg mx-auto">
-                <Card className="border-gray-200 shadow-sm rounded-2xl">
-                  <CardContent className="p-6">
+              <div className="py-8 max-w-lg mx-auto animate-in fade-in slide-in-from-bottom-2 duration-300">
+                <Card className="border-gray-200 shadow-lg rounded-3xl overflow-hidden">
+                  <CardContent className="p-8">
                     {enquirySuccess ? (
-                      <div className="text-center py-8">
-                        <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <CheckCircle className="w-8 h-8 text-green-600" />
+                      <div className="text-center py-8 animate-in zoom-in duration-300">
+                        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                          <CheckCircle className="w-10 h-10 text-green-600" />
                         </div>
-                        <h3 className="text-xl font-bold mb-2">Message Sent!</h3>
-                        <p className="text-gray-500">We will get back to you shortly.</p>
-                        <Button className="mt-6" variant="outline" onClick={() => setEnquirySuccess(false)}>Send Another</Button>
+                        <h3 className="text-2xl font-black mb-2 text-gray-900">Message Sent!</h3>
+                        <p className="text-gray-500 font-medium">We will get back to you shortly.</p>
+                        <Button className="mt-8 rounded-xl h-12 px-6 font-bold" variant="outline" onClick={() => setEnquirySuccess(false)}>Send Another</Button>
                       </div>
                     ) : (
-                      <form onSubmit={handleEnquirySubmit} className="space-y-4">
-                        <h3 className="text-xl font-bold mb-4 text-center">Contact Us</h3>
-                        <div className="space-y-2">
-                          <Label>Full Name</Label>
-                          <Input required className="rounded-xl h-12" placeholder="Your name" />
+                      <form onSubmit={handleEnquirySubmit} className="space-y-5">
+                        <div className="text-center mb-8">
+                           <h3 className="text-2xl font-black mb-2 text-gray-900">Contact Us</h3>
+                           <p className="text-sm text-gray-500 font-medium">Have a question? We're here to help.</p>
                         </div>
                         <div className="space-y-2">
-                          <Label>Phone Number</Label>
-                          <Input required className="rounded-xl h-12" placeholder="Your phone number" />
+                          <Label className="font-bold text-gray-700">Full Name</Label>
+                          <Input 
+                             required 
+                             className="rounded-xl h-14 bg-gray-50 border-transparent focus:bg-white transition-colors" 
+                             placeholder="Your name" 
+                             value={customerForm.name}
+                             onChange={(e) => setCustomerForm({...customerForm, name: e.target.value})}
+                          />
                         </div>
                         <div className="space-y-2">
-                          <Label>Message</Label>
+                          <Label className="font-bold text-gray-700">Phone Number</Label>
+                          <Input 
+                             required 
+                             className="rounded-xl h-14 bg-gray-50 border-transparent focus:bg-white transition-colors" 
+                             placeholder="Your phone number" 
+                             value={customerForm.phone}
+                             onChange={(e) => setCustomerForm({...customerForm, phone: e.target.value})}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="font-bold text-gray-700">Message</Label>
                           <textarea 
                             required 
-                            className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-black outline-none resize-none" 
+                            className="w-full p-4 rounded-xl border-transparent bg-gray-50 focus:bg-white focus:ring-2 focus:ring-black outline-none resize-none transition-colors" 
                             rows={4} 
                             placeholder="How can we help you?"
+                            value={customerForm.message}
+                            onChange={(e) => setCustomerForm({...customerForm, message: e.target.value})}
                           ></textarea>
                         </div>
-                        <Button type="submit" disabled={submitting} className="w-full bg-black hover:bg-gray-800 text-white h-12 rounded-xl mt-4">
-                          {submitting ? "Sending..." : "Send Message"} <Send className="w-4 h-4 ml-2" />
+                        <Button type="submit" disabled={submitting} className="w-full bg-black hover:bg-gray-800 text-white h-14 rounded-xl mt-4 font-bold text-lg shadow-lg">
+                          {submitting ? "Sending..." : "Send Message"} {!submitting && <Send className="w-5 h-5 ml-2" />}
                         </Button>
                       </form>
                     )}
@@ -719,33 +961,32 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
               </div>
             )}
             
-            {activeTab === 'Featured' && (
-              <div className="py-8 text-center text-gray-500">
-                Check out our top services under the Services tab!
-              </div>
-            )}
+            </div>
+            
+            <SummarySidebar />
+            
           </div>
           
           {/* Bottom Floating Cart Bar */}
           {activeTab !== 'Enquiry' && (
-            <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none p-4">
+            <div className="fixed bottom-0 left-0 right-0 z-50 pointer-events-none p-4 lg:hidden">
               <div className="max-w-3xl mx-auto flex justify-center w-full pointer-events-auto">
-                <div className={`w-full transition-all duration-300 transform ${totalItems > 0 ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'}`}>
-                  <div className="bg-[#2a2a2a] rounded-2xl shadow-2xl flex items-center justify-between p-3 pl-4 pr-3 overflow-hidden relative">
+                <div className={`w-full transition-all duration-500 transform ${totalItems > 0 ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'}`}>
+                  <div className="bg-[#1a1a1a] rounded-[24px] shadow-2xl flex items-center justify-between p-3.5 pl-5 pr-3.5 overflow-hidden relative border border-white/10">
                     <div className="flex items-center gap-4 text-white">
                       <div className="relative">
                         <ShoppingCart className="w-6 h-6 text-gray-300" />
-                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-[#2a2a2a]">
+                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[11px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-[#1a1a1a]">
                           {totalItems}
                         </span>
                       </div>
                       <div>
-                        <div className="font-bold text-base">{business.currency}{totalAmount}</div>
-                        <div className="text-[10px] text-gray-400 font-medium">Plus taxes</div>
+                        <div className="font-black text-lg leading-tight">{business.currency}{totalAmount}</div>
+                        <div className="text-[11px] text-gray-400 font-medium">Plus taxes</div>
                       </div>
                     </div>
                     <Button 
-                      className="bg-white text-black hover:bg-gray-100 rounded-xl h-11 px-8 font-bold text-sm" 
+                      className="bg-white text-black hover:bg-gray-100 rounded-[16px] h-12 px-8 font-bold text-base shadow-lg transition-transform active:scale-95" 
                       onClick={() => setStep(2)}
                     >
                       Book Now
@@ -758,103 +999,86 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
         </div>
       )}
 
-      
-      {/* Step 2: Select Staff */}
+      {/* Step 2: DateTime & Staff */}
       {step === 2 && (
-        <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen bg-white">
-          <div className="flex items-center gap-4 mb-8 pt-4">
-            <Button variant="ghost" size="icon" onClick={() => setStep(1)} className="rounded-full bg-gray-100 hover:bg-gray-200">
-              <ChevronLeft className="w-5 h-5" />
+        <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen bg-white animate-in slide-in-from-right duration-300">
+          <div className="flex items-center gap-4 mb-8 pt-4 sticky top-0 bg-white/90 backdrop-blur z-10 py-4">
+            <Button variant="ghost" size="icon" onClick={() => setStep(1)} className="rounded-full bg-gray-100 hover:bg-gray-200 shadow-sm transition-transform active:scale-90">
+              <ChevronLeft className="w-6 h-6" />
             </Button>
-            <h2 className="text-2xl font-bold">Select Professional</h2>
+            <h2 className="text-2xl font-black text-gray-900">Select Date & Time</h2>
           </div>
           
-          <div className="space-y-4 pb-32">
-            <button
-              onClick={() => setSelectedStaff('any')}
-              className={`w-full p-4 rounded-2xl border flex items-center gap-4 transition-all ${
-                selectedStaff === 'any' 
-                  ? 'bg-black border-black text-white shadow-md' 
-                  : 'bg-white border-gray-200 text-gray-900 hover:border-gray-300'
-              }`}
-            >
-              <div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold ${selectedStaff === 'any' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500'}`}>
-                <CheckCircle className="w-6 h-6" />
-              </div>
-              <div className="text-left flex-1">
-                <h3 className="font-bold text-lg">Any Professional</h3>
-                <p className={`text-sm ${selectedStaff === 'any' ? 'text-gray-300' : 'text-gray-500'}`}>Maximum availability</p>
-              </div>
-            </button>
+          <div className="space-y-10 pb-32">
             
-            {staffList.map(staff => (
-              <button
-                key={staff.id}
-                onClick={() => setSelectedStaff(staff)}
-                className={`w-full p-4 rounded-2xl border flex items-center gap-4 transition-all ${
-                  selectedStaff !== 'any' && selectedStaff?.id === staff.id 
-                    ? 'bg-black border-black text-white shadow-md' 
-                    : 'bg-white border-gray-200 text-gray-900 hover:border-gray-300'
-                }`}
-              >
-                <div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold uppercase ${selectedStaff !== 'any' && selectedStaff?.id === staff.id ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500'}`}>
-                  {staff.name.charAt(0)}
-                </div>
-                <div className="text-left flex-1">
-                  <h3 className="font-bold text-lg">{staff.name}</h3>
-                  <p className={`text-sm ${selectedStaff !== 'any' && selectedStaff?.id === staff.id ? 'text-gray-300' : 'text-gray-500'}`}>{staff.role || 'Professional'}</p>
-                </div>
-                {selectedStaff !== 'any' && selectedStaff?.id === staff.id && <CheckCircle className="w-6 h-6" />}
-              </button>
-            ))}
-          </div>
-
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 z-30">
-            <div className="max-w-xl mx-auto">
-              <Button 
-                onClick={() => setStep(3)} 
-                disabled={!selectedStaff} 
-                className="w-full bg-black text-white hover:bg-gray-800 rounded-2xl h-14 text-base font-bold shadow-xl disabled:bg-gray-200 disabled:text-gray-400"
-              >
-                Continue to Date & Time
-              </Button>
+            {/* Staff Section */}
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
+              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+                 1. Choose Professional
+              </h3>
+              <div className="space-y-3">
+               <button
+                 onClick={() => setSelectedStaff('any')}
+                 className={`w-full p-4 rounded-2xl border-2 flex items-center gap-4 transition-all duration-300 ${
+                   selectedStaff === 'any' 
+                     ? 'bg-black border-black text-white shadow-xl scale-[1.02]' 
+                     : 'bg-white border-gray-100 text-gray-900 hover:border-gray-300 hover:shadow-md'
+                 }`}
+               >
+                 <div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold transition-colors ${selectedStaff === 'any' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                   <CheckCircle className="w-6 h-6" />
+                 </div>
+                 <div className="text-left flex-1">
+                   <h3 className="font-bold text-lg">Any Professional</h3>
+                   <p className={`text-sm font-medium ${selectedStaff === 'any' ? 'text-gray-400' : 'text-gray-500'}`}>Maximum availability</p>
+                 </div>
+               </button>
+               
+               {staffList.map(staff => (
+                 <button
+                   key={staff.id}
+                   onClick={() => setSelectedStaff(staff)}
+                   className={`w-full p-4 rounded-2xl border-2 flex items-center gap-4 transition-all duration-300 ${
+                     selectedStaff !== 'any' && selectedStaff?.id === staff.id 
+                       ? 'bg-black border-black text-white shadow-xl scale-[1.02]' 
+                       : 'bg-white border-gray-100 text-gray-900 hover:border-gray-300 hover:shadow-md'
+                   }`}
+                 >
+                   <div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-black uppercase transition-colors ${selectedStaff !== 'any' && selectedStaff?.id === staff.id ? 'bg-gradient-to-br from-gray-700 to-gray-900 text-white' : 'bg-gradient-to-br from-indigo-100 to-purple-100 text-indigo-700'}`}>
+                     {staff.name.charAt(0)}
+                   </div>
+                   <div className="text-left flex-1">
+                     <h3 className="font-bold text-lg">{staff.name}</h3>
+                     <p className={`text-sm font-medium ${selectedStaff !== 'any' && selectedStaff?.id === staff.id ? 'text-gray-400' : 'text-gray-500'}`}>{staff.role || 'Professional'}</p>
+                   </div>
+                   {selectedStaff !== 'any' && selectedStaff?.id === staff.id && <CheckCircle className="w-6 h-6 animate-in zoom-in duration-300" />}
+                 </button>
+               ))}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* Step 3: Date & Time */}
-      {step === 3 && (
-        <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen bg-white">
-          {/* ... (Same as before) ... */}
-          <div className="flex items-center gap-4 mb-8 pt-4">
-            <Button variant="ghost" size="icon" onClick={() => setStep(2)} className="rounded-full bg-gray-100 hover:bg-gray-200">
-              <ChevronLeft className="w-5 h-5" />
-            </Button>
-            <h2 className="text-2xl font-bold">Select Date & Time</h2>
-          </div>
-          
-          <div className="space-y-10">
-            <div>
-              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">Date</h3>
+            {/* Date Section */}
+            {selectedStaff && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">2. Choose Date</h3>
               <div className="flex overflow-x-auto pb-4 gap-3 no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
                 {availableDates.map(date => {
                   const isSelected = selectedDate?.getTime() === date.getTime();
                   return (
                     <button
                       key={date.toISOString()}
-                      onClick={() => setSelectedDate(date)}
-                      className={`flex-shrink-0 flex flex-col items-center justify-center w-20 h-24 rounded-2xl border transition-all ${
+                      onClick={() => { setSelectedDate(date); setSelectedTime(null); }}
+                      className={`flex-shrink-0 flex flex-col items-center justify-center w-20 h-24 rounded-2xl border-2 transition-all duration-300 ${
                         isSelected 
-                          ? 'bg-black border-black text-white shadow-md scale-105' 
-                          : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
+                          ? 'bg-black border-black text-white shadow-xl scale-105' 
+                          : 'bg-white border-gray-100 text-gray-700 hover:border-gray-300 hover:shadow-md'
                       }`}
                     >
-                      <span className={`text-[10px] font-bold uppercase tracking-widest ${isSelected ? 'text-gray-300' : 'text-gray-400'}`}>
+                      <span className={`text-[11px] font-bold uppercase tracking-widest ${isSelected ? 'text-gray-400' : 'text-gray-400'}`}>
                         {format(date, 'EEE')}
                       </span>
-                      <span className="text-2xl font-black my-1">{format(date, 'd')}</span>
-                      <span className={`text-[10px] font-bold uppercase ${isSelected ? 'text-gray-300' : 'text-gray-400'}`}>
+                      <span className="text-3xl font-black my-0.5">{format(date, 'd')}</span>
+                      <span className={`text-[11px] font-bold uppercase ${isSelected ? 'text-gray-400' : 'text-gray-400'}`}>
                         {format(date, 'MMM')}
                       </span>
                     </button>
@@ -862,38 +1086,48 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
                 })}
               </div>
             </div>
+            )}
 
+            {/* Time Section */}
             {selectedDate && (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4">Available Time</h3>
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                  {timeSlots.map(time => {
-                    const isSelected = selectedTime === time;
-                    return (
-                      <button
-                        key={time}
-                        onClick={() => setSelectedTime(time)}
-                        className={`py-3 rounded-xl text-sm font-bold transition-all border ${
-                          isSelected 
-                            ? 'bg-black border-black text-white shadow-md' 
-                            : 'bg-white border-gray-200 text-gray-700 hover:border-gray-900 hover:text-gray-900'
-                        }`}
-                      >
-                        {time}
-                      </button>
-                    )
-                  })}
-                </div>
+              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
+                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">3. Choose Time</h3>
+                {timeSlots.length === 0 ? (
+                   <div className="bg-gray-50 p-6 rounded-2xl text-center border border-gray-100">
+                      <Clock className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                      <p className="font-bold text-gray-700">No time slots available for this day.</p>
+                      <p className="text-sm text-gray-500">Please select another date.</p>
+                   </div>
+                ) : (
+                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                     {timeSlots.map(time => {
+                       const isSelected = selectedTime === time;
+                       return (
+                         <button
+                           key={time}
+                           onClick={() => setSelectedTime(time)}
+                           className={`py-3.5 rounded-xl text-sm font-bold transition-all duration-300 border-2 ${
+                             isSelected 
+                               ? 'bg-black border-black text-white shadow-lg scale-105' 
+                               : 'bg-white border-gray-100 text-gray-700 hover:border-gray-900 hover:text-gray-900 hover:shadow-md'
+                           }`}
+                         >
+                           {time}
+                         </button>
+                       )
+                     })}
+                   </div>
+                )}
               </div>
             )}
           </div>
 
-          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-gray-100 z-30">
-            <div className="max-w-xl mx-auto">
+          <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-md border-t border-gray-100 z-30">
+            <div className="max-w-xl mx-auto flex gap-4">
               <Button 
-                onClick={() => setStep(4)} 
-                disabled={!selectedDate || !selectedTime} 
-                className="w-full bg-black text-white hover:bg-gray-800 rounded-2xl h-14 text-base font-bold shadow-xl disabled:bg-gray-200 disabled:text-gray-400"
+                onClick={() => setStep(3)} 
+                disabled={!selectedStaff || !selectedDate || !selectedTime} 
+                className="flex-1 bg-black text-white hover:bg-gray-800 rounded-2xl h-14 text-base font-bold shadow-xl transition-all active:scale-95 disabled:bg-gray-200 disabled:text-gray-400 disabled:scale-100"
               >
                 Continue to Details
               </Button>
@@ -903,39 +1137,43 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
       )}
 
       {/* Step 3: Details */}
-      {step === 4 && (
-        <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen bg-white pb-32">
-          {/* ... (Same as before) ... */}
-          <div className="flex items-center gap-4 mb-8 pt-4">
-            <Button variant="ghost" size="icon" onClick={() => setStep(3)} className="rounded-full bg-gray-100 hover:bg-gray-200">
-              <ChevronLeft className="w-5 h-5" />
+      {step === 3 && (
+        <div className="max-w-xl mx-auto p-4 sm:p-6 min-h-screen bg-white pb-32 animate-in slide-in-from-right duration-300">
+          <div className="flex items-center gap-4 mb-8 pt-4 sticky top-0 bg-white/90 backdrop-blur z-10 py-4">
+            <Button variant="ghost" size="icon" onClick={() => setStep(2)} className="rounded-full bg-gray-100 hover:bg-gray-200 shadow-sm transition-transform active:scale-90">
+              <ChevronLeft className="w-6 h-6" />
             </Button>
-            <h2 className="text-2xl font-bold">Your Details</h2>
+            <h2 className="text-2xl font-black text-gray-900">Your Details</h2>
           </div>
 
           <div className="space-y-8">
-            <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100">
-              <div className="flex justify-between items-start mb-4">
+            <div className="bg-gray-50 p-6 rounded-3xl border border-gray-100 shadow-sm">
+              <div className="flex justify-between items-start mb-6">
                 <div>
-                  <h4 className="font-bold text-gray-900 mb-1">{selectedServices.length} {selectedServices.length === 1 ? 'Service' : 'Services'}</h4>
-                  <p className="text-sm text-gray-500 font-medium flex items-center gap-1.5">
-                    <Calendar className="w-3.5 h-3.5" />
+                  <h4 className="font-bold text-gray-900 text-lg mb-1">{totalItems} {totalItems === 1 ? 'Item' : 'Items'}</h4>
+                  <p className="text-sm text-gray-600 font-medium flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-gray-100 w-fit">
+                    <Calendar className="w-4 h-4 text-gray-400" />
                     {selectedDate && format(selectedDate, "EEE, MMM d")} at {selectedTime}
                   </p>
                   {selectedStaff !== 'any' && selectedStaff && (
-                    <p className="text-sm text-gray-500 font-medium mt-1">Professional: {selectedStaff.name}</p>
+                    <p className="text-sm text-gray-600 font-medium mt-2 bg-white px-3 py-1.5 rounded-lg shadow-sm border border-gray-100 w-fit flex items-center gap-2">
+                       <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">
+                          {selectedStaff.name.charAt(0)}
+                       </div>
+                       {selectedStaff.name}
+                    </p>
                   )}
                 </div>
                 <div className="text-right">
-                  <div className="font-black text-lg text-red-500">{business.currency}{totalAmount}</div>
-                  <div className="text-[11px] text-gray-500 font-medium mt-0.5">{formatDuration(totalDuration)}</div>
+                  <div className="font-black text-2xl text-red-500">{business.currency}{totalAmount}</div>
+                  <div className="text-xs text-gray-500 font-bold mt-1 bg-gray-200/50 px-2 py-1 rounded">{formatDuration(totalDuration)}</div>
                 </div>
               </div>
               <div className="space-y-3 pt-4 border-t border-gray-200">
                 {selectedServices.map(s => (
                   <div key={s.id} className="flex justify-between text-sm">
-                    <span className="text-gray-700 font-medium">{s.name}</span>
-                    <span className="font-bold text-gray-900">{business.currency}{s.price}</span>
+                    <span className="text-gray-700 font-semibold">{s.name}</span>
+                    <span className="font-black text-gray-900">{business.currency}{s.price}</span>
                   </div>
                 ))}
               </div>
@@ -943,37 +1181,37 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
 
             <div className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="name" className="text-gray-700 font-semibold">Full Name</Label>
+                <Label htmlFor="name" className="text-gray-900 font-bold">Full Name</Label>
                 <Input 
                   id="name" 
                   placeholder="e.g. Jane Doe" 
                   value={customerForm.name} 
                   onChange={e => setCustomerForm({...customerForm, name: e.target.value})} 
-                  className="h-12 rounded-xl bg-gray-50 border-transparent focus:bg-white focus:border-gray-900 focus:ring-gray-900"
+                  className="h-14 rounded-2xl bg-gray-50 border-transparent focus:bg-white focus:ring-2 focus:ring-black transition-all text-base shadow-sm"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone" className="text-gray-700 font-semibold">Phone Number</Label>
-                <div className="flex relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">+91</span>
+                <Label htmlFor="phone" className="text-gray-900 font-bold">Phone Number</Label>
+                <div className="flex relative shadow-sm rounded-2xl">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold">+91</span>
                   <Input 
                     id="phone" 
                     placeholder="98765 43210" 
                     value={customerForm.phone} 
                     onChange={e => setCustomerForm({...customerForm, phone: e.target.value})}
-                    className="h-12 rounded-xl bg-gray-50 border-transparent focus:bg-white focus:border-gray-900 focus:ring-gray-900 pl-12"
+                    className="h-14 rounded-2xl bg-gray-50 border-transparent focus:bg-white focus:ring-2 focus:ring-black transition-all pl-12 text-base"
                   />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-gray-700 font-semibold">Email Address (Optional)</Label>
+                <Label htmlFor="email" className="text-gray-900 font-bold">Email Address <span className="text-gray-400 font-medium">(Optional)</span></Label>
                 <Input 
                   id="email" 
                   type="email" 
                   placeholder="jane@example.com" 
                   value={customerForm.email} 
                   onChange={e => setCustomerForm({...customerForm, email: e.target.value})}
-                  className="h-12 rounded-xl bg-gray-50 border-transparent focus:bg-white focus:border-gray-900 focus:ring-gray-900" 
+                  className="h-14 rounded-2xl bg-gray-50 border-transparent focus:bg-white focus:ring-2 focus:ring-black transition-all text-base shadow-sm" 
                 />
               </div>
             </div>
@@ -984,11 +1222,11 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
               <Button 
                 onClick={handleSubmitBooking} 
                 disabled={!customerForm.name || !customerForm.phone || submitting} 
-                className="w-full bg-black text-white hover:bg-gray-800 rounded-2xl h-14 text-base font-bold shadow-xl disabled:bg-gray-200 disabled:text-gray-400"
+                className="w-full bg-black text-white hover:bg-gray-800 rounded-2xl h-14 text-base font-bold shadow-xl transition-all active:scale-95 disabled:bg-gray-200 disabled:text-gray-400 disabled:scale-100"
               >
                 {submitting ? (
                   <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                     Processing...
                   </div>
                 ) : (
@@ -1001,50 +1239,82 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
       )}
 
       {/* Step 4: Success */}
-      {step === 5 && (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-          {/* ... (Same as before) ... */}
-          <Card className="w-full max-w-md border-0 shadow-2xl rounded-3xl overflow-hidden bg-white">
-            <CardContent className="p-10 text-center space-y-6">
-              <div className="mx-auto w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mb-8">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                  <CheckCircle className="w-8 h-8 text-green-600" />
+      {step === 4 && (
+        <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4 relative overflow-hidden animate-in fade-in duration-500">
+          <ConfettiStyles />
+          {Array.from({length: 15}).map((_, i) => (
+             <div key={i} className="confetti" />
+          ))}
+          
+          <Card className="w-full max-w-md border-0 shadow-2xl shadow-black/50 rounded-[2rem] overflow-hidden bg-white relative z-10 animate-in zoom-in-95 duration-500 delay-100">
+            <CardContent className="p-8 sm:p-10 text-center space-y-6">
+              <div className="mx-auto w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mb-6 shadow-inner relative">
+                <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30 animate-in zoom-in delay-300">
+                  <CheckCircle className="w-8 h-8 text-white" />
                 </div>
               </div>
               
-              <div className="space-y-2">
-                <h2 className="text-3xl font-black text-gray-900 tracking-tight">Confirmed!</h2>
-                <p className="text-gray-500 font-medium px-4">
+              <div className="space-y-3">
+                <h2 className="text-3xl sm:text-4xl font-black text-gray-900 tracking-tight">Booking Confirmed!</h2>
+                <p className="text-gray-500 font-medium px-2 text-base">
                   Awesome, <strong className="text-gray-900">{customerForm.name}</strong>. Your appointment is all set.
                 </p>
+                <div className="inline-block bg-gray-100 px-4 py-2 rounded-xl mt-2 font-mono font-bold text-gray-700 tracking-widest shadow-inner">
+                   {bookingRef}
+                </div>
               </div>
               
-              <div className="bg-gray-50 p-6 rounded-2xl text-left w-full mt-8 space-y-4 border border-gray-100">
-                <div>
-                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">When</div>
-                  <div className="font-bold text-gray-900 text-lg">
-                    {selectedDate && format(selectedDate, "MMM d, yyyy")} at {selectedTime}
+              <div className="bg-gray-50 p-6 rounded-3xl text-left w-full mt-8 space-y-4 border border-gray-100 shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm shrink-0 border border-gray-100">
+                     <Calendar className="w-5 h-5 text-gray-500" />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">When</div>
+                    <div className="font-black text-gray-900 text-lg leading-tight">
+                      {selectedDate && format(selectedDate, "MMMM d, yyyy")}
+                    </div>
+                    <div className="text-gray-600 font-bold">{selectedTime}</div>
                   </div>
                 </div>
-                <div className="w-full h-px bg-gray-200"></div>
-                <div>
-                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Where</div>
-                  <div className="font-bold text-gray-900 text-lg">
-                    {business.name}
+                <div className="w-full h-px bg-gray-200 my-2"></div>
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm shrink-0 border border-gray-100">
+                     <MapPin className="w-5 h-5 text-gray-500" />
                   </div>
-                  <div className="text-sm text-gray-500 mt-1">
-                    {business.address}
+                  <div>
+                    <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Where</div>
+                    <div className="font-black text-gray-900 text-lg leading-tight">
+                      {business.name}
+                    </div>
+                    <div className="text-sm text-gray-500 font-medium mt-1 leading-snug">
+                      {business.address}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-6">
+              <div className="pt-6 space-y-3">
                 <Button 
-                  onClick={() => window.location.reload()}
-                  className="w-full bg-gray-100 text-gray-900 hover:bg-gray-200 rounded-xl h-12 font-bold"
+                  onClick={generateICS}
+                  className="w-full bg-black text-white hover:bg-gray-800 rounded-xl h-14 font-bold text-base shadow-lg transition-transform active:scale-95"
                 >
-                  Book Another Service
+                  <Calendar className="w-5 h-5 mr-2" /> Add to Calendar
                 </Button>
+                <div className="grid grid-cols-2 gap-3">
+                   <a href={`https://wa.me/?text=I just booked an appointment at ${business.name} for ${selectedDate && format(selectedDate, "MMM d")} at ${selectedTime}! Book yours here: ${typeof window !== 'undefined' ? window.location.href : ''}`} target="_blank" rel="noreferrer" className="block w-full">
+                     <Button variant="outline" className="w-full border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl h-12 font-bold transition-transform active:scale-95">
+                        <MessageCircle className="w-4 h-4 mr-2" /> Share
+                     </Button>
+                   </a>
+                   <Button 
+                     variant="outline"
+                     onClick={() => window.location.reload()}
+                     className="w-full border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl h-12 font-bold transition-transform active:scale-95"
+                   >
+                     Book Again
+                   </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
