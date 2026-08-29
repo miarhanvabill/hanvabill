@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
-    const res = await sql`
-      SELECT tenant_id, tenant_key, phone_number, message_content, direction 
-      FROM whatsapp_messages 
-      ORDER BY created_at DESC 
-      LIMIT 10;
-    `;
-    const count = await sql`SELECT count(*) from whatsapp_messages`;
-    return NextResponse.json({ rows: res, count: count[0].count });
+    await sql`ALTER TABLE customer_packages DROP COLUMN IF EXISTS tenant_id`;
+    await sql`ALTER TABLE loyalty_tiers DROP COLUMN IF EXISTS tenant_id`;
+    
+    await sql`ALTER TABLE customer_packages ADD COLUMN tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE`;
+    await sql`ALTER TABLE loyalty_tiers ADD COLUMN tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE`;
+
+    return NextResponse.json({ success: true });
   } catch (e: any) {
     return NextResponse.json({ error: e.message });
   }
