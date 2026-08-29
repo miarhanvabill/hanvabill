@@ -1,0 +1,1 @@
+sed -i '' -e 's/export async function getBookings(startDate?: string, endDate?: string, status?: string, search?: string): Promise<Booking\[\]> {/export async function getBookings(startDate?: string, endDate?: string, status?: string, search?: string, offset: number = 0, limit: number = 100): Promise<Booking[]> {/g' app/actions/bookings.ts

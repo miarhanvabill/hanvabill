@@ -544,6 +544,9 @@ function BookingsContent({ searchParams }: BookingsPageProps) {
   const [bookings, setBookings] = useState<any[]>([])
   const [stats, setStats] = useState({ total: 0, today: 0, pending: 0, revenue: 0 })
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [offset, setOffset] = useState(0)
 
   // Default to current month
   const now = new Date()
@@ -554,29 +557,45 @@ function BookingsContent({ searchParams }: BookingsPageProps) {
   const endDate = searchParams.endDate || currentMonthEnd
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true)
-        const [bookingsData, statsData] = await Promise.all([
-          getBookings(startDate, endDate, searchParams.status, searchParams.search),
-          getBookingStats(startDate, endDate)
-        ])
+    setOffset(0)
+    fetchData(true, 0)
+  }, [startDate, endDate, searchParams.status, searchParams.search])
+
+  const fetchData = async (reset = false, currentOffset = offset) => {
+    try {
+      if (reset) setLoading(true)
+      else setLoadingMore(true)
+
+      const [bookingsData, statsData] = await Promise.all([
+        getBookings(startDate, endDate, searchParams.status, searchParams.search, currentOffset, 100),
+        getBookingStats(startDate, endDate)
+      ])
+      
+      if (reset) {
         setBookings(bookingsData)
         setStats(statsData)
-      } catch (error) {
-        console.error("Error fetching data:", error)
-        toast({
-          title: "Error",
-          description: "Failed to load bookings data",
-          variant: "destructive"
-        })
-      } finally {
-        setLoading(false)
+      } else {
+        setBookings(prev => [...prev, ...bookingsData])
       }
+      setHasMore(bookingsData.length === 100)
+    } catch (error) {
+      console.error("Error fetching data:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load bookings data",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+      setLoadingMore(false)
     }
+  }
 
-    fetchData()
-  }, [searchParams.date, searchParams.status, searchParams.search])
+  const handleLoadMore = () => {
+    const newOffset = offset + 100
+    setOffset(newOffset)
+    fetchData(false, newOffset)
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -826,6 +845,13 @@ function BookingsContent({ searchParams }: BookingsPageProps) {
                         : "Get started by creating your first booking."}
                     </p>
                   </div>
+              {hasMore && bookings.length > 0 && (
+                <div className="flex justify-center mt-6">
+                  <Button variant="outline" onClick={handleLoadMore} disabled={loadingMore}>
+                    {loadingMore ? "Loading..." : "Load More Bookings"}
+                  </Button>
+                </div>
+              )}
                 )}
               </div>
             </CardContent>

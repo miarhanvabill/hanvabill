@@ -76,7 +76,7 @@ async function invalidateBookingCache(bookingId?: number, customerId?: number, s
   }
 }
 
-export async function getBookings(startDate?: string, endDate?: string, status?: string, search?: string): Promise<Booking[]> {
+export async function getBookings(startDate?: string, endDate?: string, status?: string, search?: string, offset: number = 0, limit: number = 100): Promise<Booking[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const startStr = typeof startDate === 'string' ? startDate : '';
@@ -123,6 +123,7 @@ export async function getBookings(startDate?: string, endDate?: string, status?:
               AND (${searchPattern}::text IS NULL OR c.full_name ILIKE ${searchPattern} OR c.phone_number ILIKE ${searchPattern} OR s.name ILIKE ${searchPattern})
             GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, st.name, c.full_name, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, b.created_at, r.rating
             ORDER BY b.booking_date DESC, b.booking_time DESC
+            LIMIT ${limit} OFFSET ${offset}
           `
           return bookings.map(mapBookingResult)
         },

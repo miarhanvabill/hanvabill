@@ -54,10 +54,10 @@ export interface UpdateCustomerState {
 }
 
 // ✅ Updated to use new withTenantAuth signature
-export async function getCustomers(): Promise<Customer[]> {
+export async function getCustomers(search?: string, offset: number = 0, limit: number = 100): Promise<Customer[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     return await cacheFetch(
-      `customers:all:${tenantId}`,
+      `customers:all:${tenantId}:${search || ""}:${offset}:${limit}`,
       async () => {
         const customers = await sql`
           SELECT 
@@ -84,9 +84,11 @@ export async function getCustomers(): Promise<Customer[]> {
           FROM customers c
           LEFT JOIN bookings b ON c.id = b.customer_id
           WHERE c.tenant_id = ${tenantId}
+          ${search ? sql`AND (c.full_name ILIKE ${'%' + search + '%'} OR c.phone_number ILIKE ${'%' + search + '%'} OR c.email ILIKE ${'%' + search + '%'})` : sql``}
           GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.tags, c.preferred_staff_id,
         referred_by_customer_id, c.created_at, c.updated_at
           ORDER BY c.created_at DESC
+          LIMIT ${limit} OFFSET ${offset}
         `
 
         return customers.map((customer) => ({

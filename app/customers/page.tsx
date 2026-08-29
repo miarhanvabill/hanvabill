@@ -17,35 +17,35 @@ import { toast } from "@/hooks/use-toast"
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
-  const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([])
+  
   const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [offset, setOffset] = useState(0)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
 
   useEffect(() => {
-    loadCustomers()
-  }, [])
+    const timer = setTimeout(() => {
+      setOffset(0)
+      loadCustomers(true, 0)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
 
-  useEffect(() => {
-    if (searchTerm.trim()) {
-      const filtered = customers.filter(
-        (customer) =>
-          customer.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          customer.phone_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          customer.email?.toLowerCase().includes(searchTerm.toLowerCase()),
-      )
-      setFilteredCustomers(filtered)
-    } else {
-      setFilteredCustomers(customers)
-    }
-  }, [searchTerm, customers])
-
-  const loadCustomers = async () => {
+  const loadCustomers = async (reset = false, currentOffset = offset) => {
     try {
-      setLoading(true)
-      const data = await getCustomers()
-      setCustomers(data)
-      setFilteredCustomers(data)
+      if (reset) setLoading(true)
+      else setLoadingMore(true)
+      
+      const data = await getCustomers(searchTerm, currentOffset, 100)
+      
+      if (reset) {
+        setCustomers(data)
+      } else {
+        setCustomers(prev => [...prev, ...data])
+      }
+      setHasMore(data.length === 100)
     } catch (error) {
       console.error("Error loading customers:", error)
       toast({
@@ -55,7 +55,14 @@ export default function CustomersPage() {
       })
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
+  }
+
+  const handleLoadMore = () => {
+    const newOffset = offset + 100
+    setOffset(newOffset)
+    loadCustomers(false, newOffset)
   }
 
   const handleDeleteCustomer = async (id: string) => {
@@ -214,7 +221,7 @@ export default function CustomersPage() {
 
       {/* Customer List */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredCustomers.map((customer) => (
+        {customers.map((customer) => (
           <Card key={customer.id} className="hover:shadow-md transition-shadow">
             <CardContent className="p-6">
               <div className="flex items-start justify-between">
@@ -291,7 +298,15 @@ export default function CustomersPage() {
         ))}
       </div>
 
-      {filteredCustomers.length === 0 && !loading && (
+      {hasMore && customers.length > 0 && (
+        <div className="flex justify-center mt-6">
+          <Button variant="outline" onClick={handleLoadMore} disabled={loadingMore}>
+            {loadingMore ? "Loading..." : "Load More Customers"}
+          </Button>
+        </div>
+      )}
+
+      {customers.length === 0 && !loading && (
         <div className="text-center py-12">
           <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-semibold mb-2">No customers found</h3>
