@@ -5,13 +5,12 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    await sql`ALTER TABLE customer_packages DROP COLUMN IF EXISTS tenant_id`;
-    await sql`ALTER TABLE loyalty_tiers DROP COLUMN IF EXISTS tenant_id`;
-    
-    await sql`ALTER TABLE customer_packages ADD COLUMN tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE`;
-    await sql`ALTER TABLE loyalty_tiers ADD COLUMN tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE`;
-
-    return NextResponse.json({ success: true });
+    const res = await sql`
+      SELECT column_name, data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'tenants';
+    `;
+    return NextResponse.json({ rows: res });
   } catch (e: any) {
     return NextResponse.json({ error: e.message });
   }
