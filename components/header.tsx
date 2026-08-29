@@ -23,7 +23,7 @@ interface HeaderProps {
 }
 
 interface Notification {
-  id: number
+  id: string
   title: string
   message: string
   type: string
@@ -57,7 +57,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
     }
   }
 
-  const markAsRead = async (notificationId: number) => {
+  const markAsRead = async (notificationId: string) => {
     try {
       const response = await fetch(`/api/notifications/${notificationId}`, {
         method: "PATCH",

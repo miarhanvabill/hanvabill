@@ -21,9 +21,10 @@ export async function GET(request: NextRequest) {
       }
 
       // UNION: WA automation logs + recent booking events
+      // Filtering out any that exist in notification_dismissals
       const rows = await sql`
         SELECT 
-          wal.id,
+          wal.id::text || '-wa' as id,
           wal.event_type as type,
           COALESCE(
             CASE 
@@ -46,12 +47,13 @@ export async function GET(request: NextRequest) {
           wal.recipient_phone
         FROM whatsapp_automation_logs wal
         LEFT JOIN customers c ON wal.customer_id = c.id AND c.tenant_id = ${tenantId}
-        WHERE wal.tenant_id = ${tenantId}::text
+        LEFT JOIN notification_dismissals nd ON nd.tenant_id = ${tenantId} AND nd.item_type = 'wa' AND nd.item_id = wal.id::text
+        WHERE wal.tenant_id = ${tenantId}::text AND nd.dismissed_at IS NULL
 
         UNION ALL
 
         SELECT
-          b.id,
+          b.id::text || '-booking' as id,
           CASE b.status
             WHEN 'pending'   THEN 'appointment_pending'
             WHEN 'confirmed' THEN 'appointment_confirmed'
@@ -73,8 +75,10 @@ export async function GET(request: NextRequest) {
           c.phone_number as recipient_phone
         FROM bookings b
         LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
-        WHERE b.tenant_id = ${tenantId}
+        LEFT JOIN notification_dismissals nd ON nd.tenant_id = ${tenantId} AND nd.item_type = 'booking' AND nd.item_id = b.id::text
+        WHERE b.tenant_id = ${tenantId} 
           AND b.created_at >= NOW() - INTERVAL '7 days'
+          AND nd.dismissed_at IS NULL
 
         ORDER BY created_at DESC
         LIMIT 20
