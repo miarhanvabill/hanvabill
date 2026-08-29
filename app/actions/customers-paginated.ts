@@ -1,3 +1,4 @@
+"use server"
 import { sql } from "@/lib/db"
 import { withTenantAuth } from "@/lib/withTenantAuth"
 import { cacheFetch } from "@/lib/cache"
