@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { Suspense, useState, useEffect } from "react"
+import React, { Suspense, useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Calendar, Clock, Phone, IndianRupee, Filter, Plus, Search, CheckCircle, XCircle, Upload } from "lucide-react"
 import Link from "next/link"
-import { getBookings, getBookingStats, createBooking, bulkUploadBookings } from "@/app/actions/bookings"
+import { getBookingStats, createBooking, bulkUploadBookings } from "@/app/actions/bookings"
+import { getBookingsPaginated } from "@/app/actions/bookings-paginated"
 import { getStaff } from "@/app/actions/staff"
 import { toast } from "@/hooks/use-toast"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -542,11 +543,11 @@ function StatusFilterButtons({ currentStatus }: { currentStatus: string }) {
 
 function BookingsContent({ searchParams }: BookingsPageProps) {
   const [bookings, setBookings] = useState<any[]>([])
+  const [totalBookings, setTotalBookings] = useState(0)
   const [stats, setStats] = useState({ total: 0, today: 0, pending: 0, revenue: 0 })
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [offset, setOffset] = useState(0)
+  const [pageSize, setPageSize] = useState(50)
+  const [currentPage, setCurrentPage] = useState(1)
 
   // Default to current month
   const now = new Date()
@@ -557,27 +558,23 @@ function BookingsContent({ searchParams }: BookingsPageProps) {
   const endDate = searchParams.endDate || currentMonthEnd
 
   useEffect(() => {
-    setOffset(0)
-    fetchData(true, 0)
-  }, [startDate, endDate, searchParams.status, searchParams.search])
+    setCurrentPage(1)
+    fetchData(1, pageSize)
+  }, [startDate, endDate, searchParams.status, searchParams.search, pageSize])
 
-  const fetchData = async (reset = false, currentOffset = offset) => {
+  const fetchData = async (page: number, size: number) => {
     try {
-      if (reset) setLoading(true)
-      else setLoadingMore(true)
+      setLoading(true)
+      const offset = (page - 1) * size
 
-      const [bookingsData, statsData] = await Promise.all([
-        getBookings(startDate, endDate, searchParams.status, searchParams.search, currentOffset, 100),
+      const [bookingsResponse, statsData] = await Promise.all([
+        getBookingsPaginated(startDate, endDate, searchParams.status, searchParams.search, offset, size),
         getBookingStats(startDate, endDate)
       ])
       
-      if (reset) {
-        setBookings(bookingsData)
-        setStats(statsData)
-      } else {
-        setBookings(prev => [...prev, ...bookingsData])
-      }
-      setHasMore(bookingsData.length === 100)
+      setBookings(bookingsResponse.data)
+      setTotalBookings(bookingsResponse.total)
+      setStats(statsData)
     } catch (error) {
       console.error("Error fetching data:", error)
       toast({
@@ -587,14 +584,12 @@ function BookingsContent({ searchParams }: BookingsPageProps) {
       })
     } finally {
       setLoading(false)
-      setLoadingMore(false)
     }
   }
 
-  const handleLoadMore = () => {
-    const newOffset = offset + 100
-    setOffset(newOffset)
-    fetchData(false, newOffset)
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    fetchData(page, pageSize)
   }
 
   const getStatusColor = (status: string) => {
@@ -848,11 +843,65 @@ function BookingsContent({ searchParams }: BookingsPageProps) {
                 )}
               </div>
               
-              {hasMore && bookings.length > 0 && (
-                <div className="flex justify-center mt-6 mb-4">
-                  <Button variant="outline" onClick={handleLoadMore} disabled={loadingMore}>
-                    {loadingMore ? "Loading..." : "Load More Bookings"}
-                  </Button>
+              {totalBookings > 0 && (
+                <div className="mt-8 flex flex-col sm:flex-row items-center justify-between border-t pt-4 text-sm text-muted-foreground">
+                  <div className="mb-4 sm:mb-0 text-center sm:text-left">
+                    Showing {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalBookings)} of {totalBookings} bookings
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="border rounded px-2 py-1 bg-background text-foreground"
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(Number(e.target.value))
+                          setCurrentPage(1)
+                        }}
+                      >
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                      <span>per page</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1 || loading}
+                      >
+                        {"<"}
+                      </Button>
+                      <div className="flex items-center gap-1 mx-2 overflow-x-auto max-w-[200px] sm:max-w-none">
+                        {Array.from({ length: Math.ceil(totalBookings / pageSize) }, (_, i) => i + 1)
+                          .filter(p => p === 1 || p === Math.ceil(totalBookings / pageSize) || Math.abs(p - currentPage) <= 1)
+                          .map((p, i, arr) => (
+                            <React.Fragment key={p}>
+                              {i > 0 && arr[i - 1] !== p - 1 && <span className="px-2">...</span>}
+                              <Button
+                                variant={p === currentPage ? "default" : "outline"}
+                                size="sm"
+                                className={p === currentPage ? "bg-slate-900 text-white hover:bg-slate-800" : ""}
+                                onClick={() => handlePageChange(p)}
+                                disabled={loading}
+                              >
+                                {p}
+                              </Button>
+                            </React.Fragment>
+                          ))}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage >= Math.ceil(totalBookings / pageSize) || loading}
+                      >
+                        {">"}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               )}
             </CardContent>

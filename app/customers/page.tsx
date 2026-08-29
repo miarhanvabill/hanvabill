@@ -1,14 +1,15 @@
 // app/customers/page.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Search, Plus, Phone, Mail, Calendar, Edit, Trash2, User, Upload } from "lucide-react"
-import { getCustomers, deleteCustomer, bulkUploadCustomers, type Customer } from "@/app/actions/customers"
+import { deleteCustomer, bulkUploadCustomers, type Customer } from "@/app/actions/customers"
+import { getCustomersPaginated } from "@/app/actions/customers-paginated"
 import { formatCurrency } from "@/lib/currency"
 import Link from "next/link"
 import { BulkUploadModal } from "@/components/bulk-upload-modal"
@@ -17,35 +18,28 @@ import { toast } from "@/hooks/use-toast"
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
-  
+  const [totalCustomers, setTotalCustomers] = useState(0)
   const [searchTerm, setSearchTerm] = useState("")
   const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [offset, setOffset] = useState(0)
+  const [pageSize, setPageSize] = useState(50)
+  const [currentPage, setCurrentPage] = useState(1)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setOffset(0)
-      loadCustomers(true, 0)
+      setCurrentPage(1)
+      loadCustomers(1, pageSize)
     }, 300)
     return () => clearTimeout(timer)
-  }, [searchTerm])
+  }, [searchTerm, pageSize])
 
-  const loadCustomers = async (reset = false, currentOffset = offset) => {
+  const loadCustomers = async (page: number, size: number) => {
     try {
-      if (reset) setLoading(true)
-      else setLoadingMore(true)
-      
-      const data = await getCustomers(searchTerm, currentOffset, 100)
-      
-      if (reset) {
-        setCustomers(data)
-      } else {
-        setCustomers(prev => [...prev, ...data])
-      }
-      setHasMore(data.length === 100)
+      setLoading(true)
+      const offset = (page - 1) * size
+      const { data, total } = await getCustomersPaginated(searchTerm, offset, size)
+      setCustomers(data)
+      setTotalCustomers(total)
     } catch (error) {
       console.error("Error loading customers:", error)
       toast({
@@ -55,21 +49,19 @@ export default function CustomersPage() {
       })
     } finally {
       setLoading(false)
-      setLoadingMore(false)
     }
   }
 
-  const handleLoadMore = () => {
-    const newOffset = offset + 100
-    setOffset(newOffset)
-    loadCustomers(false, newOffset)
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    loadCustomers(page, pageSize)
   }
 
   const handleDeleteCustomer = async (id: string) => {
     if (!confirm("Are you sure you want to delete this customer?")) return
     try {
       await deleteCustomer(id)
-      await loadCustomers()
+      await loadCustomers(currentPage, pageSize)
       toast({
         title: "Success",
         description: "Customer deleted successfully",
@@ -88,7 +80,7 @@ export default function CustomersPage() {
     const result = await bulkUploadCustomers(file)
     if (result.success) {
       // Reload customers after successful upload
-      await loadCustomers()
+      await loadCustomers(currentPage, pageSize)
       toast({
         title: "Success",
         description: result.message,
@@ -179,7 +171,7 @@ export default function CustomersPage() {
             <User className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{customers.length}</div>
+            <div className="text-2xl font-bold">{totalCustomers}</div>
           </CardContent>
         </Card>
         <Card>
@@ -298,11 +290,65 @@ export default function CustomersPage() {
         ))}
       </div>
 
-      {hasMore && customers.length > 0 && (
-        <div className="flex justify-center mt-6">
-          <Button variant="outline" onClick={handleLoadMore} disabled={loadingMore}>
-            {loadingMore ? "Loading..." : "Load More Customers"}
-          </Button>
+      {totalCustomers > 0 && (
+        <div className="mt-8 flex flex-col sm:flex-row items-center justify-between border-t pt-4 text-sm text-muted-foreground">
+          <div className="mb-4 sm:mb-0 text-center sm:text-left">
+            Showing {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, totalCustomers)} of {totalCustomers} customers
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <div className="flex items-center gap-2">
+              <select
+                className="border rounded px-2 py-1 bg-background text-foreground"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value))
+                  setCurrentPage(1)
+                }}
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+              <span>per page</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1 || loading}
+              >
+                {"<"}
+              </Button>
+              <div className="flex items-center gap-1 mx-2 overflow-x-auto max-w-[200px] sm:max-w-none">
+                {Array.from({ length: Math.ceil(totalCustomers / pageSize) }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === Math.ceil(totalCustomers / pageSize) || Math.abs(p - currentPage) <= 1)
+                  .map((p, i, arr) => (
+                    <React.Fragment key={p}>
+                      {i > 0 && arr[i - 1] !== p - 1 && <span className="px-2">...</span>}
+                      <Button
+                        variant={p === currentPage ? "default" : "outline"}
+                        size="sm"
+                        className={p === currentPage ? "bg-slate-900 text-white hover:bg-slate-800" : ""}
+                        onClick={() => handlePageChange(p)}
+                        disabled={loading}
+                      >
+                        {p}
+                      </Button>
+                    </React.Fragment>
+                  ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage >= Math.ceil(totalCustomers / pageSize) || loading}
+              >
+                {">"}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
