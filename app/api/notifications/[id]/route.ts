@@ -1,10 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
 
-export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const idParam = params.id;
+      const resolvedParams = await params;
+      const idParam = resolvedParams.id;
+      
       let itemType = '';
       let itemId = '';
 
@@ -34,10 +36,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   })
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const idParam = params.id;
+      const resolvedParams = await params;
+      const idParam = resolvedParams.id;
+      
       let itemType = '';
       let itemId = '';
 
