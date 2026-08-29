@@ -600,6 +600,125 @@ const handleEnquirySubmit = async (e: React.FormEvent) => {
 
   if (loading) {
     
+  return (
+      <div className="min-h-screen bg-gray-50 p-4">
+         <div className="max-w-7xl mx-auto h-[400px] bg-gray-200 animate-pulse rounded-3xl mb-8"></div>
+         <div className="max-w-7xl mx-auto space-y-4">
+            <div className="h-10 w-48 bg-gray-200 animate-pulse rounded-lg"></div>
+            <div className="h-32 bg-gray-200 animate-pulse rounded-2xl"></div>
+            <div className="h-32 bg-gray-200 animate-pulse rounded-2xl"></div>
+            <div className="h-32 bg-gray-200 animate-pulse rounded-2xl"></div>
+         </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4 text-center">
+        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
+          <X className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold mb-2">Oops!</h2>
+        <p className="text-gray-600 max-w-md">{error}</p>
+        <p className="text-sm text-gray-400 mt-4">Please check the URL or try again later.</p>
+      </div>
+    )
+  }
+
+  const totalAmount = 
+    selectedServices.reduce((sum, s) => sum + Number(s.price), 0) + 
+    selectedProducts.reduce((sum, p) => sum + (Number(p.price) * (productQuantities[p.id] || 1)), 0) + 
+    selectedPackages.reduce((sum, p) => sum + Number(p.price), 0) + 
+    selectedMemberships.reduce((sum, m) => sum + Number(m.price), 0);
+    
+  const totalDuration = selectedServices.reduce((sum, s) => sum + Number(s.duration), 0);
+  const totalItems = selectedServices.length + selectedProducts.length + selectedPackages.length + selectedMemberships.length;
+  
+  const isOpen = () => {
+    if (!business) return true;
+    const currentDay = format(new Date(), 'EEEE').toLowerCase();
+    if (business.workingDays && Array.isArray(business.workingDays) && !business.workingDays.includes(currentDay)) return false;
+    
+    if (business.openTime && business.closeTime) {
+       const currentHour = new Date().getHours();
+       const openH = parseInt(business.openTime.split(':')[0] || "9");
+       const closeH = parseInt(business.closeTime.split(':')[0] || "20");
+       return currentHour >= openH && currentHour < closeH;
+    }
+    return true;
+  }
+  
+  const currentDayName = format(new Date(), 'EEEE');
+
+  const SummarySidebar = () => {
+    if (totalItems === 0) return null;
+    return (
+      <div className="hidden lg:block w-80 shrink-0 ml-8">
+        <div className="sticky top-24 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+          <h3 className="font-bold text-lg border-b pb-4 mb-4">Booking Summary</h3>
+          <div className="space-y-4 max-h-[50vh] overflow-y-auto no-scrollbar pb-4">
+             {selectedServices.map(s => (
+                <div key={s.id} className="flex justify-between items-start text-sm">
+                   <div>
+                     <p className="font-medium">{s.name}</p>
+                     <p className="text-gray-500 text-xs">{formatDuration(s.duration)}</p>
+                   </div>
+                   <p className="font-bold">{business.currency}{s.price}</p>
+                </div>
+             ))}
+             {selectedProducts.map(p => (
+                <div key={p.id} className="flex justify-between items-start text-sm">
+                   <p className="font-medium">{p.name} <span className="text-gray-400">x{productQuantities[p.id] || 1}</span></p>
+                   <p className="font-bold">{business.currency}{(Number(p.price) * (productQuantities[p.id] || 1))}</p>
+                </div>
+             ))}
+             {selectedPackages.map(p => (
+                <div key={p.id} className="flex justify-between items-start text-sm">
+                   <p className="font-medium">{p.name}</p>
+                   <p className="font-bold">{business.currency}{p.price}</p>
+                </div>
+             ))}
+             {selectedMemberships.map(m => (
+                <div key={m.id} className="flex justify-between items-start text-sm">
+                   <p className="font-medium">{m.name}</p>
+                   <p className="font-bold">{business.currency}{m.price}</p>
+                </div>
+             ))}
+          </div>
+          <div className="border-t pt-4 mt-2">
+             <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-600">Total Duration</span>
+                <span className="font-medium">{formatDuration(totalDuration)}</span>
+             </div>
+             <div className="flex justify-between items-center mb-6">
+                <span className="font-bold text-lg">Total</span>
+                <span className="font-black text-xl text-red-500">{business.currency}{totalAmount}</span>
+             </div>
+             <Button 
+                onClick={() => setStep(2)} 
+                className="w-full bg-black text-white hover:bg-gray-800 rounded-xl h-12 font-bold"
+             >
+                Proceed to Book
+             </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Stock images for Gallery empty state
+  const stockGallery = [
+     "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=600&q=80",
+     "https://images.unsplash.com/photo-1522337660859-02fbefca4702?auto=format&fit=crop&w=600&q=80",
+     "https://images.unsplash.com/photo-1516975080661-46bfa20224b1?auto=format&fit=crop&w=600&q=80",
+     "https://images.unsplash.com/photo-1521590832167-7bfcfaa6362f?auto=format&fit=crop&w=600&q=80",
+     "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=600&q=80",
+     "https://images.unsplash.com/photo-1621551122354-e96737d64b70?auto=format&fit=crop&w=600&q=80"
+  ];
+  
+  const galleryImages = (business?.galleryImages?.length > 0) ? business.galleryImages : stockGallery;
+  
 const LoginModal = () => (
   <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setShowLoginModal(false); setLoginStep('phone'); setLoginError('') }} />
@@ -893,125 +1012,7 @@ const ProfileDrawer = () => (
   </div>
 )
 
-  return (
-      <div className="min-h-screen bg-gray-50 p-4">
-         <div className="max-w-7xl mx-auto h-[400px] bg-gray-200 animate-pulse rounded-3xl mb-8"></div>
-         <div className="max-w-7xl mx-auto space-y-4">
-            <div className="h-10 w-48 bg-gray-200 animate-pulse rounded-lg"></div>
-            <div className="h-32 bg-gray-200 animate-pulse rounded-2xl"></div>
-            <div className="h-32 bg-gray-200 animate-pulse rounded-2xl"></div>
-            <div className="h-32 bg-gray-200 animate-pulse rounded-2xl"></div>
-         </div>
-      </div>
-    )
-  }
 
-  if (error) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4 text-center">
-        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-4">
-          <X className="w-8 h-8" />
-        </div>
-        <h2 className="text-xl font-bold mb-2">Oops!</h2>
-        <p className="text-gray-600 max-w-md">{error}</p>
-        <p className="text-sm text-gray-400 mt-4">Please check the URL or try again later.</p>
-      </div>
-    )
-  }
-
-  const totalAmount = 
-    selectedServices.reduce((sum, s) => sum + Number(s.price), 0) + 
-    selectedProducts.reduce((sum, p) => sum + (Number(p.price) * (productQuantities[p.id] || 1)), 0) + 
-    selectedPackages.reduce((sum, p) => sum + Number(p.price), 0) + 
-    selectedMemberships.reduce((sum, m) => sum + Number(m.price), 0);
-    
-  const totalDuration = selectedServices.reduce((sum, s) => sum + Number(s.duration), 0);
-  const totalItems = selectedServices.length + selectedProducts.length + selectedPackages.length + selectedMemberships.length;
-  
-  const isOpen = () => {
-    if (!business) return true;
-    const currentDay = format(new Date(), 'EEEE').toLowerCase();
-    if (business.workingDays && Array.isArray(business.workingDays) && !business.workingDays.includes(currentDay)) return false;
-    
-    if (business.openTime && business.closeTime) {
-       const currentHour = new Date().getHours();
-       const openH = parseInt(business.openTime.split(':')[0] || "9");
-       const closeH = parseInt(business.closeTime.split(':')[0] || "20");
-       return currentHour >= openH && currentHour < closeH;
-    }
-    return true;
-  }
-  
-  const currentDayName = format(new Date(), 'EEEE');
-
-  const SummarySidebar = () => {
-    if (totalItems === 0) return null;
-    return (
-      <div className="hidden lg:block w-80 shrink-0 ml-8">
-        <div className="sticky top-24 bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-          <h3 className="font-bold text-lg border-b pb-4 mb-4">Booking Summary</h3>
-          <div className="space-y-4 max-h-[50vh] overflow-y-auto no-scrollbar pb-4">
-             {selectedServices.map(s => (
-                <div key={s.id} className="flex justify-between items-start text-sm">
-                   <div>
-                     <p className="font-medium">{s.name}</p>
-                     <p className="text-gray-500 text-xs">{formatDuration(s.duration)}</p>
-                   </div>
-                   <p className="font-bold">{business.currency}{s.price}</p>
-                </div>
-             ))}
-             {selectedProducts.map(p => (
-                <div key={p.id} className="flex justify-between items-start text-sm">
-                   <p className="font-medium">{p.name} <span className="text-gray-400">x{productQuantities[p.id] || 1}</span></p>
-                   <p className="font-bold">{business.currency}{(Number(p.price) * (productQuantities[p.id] || 1))}</p>
-                </div>
-             ))}
-             {selectedPackages.map(p => (
-                <div key={p.id} className="flex justify-between items-start text-sm">
-                   <p className="font-medium">{p.name}</p>
-                   <p className="font-bold">{business.currency}{p.price}</p>
-                </div>
-             ))}
-             {selectedMemberships.map(m => (
-                <div key={m.id} className="flex justify-between items-start text-sm">
-                   <p className="font-medium">{m.name}</p>
-                   <p className="font-bold">{business.currency}{m.price}</p>
-                </div>
-             ))}
-          </div>
-          <div className="border-t pt-4 mt-2">
-             <div className="flex justify-between items-center mb-2">
-                <span className="text-gray-600">Total Duration</span>
-                <span className="font-medium">{formatDuration(totalDuration)}</span>
-             </div>
-             <div className="flex justify-between items-center mb-6">
-                <span className="font-bold text-lg">Total</span>
-                <span className="font-black text-xl text-red-500">{business.currency}{totalAmount}</span>
-             </div>
-             <Button 
-                onClick={() => setStep(2)} 
-                className="w-full bg-black text-white hover:bg-gray-800 rounded-xl h-12 font-bold"
-             >
-                Proceed to Book
-             </Button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Stock images for Gallery empty state
-  const stockGallery = [
-     "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&w=600&q=80",
-     "https://images.unsplash.com/photo-1522337660859-02fbefca4702?auto=format&fit=crop&w=600&q=80",
-     "https://images.unsplash.com/photo-1516975080661-46bfa20224b1?auto=format&fit=crop&w=600&q=80",
-     "https://images.unsplash.com/photo-1521590832167-7bfcfaa6362f?auto=format&fit=crop&w=600&q=80",
-     "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?auto=format&fit=crop&w=600&q=80",
-     "https://images.unsplash.com/photo-1621551122354-e96737d64b70?auto=format&fit=crop&w=600&q=80"
-  ];
-  
-  const galleryImages = (business?.galleryImages?.length > 0) ? business.galleryImages : stockGallery;
-  
   const avgRating = reviews.length > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length).toFixed(1) : "4.8";
 
   return (
@@ -1043,9 +1044,13 @@ const ProfileDrawer = () => (
       <div className="sticky top-0 bg-white/80 backdrop-blur-md z-50 border-b border-gray-100 shadow-sm hidden sm:block">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-black text-white font-bold flex items-center justify-center rounded uppercase text-sm">
-              {business?.name?.substring(0,2) || "CB"}
-            </div>
+            {business?.logo_url ? (
+               <img src={business.logo_url} alt="Logo" className="w-8 h-8 rounded object-cover" />
+            ) : (
+               <div className="w-8 h-8 bg-black text-white font-bold flex items-center justify-center rounded uppercase text-sm">
+                 {business?.name?.substring(0,2) || "CB"}
+               </div>
+            )}
             <h1 className="font-bold text-gray-900 uppercase tracking-tight">{business.name}</h1>
           </div>
           
@@ -1079,7 +1084,11 @@ const ProfileDrawer = () => (
           <div className="bg-white pb-6 border-b border-gray-100">
             <div className="max-w-7xl mx-auto relative">
               <div className="h-48 sm:h-64 md:h-80 w-full relative overflow-hidden bg-gradient-to-r from-gray-900 to-black rounded-b-3xl sm:rounded-none">
-                <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] mix-blend-overlay"></div>
+                {business?.cover_image_url ? (
+                   <img src={business.cover_image_url} alt="Cover" className="absolute inset-0 w-full h-full object-cover" />
+                ) : (
+                   <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] mix-blend-overlay"></div>
+                )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
               </div>
               
@@ -1087,9 +1096,13 @@ const ProfileDrawer = () => (
                 <div className="bg-white rounded-3xl shadow-xl shadow-black/5 border border-gray-100 p-5 sm:p-8 w-full transition-transform hover:-translate-y-1 duration-300">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                     <div className="flex items-center gap-5">
-                       <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-black to-gray-800 text-white font-bold flex items-center justify-center rounded-2xl shadow-lg border-4 border-white shrink-0 text-3xl uppercase">
-                         {business?.name?.substring(0,2) || "CB"}
-                       </div>
+                       {business?.logo_url ? (
+                          <img src={business.logo_url} alt="Logo" className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl shadow-lg border-4 border-white shrink-0 object-cover bg-white" />
+                       ) : (
+                          <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-black to-gray-800 text-white font-bold flex items-center justify-center rounded-2xl shadow-lg border-4 border-white shrink-0 text-3xl uppercase">
+                            {business?.name?.substring(0,2) || "CB"}
+                          </div>
+                       )}
                        <div>
                          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                            {isOpen() ? (
