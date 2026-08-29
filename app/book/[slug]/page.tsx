@@ -17,6 +17,7 @@ interface Service {
   duration: number
   price: number
   category: string
+  image_url?: string
 }
 
 interface Product {
@@ -1205,7 +1206,7 @@ const ProfileDrawer = () => (
                         return (
                            <Card key={service.id} className="min-w-[280px] sm:min-w-0 snap-start rounded-3xl overflow-hidden border-0 shadow-lg shadow-black/5 hover:shadow-xl transition-all duration-300 group">
                               <div className="h-40 overflow-hidden relative">
-                                 <img src={getServiceFallbackImage(service.name, service.category || '')} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt={service.name} />
+                                 <img src={service.image_url || getServiceFallbackImage(service.name, service.category || '')} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt={service.name} />
                                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
                                  <Badge className="absolute bottom-3 left-3 bg-white/20 backdrop-blur-md text-white border-white/30"><Clock className="w-3 h-3 mr-1" /> {formatDuration(service.duration)}</Badge>
                               </div>
@@ -1331,7 +1332,7 @@ const ProfileDrawer = () => (
                             >
                               <div className="flex justify-between items-start gap-4">
                                 <div className="w-20 h-20 shrink-0 rounded-2xl overflow-hidden bg-gray-100 shadow-inner">
-                                  <img src={getServiceFallbackImage(service.name, cat)} className="w-full h-full object-cover" alt={service.name} />
+                                  <img src={service.image_url || getServiceFallbackImage(service.name, cat)} className="w-full h-full object-cover" alt={service.name} />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <h4 className="font-bold text-gray-900 leading-tight mb-1 truncate text-lg">{service.name}</h4>
