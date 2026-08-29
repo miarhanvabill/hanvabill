@@ -22,22 +22,7 @@ export async function downloadInvoicePDF(invoiceData: any) {
     }
 
     const { htmlContent, invoiceData: completeData } = await response.json()
-    console.log("[v0] Received HTML content length:", htmlContent.length)
-
-    const tempDiv = document.createElement("div")
-    tempDiv.innerHTML = htmlContent
-    tempDiv.style.position = "absolute"
-    tempDiv.style.left = "-9999px"
-    tempDiv.style.top = "0"
-    tempDiv.style.width = "800px"
-    tempDiv.style.backgroundColor = "white"
-    tempDiv.style.fontFamily = "Arial, sans-serif"
-    tempDiv.style.fontSize = "12px"
-    tempDiv.style.lineHeight = "1.4"
-    tempDiv.style.color = "#000"
-    document.body.appendChild(tempDiv)
-
-    await new Promise((resolve) => setTimeout(resolve, 500))
+        console.log("[v0] Received HTML content length:", htmlContent.length)
 
     const opt = {
       margin: [0.5, 0.5, 0.5, 0.5],
@@ -52,19 +37,6 @@ export async function downloadInvoicePDF(invoiceData: any) {
         letterRendering: true,
         allowTaint: false,
         backgroundColor: "#ffffff",
-        width: 800,
-        height: 1200,
-        scrollX: 0,
-        scrollY: 0,
-        onclone: (clonedDoc: Document) => {
-          const clonedDiv = clonedDoc.body.querySelector("div")
-          if (clonedDiv) {
-            clonedDiv.style.fontFamily = "Arial, sans-serif"
-            clonedDiv.style.fontSize = "12px"
-            clonedDiv.style.lineHeight = "1.4"
-            clonedDiv.style.color = "#000"
-          }
-        },
       },
       jsPDF: {
         unit: "in",
@@ -74,13 +46,11 @@ export async function downloadInvoicePDF(invoiceData: any) {
       },
     }
 
-    console.log("[v0] Starting PDF generation with improved settings...")
+    console.log("[v0] Starting PDF generation with HTML string...")
     // Dynamically import html2pdf to prevent SSR ReferenceError
     const html2pdf = (await import("html2pdf.js")).default
-    await html2pdf().from(tempDiv).set(opt).save()
+    await html2pdf().from(htmlContent).set(opt).save()
     console.log("[v0] PDF generated successfully")
-
-    document.body.removeChild(tempDiv)
   } catch (error) {
     console.error("[v0] Error downloading PDF:", error)
     throw error
