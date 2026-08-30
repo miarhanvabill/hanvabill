@@ -71,6 +71,7 @@ interface CartItem {
 interface Service {
   id: number
   name: string
+  image_url?: string
   price: number
   duration_minutes?: number
   category?: string
@@ -80,6 +81,7 @@ interface Service {
 interface Product {
   id: number
   name: string
+  image_url?: string
   price: number
   category_name?: string
   stock_quantity?: number
@@ -88,6 +90,7 @@ interface Product {
 interface Pkg {
   id: number
   name: string
+  image_url?: string
   package_price: number // Updated to match database schema
   original_price: number // Added original_price property
   category?: string
@@ -103,6 +106,7 @@ interface Pkg {
 interface Membership {
   id: number
   name: string
+  image_url?: string
   price: number
   category?: string
   validityDays?: number
@@ -813,8 +817,13 @@ export function ServiceSelectionScreen({
             {/* Services */}
             {itemType === "service" &&
               filteredServices.map((sv) => (
-                <Card key={sv.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4 space-y-3">
+                <Card key={sv.id} className="hover:shadow-md transition-shadow overflow-hidden flex flex-col">
+                  {sv.image_url && (
+                    <div className="h-40 w-full shrink-0 border-b relative bg-muted">
+                      <img src={sv.image_url} alt={sv.name} className="absolute inset-0 w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <CardContent className="p-4 space-y-3 flex-1 flex flex-col">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <h3 className="font-semibold flex items-center gap-2">
@@ -850,7 +859,12 @@ export function ServiceSelectionScreen({
             {/* Products */}
             {itemType === "product" &&
               filteredProducts.map((p) => (
-                <Card key={p.id} className="hover:shadow-md transition-shadow">
+                <Card key={p.id} className="hover:shadow-md transition-shadow overflow-hidden flex flex-col">
+                  {p.image_url && (
+                    <div className="h-40 w-full shrink-0 border-b relative bg-muted">
+                      <img src={p.image_url} alt={p.name} className="absolute inset-0 w-full h-full object-cover" />
+                    </div>
+                  )}
                   <CardContent className="p-4 space-y-3">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -889,9 +903,14 @@ export function ServiceSelectionScreen({
                 return (
                   <Card
                     key={pkg.id}
-                    className="hover:shadow-lg transition-all duration-200 border-2 hover:border-primary/20"
+                    className="hover:shadow-lg transition-all duration-200 border-2 hover:border-primary/20 overflow-hidden flex flex-col"
                   >
-                    <CardContent className="p-6 space-y-4">
+                    {pkg.image_url && (
+                      <div className="h-40 w-full shrink-0 border-b relative bg-muted">
+                        <img src={pkg.image_url} alt={pkg.name} className="absolute inset-0 w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <CardContent className="p-6 space-y-4 flex-1 flex flex-col">
                       {/* Header with icon and savings badge */}
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3 flex-1">
@@ -1015,7 +1034,7 @@ export function ServiceSelectionScreen({
 
                       <Button
                         size="lg"
-                        className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
+                        className="w-full mt-auto bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
                         onClick={() => addToCart("package", pkg)}
                       >
                         <Gift className="w-4 h-4 mr-2" />
@@ -1034,9 +1053,14 @@ export function ServiceSelectionScreen({
                 return (
                   <Card
                     key={m.id}
-                    className="hover:shadow-lg transition-all duration-200 border-2 hover:border-primary/20"
+                    className="hover:shadow-lg transition-all duration-200 border-2 hover:border-primary/20 overflow-hidden flex flex-col"
                   >
-                    <CardContent className="p-6 space-y-4">
+                    {m.image_url && (
+                      <div className="h-40 w-full shrink-0 border-b relative bg-muted">
+                        <img src={m.image_url} alt={m.name} className="absolute inset-0 w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <CardContent className="p-6 space-y-4 flex-1 flex flex-col">
                       {/* Header with premium styling */}
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3 flex-1">
@@ -1136,7 +1160,7 @@ export function ServiceSelectionScreen({
 
                       <Button
                         size="lg"
-                        className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white"
+                        className="w-full mt-auto bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white"
                         onClick={() => addToCart("membership", m)}
                       >
                         <Crown className="w-4 h-4 mr-2" />

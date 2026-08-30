@@ -39,6 +39,7 @@ export async function getActiveMemberships(): Promise<MembershipPlan[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       console.log("[v0] Fetching active memberships from database")
+      await sql`ALTER TABLE membership_plans ADD COLUMN IF NOT EXISTS image_url TEXT;`
       const result = await sql`
         SELECT 
           id,
@@ -50,6 +51,7 @@ export async function getActiveMemberships(): Promise<MembershipPlan[]> {
           discount_percentage,
           status,
           is_multi_branch,
+          image_url,
           created_at,
           updated_at
         FROM membership_plans 
@@ -87,6 +89,7 @@ export async function getAllMembershipPlans(): Promise<MembershipPlan[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       console.log("[v0] Fetching all membership plans from database")
+      await sql`ALTER TABLE membership_plans ADD COLUMN IF NOT EXISTS image_url TEXT;`
       const result = await sql`
         SELECT 
           id,
@@ -98,6 +101,7 @@ export async function getAllMembershipPlans(): Promise<MembershipPlan[]> {
           discount_percentage,
           status,
           is_multi_branch,
+          image_url,
           created_at,
           updated_at
         FROM membership_plans 

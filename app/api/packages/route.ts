@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic"
 export async function GET() {
   try {
     return await withTenantAuth(async ({ sql, tenantId }) => {
+      await sql`ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS image_url TEXT;`
       const packages = await sql`
         SELECT * FROM service_packages 
         WHERE is_active = 'true' 
