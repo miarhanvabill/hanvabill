@@ -7,10 +7,9 @@ export const dynamic = "force-dynamic"
 
 export async function GET() {
   try {
-    const services = await withTenantAuth(async ({ sql, tenantId }) => {
-      return await getServices({ sql, tenantId })
-    })
-    return NextResponse.json(services)
+    const services = await getServices()
+    const activeServices = services.filter((s: any) => s.is_active)
+    return NextResponse.json(activeServices)
   } catch (error) {
     console.error("GET /api/services error:", error)
     return NextResponse.json({ error: "Failed to fetch services" }, { status: 500 })

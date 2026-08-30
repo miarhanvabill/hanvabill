@@ -23,11 +23,23 @@ export async function getProducts() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const rows = await sql`
-        SELECT p.*, c.name as category_name
+        SELECT p.*, c.name as category_name,
+        (
+          SELECT COALESCE(SUM(CAST(item->>'quantity' AS INTEGER)), 0)
+          FROM invoices i, 
+          jsonb_array_elements(
+            CASE 
+              WHEN i.product_details IS NULL THEN '[]'::jsonb 
+              WHEN jsonb_typeof(i.product_details::jsonb) = 'array' THEN i.product_details::jsonb 
+              ELSE '[]'::jsonb 
+            END
+          ) AS item
+          WHERE item->>'id' = p.id::text AND i.tenant_id = ${tenantId}
+        ) as sales_count
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id AND c.tenant_id = ${tenantId}
         WHERE p.tenant_id = ${tenantId}
-        ORDER BY p.created_at DESC
+        ORDER BY sales_count DESC, p.created_at DESC
       `
       return rows
     } catch (error: any) {

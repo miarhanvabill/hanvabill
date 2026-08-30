@@ -33,19 +33,25 @@ export async function getServices(): Promise<Service[]> {
 
       const result = await sql`
         SELECT 
-          id,
-          name,
-          price,
-          duration_minutes,
-          category,
-          description,
-          is_active,
-          code,
-          image_url,
-          created_at
-        FROM services 
-        WHERE tenant_id = ${tenantId}
-        ORDER BY created_at DESC
+          s.id,
+          s.name,
+          s.price,
+          s.duration_minutes,
+          s.category,
+          s.description,
+          s.is_active,
+          s.code,
+          s.image_url,
+          s.created_at,
+          (
+            SELECT COUNT(*) 
+            FROM booking_services bs 
+            JOIN bookings b ON bs.booking_id = b.id 
+            WHERE bs.service_id = s.id AND b.tenant_id = ${tenantId} AND b.status = 'completed'
+          ) as sales_count
+        FROM services s
+        WHERE s.tenant_id = ${tenantId}
+        ORDER BY sales_count DESC, s.created_at DESC
       `
       return result as Service[]
     } catch (error) {

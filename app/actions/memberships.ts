@@ -42,22 +42,27 @@ export async function getActiveMemberships(): Promise<MembershipPlan[]> {
       await sql`ALTER TABLE membership_plans ADD COLUMN IF NOT EXISTS image_url TEXT;`
       const result = await sql`
         SELECT 
-          id,
-          name,
-          description,
-          price,
-          duration_months,
-          benefits,
-          discount_percentage,
-          status,
-          is_multi_branch,
-          image_url,
-          created_at,
-          updated_at
-        FROM membership_plans 
-        WHERE status = 'active' 
-        AND tenant_id = ${tenantId}
-        ORDER BY created_at DESC
+          mp.id,
+          mp.name,
+          mp.description,
+          mp.price,
+          mp.duration_months,
+          mp.benefits,
+          mp.discount_percentage,
+          mp.status,
+          mp.is_multi_branch,
+          mp.image_url,
+          mp.created_at,
+          mp.updated_at,
+          (
+            SELECT COUNT(*) 
+            FROM customer_memberships cm 
+            WHERE cm.membership_plan_id = mp.id AND cm.tenant_id = ${tenantId}
+          ) as sales_count
+        FROM membership_plans mp
+        WHERE mp.status = 'active' 
+        AND mp.tenant_id = ${tenantId}
+        ORDER BY sales_count DESC, mp.created_at DESC
       `
 
       console.log("[v0] Active memberships SQL result:", result)

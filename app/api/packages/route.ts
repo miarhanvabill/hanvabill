@@ -9,10 +9,16 @@ export async function GET() {
     return await withTenantAuth(async ({ sql, tenantId }) => {
       await sql`ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS image_url TEXT;`
       const packages = await sql`
-        SELECT * FROM service_packages 
-        WHERE is_active = 'true' 
-        AND tenant_id = ${tenantId}
-        ORDER BY name
+        SELECT sp.*,
+        (
+          SELECT COUNT(*) 
+          FROM customer_packages cp 
+          WHERE cp.package_id = sp.id AND cp.tenant_id = ${tenantId}
+        ) as sales_count
+        FROM service_packages sp
+        WHERE sp.is_active = 'true' 
+        AND sp.tenant_id = ${tenantId}
+        ORDER BY sales_count DESC, sp.name
       `
       
       // Fetch all services to map IDs to names
