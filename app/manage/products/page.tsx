@@ -36,6 +36,7 @@ interface Product {
   stock_quantity: number
   min_stock_level: number
   barcode: string
+  image_url?: string
   is_active: boolean
   created_at: string
 }
@@ -411,9 +412,18 @@ export default function ProductsPage() {
               {filteredProducts.map((product) => (
                 <TableRow key={product.id}>
                   <TableCell>
-                    <div>
-                      <div className="font-medium">{product.name}</div>
-                      <div className="text-sm text-muted-foreground">{product.barcode}</div>
+                    <div className="flex items-center gap-3">
+                      {product.image_url ? (
+                        <img src={product.image_url} alt={product.name} className="h-10 w-10 rounded object-cover border" />
+                      ) : (
+                        <div className="h-10 w-10 rounded bg-muted flex items-center justify-center border">
+                          <Package className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div>
+                        <div className="font-medium">{product.name}</div>
+                        <div className="text-sm text-muted-foreground">{product.barcode}</div>
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>{product.category_name}</TableCell>
