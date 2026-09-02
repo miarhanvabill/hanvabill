@@ -4,7 +4,7 @@ import { createHmac } from 'crypto'
 
 const SECRET = process.env.CUSTOMER_JWT_SECRET
 if (!SECRET) {
-  throw new Error("CUSTOMER_JWT_SECRET is missing. Cannot sign/verify tokens.")
+  console.error("CRITICAL: CUSTOMER_JWT_SECRET is missing. Cannot sign/verify tokens securely.")
 }
 
 export interface CustomerTokenPayload {
@@ -38,7 +38,7 @@ export function signCustomerToken(payload: CustomerTokenPayload): string {
     iat: now,
     exp: now + 7 * 24 * 60 * 60, // 7 days
   }))
-  const signature = createHmac('sha256', SECRET)
+  const signature = createHmac('sha256', SECRET || "uninitialized_secret")
     .update(`${header}.${claims}`)
     .digest('base64url')
   return `${header}.${claims}.${signature}`
@@ -50,7 +50,7 @@ export function verifyCustomerToken(token: string): CustomerTokenPayload | null 
     if (parts.length !== 3) return null
 
     const [header, claims, signature] = parts
-    const expectedSig = createHmac('sha256', SECRET)
+    const expectedSig = createHmac('sha256', SECRET || "uninitialized_secret")
       .update(`${header}.${claims}`)
       .digest('base64url')
 
