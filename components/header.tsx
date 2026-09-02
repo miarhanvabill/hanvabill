@@ -150,7 +150,29 @@ export function Header({ onMenuToggle }: HeaderProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+            <div className="flex items-center justify-between px-2 py-1.5">
+              <span className="font-semibold text-sm">Notifications</span>
+              {unreadCount > 0 && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={async () => {
+                    try {
+                      const { markAllAsRead } = await import("@/app/actions/notifications");
+                      const result = await markAllAsRead();
+                      if (result.success) {
+                        setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+                      }
+                    } catch (error) {
+                      console.error("Error marking all as read:", error);
+                    }
+                  }} 
+                  className="h-auto p-0 text-xs text-blue-600 hover:text-blue-800"
+                >
+                  Mark all as read
+                </Button>
+              )}
+            </div>
             <DropdownMenuSeparator />
             {loading ? (
               <DropdownMenuItem className="text-center text-gray-500">Loading notifications...</DropdownMenuItem>

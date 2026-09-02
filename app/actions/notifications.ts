@@ -199,6 +199,10 @@ export async function markAllNotificationsAsRead(): Promise<{ success: boolean; 
   })
 }
 
+export async function markAllAsRead(): Promise<{ success: boolean; message: string }> {
+  return await markAllNotificationsAsRead()
+}
+
 export async function deleteNotification(id: number): Promise<{ success: boolean; message: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
