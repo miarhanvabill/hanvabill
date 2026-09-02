@@ -716,21 +716,43 @@ export async function updateBookingStatus(bookingId: number, status: string) {
       if (status === "completed" && booking.customer_id) {
         sql`
           SELECT full_name, phone_number FROM customers WHERE id = ${booking.customer_id} AND tenant_id = ${tenantId} LIMIT 1
-        `.then((custRows: any) => {
+        `.then(async (custRows: any) => {
           if (custRows.length > 0 && custRows[0].phone_number) {
-            import("@/lib/whatsapp-automations").then(({ triggerWhatsAppAutomation }) => {
-              triggerWhatsAppAutomation({
-                tenantId: tenantId.toString(),
-                eventType: "review_request",
-                recipientPhone: custRows[0].phone_number,
-                customerId: Number(booking.customer_id),
-                referenceId: `booking:${bookingId}:review`,
-                variables: {
-                  customer_name: custRows[0].full_name,
-                },
-                sql,
-              }).catch((err) => console.error("Failed to send review request WhatsApp automation:", err))
-            }).catch(() => {})
+            const customerName = custRows[0].full_name || "Valued Customer";
+            const messageText = `Thank you for visiting, ${customerName}! Please leave us a review: [Link]`;
+            
+            try {
+              const tenantRes = await sql`SELECT tenant_key FROM tenants WHERE id = ${tenantId} LIMIT 1`;
+              const tenantKey = tenantRes.length > 0 ? tenantRes[0].tenant_key : null;
+
+              await sql`
+                INSERT INTO whatsapp_messages (
+                  tenant_id,
+                  tenant_key,
+                  customer_id,
+                  phone_number,
+                  message_content,
+                  direction,
+                  status,
+                  message_type,
+                  trigger_type,
+                  created_at
+                ) VALUES (
+                  ${tenantId},
+                  ${tenantKey},
+                  ${booking.customer_id},
+                  ${custRows[0].phone_number},
+                  ${messageText},
+                  'outbound',
+                  'pending',
+                  'review_request',
+                  'booking_completed',
+                  NOW()
+                )
+              `;
+            } catch (err) {
+              console.error("Error inserting review request into whatsapp_messages:", err);
+            }
           }
         }).catch((err: any) => console.error("Error fetching customer for review request:", err))
       }
