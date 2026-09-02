@@ -2,7 +2,10 @@
 // Lightweight JWT implementation using Node.js built-in crypto (no extra deps needed)
 import { createHmac } from 'crypto'
 
-const SECRET = process.env.CUSTOMER_JWT_SECRET || 'hanva-customer-portal-fallback-secret-2024-xyz'
+const SECRET = process.env.CUSTOMER_JWT_SECRET
+if (!SECRET) {
+  throw new Error("CUSTOMER_JWT_SECRET is missing. Cannot sign/verify tokens.")
+}
 
 export interface CustomerTokenPayload {
   customerId: number

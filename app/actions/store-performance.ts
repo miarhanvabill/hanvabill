@@ -88,31 +88,67 @@ export async function getStorePerformanceData(range?: DateRange) {
         LIMIT 5
       `.catch(() => [])
 
-      // Mock remaining leaderboards since explicit relations might be missing or complex
-      const topStaff = [
-        { name: "John Doe", revenue: total_revenue * 0.4 || 4000 },
-        { name: "Jane Smith", revenue: total_revenue * 0.35 || 3500 },
-        { name: "Mike Johnson", revenue: total_revenue * 0.25 || 2500 },
-      ]
+      // Replace mocked leaderboards with best-effort real queries
+      const topStaff = await sql`
+        SELECT 
+          COALESCE(s.full_name, 'Unknown Staff') as name,
+          COALESCE(SUM(b.total_amount), 0) as revenue
+        FROM bookings b
+        LEFT JOIN staff s ON b.staff_id = s.id
+        WHERE b.tenant_id = ${tenantId}
+          AND DATE(b.created_at) >= ${startDate}
+          AND DATE(b.created_at) <= ${endDate}
+          AND b.status IN ('completed', 'confirmed')
+        GROUP BY s.full_name
+        ORDER BY revenue DESC
+        LIMIT 5
+      `.catch(() => [])
 
-      const topProducts = [
-        { name: "Shampoo XYZ", revenue: 800 },
-        { name: "Conditioner ABC", revenue: 600 },
-        { name: "Hair Gel 123", revenue: 400 },
-      ]
+      const topProducts = await sql`
+        SELECT 
+          COALESCE(p.name, 'Unknown Product') as name,
+          COALESCE(SUM(bi.price * bi.quantity), 0) as revenue
+        FROM booking_products bi
+        JOIN bookings b ON bi.booking_id = b.id
+        LEFT JOIN products p ON bi.product_id = p.id
+        WHERE b.tenant_id = ${tenantId}
+          AND DATE(b.created_at) >= ${startDate}
+          AND DATE(b.created_at) <= ${endDate}
+          AND b.status IN ('completed', 'confirmed')
+        GROUP BY p.name
+        ORDER BY revenue DESC
+        LIMIT 5
+      `.catch(() => [])
 
-      const topPackages = [
-        { name: "Bridal Package", revenue: 1200 },
-        { name: "Summer Spa", revenue: 800 },
-      ]
+      const topPackages = await sql`
+        SELECT 
+          COALESCE(p.name, 'Unknown Package') as name,
+          COALESCE(SUM(bi.price * bi.quantity), 0) as revenue
+        FROM booking_packages bi
+        JOIN bookings b ON bi.booking_id = b.id
+        LEFT JOIN packages p ON bi.package_id = p.id
+        WHERE b.tenant_id = ${tenantId}
+          AND DATE(b.created_at) >= ${startDate}
+          AND DATE(b.created_at) <= ${endDate}
+          AND b.status IN ('completed', 'confirmed')
+        GROUP BY p.name
+        ORDER BY revenue DESC
+        LIMIT 5
+      `.catch(() => [])
 
       // Quarterly Results Table
-      const quarterlyResults = [
-        { quarter: "Q1", revenue: 45000, expenses: 15000, profit: 30000 },
-        { quarter: "Q2", revenue: 52000, expenses: 18000, profit: 34000 },
-        { quarter: "Q3", revenue: 48000, expenses: 16000, profit: 32000 },
-        { quarter: "Q4", revenue: 61000, expenses: 20000, profit: 41000 },
-      ]
+      const quarterlyResults = await sql`
+        SELECT 
+          'Q' || CEIL(EXTRACT(MONTH FROM created_at)/3.0) as quarter,
+          COALESCE(SUM(total_amount), 0) as revenue,
+          0 as expenses,
+          COALESCE(SUM(total_amount), 0) as profit
+        FROM bookings
+        WHERE tenant_id = ${tenantId}
+          AND EXTRACT(YEAR FROM created_at) = EXTRACT(YEAR FROM CURRENT_DATE)
+        GROUP BY quarter
+        ORDER BY quarter
+      `.catch(() => [])
 
       return {
         success: true,
@@ -136,11 +172,16 @@ export async function getStorePerformanceData(range?: DateRange) {
           leaderboards: {
             topServices: topServices.map((s: any) => ({ name: s.name, revenue: Number(s.revenue) || 0 })),
             topCustomers: topCustomers.map((c: any) => ({ name: c.name, revenue: Number(c.revenue) || 0 })),
-            topStaff,
-            topProducts,
-            topPackages,
+            topStaff: topStaff.map((s: any) => ({ name: s.name, revenue: Number(s.revenue) || 0 })),
+            topProducts: topProducts.map((p: any) => ({ name: p.name, revenue: Number(p.revenue) || 0 })),
+            topPackages: topPackages.map((p: any) => ({ name: p.name, revenue: Number(p.revenue) || 0 })),
           },
-          quarterlyResults
+          quarterlyResults: quarterlyResults.map((q: any) => ({
+            quarter: q.quarter,
+            revenue: Number(q.revenue) || 0,
+            expenses: Number(q.expenses) || 0,
+            profit: Number(q.profit) || 0
+          }))
         }
       }
     } catch (error) {

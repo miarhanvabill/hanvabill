@@ -46,35 +46,7 @@ export async function getMarketingCampaigns() {
       })) as Campaign[]
     } catch (error) {
       console.error("Error fetching campaigns:", error)
-      return [
-        {
-          id: 1,
-          name: "Summer Sale 2024",
-          type: "email" as const,
-          subject: "Get 25% off on all services!",
-          message: "Don't miss our biggest sale of the year. Book now and save 25% on all salon services.",
-          status: "active",
-          sent_count: 1250,
-          opened_count: 306,
-          clicked_count: 45,
-          revenue: 15600,
-          budget: 2000,
-          created_at: new Date().toISOString(),
-        },
-        {
-          id: 2,
-          name: "Birthday Special",
-          type: "sms" as const,
-          message: "Happy Birthday! Enjoy a complimentary service on your special day.",
-          status: "scheduled",
-          sent_count: 0,
-          opened_count: 0,
-          clicked_count: 0,
-          revenue: 0,
-          budget: 500,
-          created_at: new Date().toISOString(),
-        },
-      ] as Campaign[]
+      return [] as Campaign[]
     }
   })
 }
@@ -90,32 +62,7 @@ export async function getCustomerSegments() {
       return segments as CustomerSegment[]
     } catch (error) {
       console.error("Error fetching segments:", error)
-      return [
-        {
-          id: 1,
-          name: "VIP Customers",
-          criteria: "Total spent > ₹10,000",
-          customer_count: 45,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        {
-          id: 2,
-          name: "New Customers",
-          criteria: "First visit within 30 days",
-          customer_count: 128,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-        {
-          id: 3,
-          name: "Inactive Customers",
-          criteria: "No visit in last 90 days",
-          customer_count: 67,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      ] as CustomerSegment[]
+      return [] as CustomerSegment[]
     }
   })
 }

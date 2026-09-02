@@ -590,10 +590,24 @@ const handleEnquirySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const res = await fetch('/api/public/enquiries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId,
+          name: customerForm.name,
+          phone: customerForm.phone,
+          email: customerForm.email,
+          subject: 'General Enquiry',
+          message: customerForm.message
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to submit enquiry");
       setEnquirySuccess(true);
-    } catch (err) {
-      alert("Failed to submit enquiry");
+      setCustomerForm({ name: "", phone: "", email: "", message: "", extra_notes: "" });
+    } catch (err: any) {
+      alert(err.message || "Failed to submit enquiry");
     } finally {
       setSubmitting(false);
     }
