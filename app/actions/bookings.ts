@@ -380,6 +380,23 @@ export async function createBooking(formData: FormData) {
         }
       }
 
+      const resourceIdStr = formData.get("resourceId")
+      const finalResourceId = resourceIdStr ? Number(resourceIdStr) : null
+      
+      if (finalResourceId) {
+        const conflicting = await sql`
+          SELECT id FROM bookings 
+          WHERE resource_id = ${finalResourceId} 
+          AND booking_date = ${bookingDate.toString()}
+          AND booking_time = ${bookingTime.toString()}
+          AND tenant_id = ${tenantId}
+          AND status != 'cancelled'
+        `
+        if (conflicting.length > 0) {
+          throw new Error("Resource is already booked for this time.")
+        }
+      }
+
       const timestamp = Date.now()
       const bookingNumber = `BK${timestamp.toString().slice(-8)}${Math.floor(Math.random() * 100)
         .toString()
@@ -389,6 +406,7 @@ export async function createBooking(formData: FormData) {
         bookingNumber,
         finalCustomerId,
         finalStaffId,
+        finalResourceId,
         finalServiceIds,
         bookingDate: bookingDate.toString(),
         bookingTime: bookingTime.toString(),
@@ -402,6 +420,7 @@ export async function createBooking(formData: FormData) {
           booking_number,
           customer_id,
           staff_id,
+          resource_id,
           booking_date,
           booking_time,
           total_amount,
@@ -415,6 +434,7 @@ export async function createBooking(formData: FormData) {
           ${bookingNumber},
           ${finalCustomerId},
           ${finalStaffId},
+          ${finalResourceId},
           ${bookingDate.toString()},
           ${bookingTime.toString()},
           ${totalAmountNum},
@@ -957,6 +977,21 @@ export async function updateBookingTime(
       }
 
       const currentBooking = existing[0]
+
+      if (newResourceId !== undefined && newResourceId !== null) {
+        const conflicting = await sql`
+          SELECT id FROM bookings 
+          WHERE resource_id = ${newResourceId} 
+          AND booking_date = ${newDate}
+          AND booking_time = ${newTime}
+          AND tenant_id = ${tenantId}
+          AND id != ${bookingId}
+          AND status != 'cancelled'
+        `
+        if (conflicting.length > 0) {
+          throw new Error("Resource is already booked for this time.")
+        }
+      }
 
       // Determine fields to update
       let staffUpdate = newStaffId !== undefined ? newStaffId : Number(currentBooking.staff_id)
