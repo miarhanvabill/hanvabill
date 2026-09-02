@@ -20,8 +20,8 @@ export async function POST(req: NextRequest) {
 
       // Create owner as first staff member
       await sql`
-        INSERT INTO staff (tenant_id, name, phone, role, status, created_at)
-        VALUES (${tenantId}, ${ownerName}, ${phone}, 'owner', 'active', NOW())
+        INSERT INTO staff (tenant_id, name, phone, role, is_active, created_at)
+        VALUES (${tenantId}, ${ownerName}, ${phone}, 'owner', true, NOW())
         ON CONFLICT DO NOTHING
       `
 

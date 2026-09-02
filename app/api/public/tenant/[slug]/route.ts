@@ -97,7 +97,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
     const staff = await sql`
       SELECT id, name, role, avatar_url 
       FROM staff 
-      WHERE tenant_id = ${tenantId} AND status = 'active'
+      WHERE tenant_id = ${tenantId} AND is_active = true
     `.catch((e) => {
       console.error("Staff error:", e);
       return [];

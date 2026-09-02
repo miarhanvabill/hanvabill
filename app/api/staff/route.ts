@@ -17,7 +17,7 @@ export async function GET(req: Request) {
         const [stats] = await sql`
           SELECT 
             COUNT(*) as total_staff,
-            COUNT(CASE WHEN status = 'active' THEN 1 END) as active_staff,
+            COUNT(CASE WHEN is_active = true THEN 1 END) as active_staff,
             COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as new_this_month
           FROM staff 
           WHERE tenant_id = ${tenantId}
