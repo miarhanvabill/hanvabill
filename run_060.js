@@ -1,7 +1,7 @@
 const { neon } = require('@neondatabase/serverless');
 
 async function run() {
-  const sql = neon('postgresql://neondb_owner:npg_1Ith8nUxyoDS@ep-long-scene-a19t43g8-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require');
+  const sql = neon("postgresql://neondb_owner:npg_zL01wFmKjDce@ep-muddy-pine-a1a7s3e4-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require");
   try {
     await sql`
       CREATE TABLE IF NOT EXISTS expenses (

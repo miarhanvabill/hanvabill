@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { IndianRupee, Plus, Filter, Download, Calendar, Receipt, TrendingUp, Edit, Trash2, Search } from "lucide-react"
+import { getExpenses, addExpense, deleteExpense } from "@/app/actions/expenses"
 
 interface Expense {
   id: number
@@ -18,7 +19,8 @@ interface Expense {
   category: string
   description: string
   amount: number
-  paymentMethod: string
+  payment_method?: string
+  paymentMethod?: string
   vendor?: string
   receipt?: string
   status: string
@@ -59,66 +61,15 @@ export default function ExpensesPage() {
 
   const loadExpenses = async () => {
     setLoading(true)
-    // Mock data
-    const mockExpenses: Expense[] = [
-      {
-        id: 1,
-        date: "2025-01-08",
-        category: "Office Supplies",
-        description: "Hair care products and styling tools",
-        amount: 2500.0,
-        paymentMethod: "Cash",
-        vendor: "Beauty Supply Co.",
-        status: "approved",
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 2,
-        date: "2025-01-07",
-        category: "Utilities",
-        description: "Electricity bill for January",
-        amount: 1800.0,
-        paymentMethod: "Bank Transfer",
-        status: "approved",
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 3,
-        date: "2025-01-06",
-        category: "Marketing",
-        description: "Social media advertising campaign",
-        amount: 3000.0,
-        paymentMethod: "Credit Card",
-        vendor: "Digital Marketing Agency",
-        status: "pending",
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 4,
-        date: "2025-01-05",
-        category: "Equipment",
-        description: "New hair dryer and styling chair",
-        amount: 15000.0,
-        paymentMethod: "Bank Transfer",
-        vendor: "Salon Equipment Ltd.",
-        status: "approved",
-        createdAt: new Date().toISOString(),
-      },
-      {
-        id: 5,
-        date: "2025-01-04",
-        category: "Maintenance",
-        description: "AC servicing and repair",
-        amount: 1200.0,
-        paymentMethod: "Cash",
-        vendor: "Cool Air Services",
-        status: "approved",
-        createdAt: new Date().toISOString(),
-      },
-    ]
-
-    setExpenses(mockExpenses)
-    setLoading(false)
+    try {
+      const data = await getExpenses()
+      // Normalize paymentMethod casing
+      setExpenses(data.map((e: any) => ({ ...e, paymentMethod: e.payment_method || e.paymentMethod })))
+    } catch (error) {
+      console.error("Failed to load expenses:", error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleAddExpense = async () => {
@@ -127,29 +78,43 @@ export default function ExpensesPage() {
       return
     }
 
-    const newExpense: Expense = {
-      id: expenses.length + 1,
-      date: expenseForm.date,
-      category: expenseForm.category,
-      description: expenseForm.description,
-      amount: Number.parseFloat(expenseForm.amount),
-      paymentMethod: expenseForm.paymentMethod,
-      vendor: expenseForm.vendor,
-      status: "pending",
-      createdAt: new Date().toISOString(),
-    }
+    try {
+      const newExpense = await addExpense({
+        date: expenseForm.date,
+        category: expenseForm.category,
+        description: expenseForm.description,
+        amount: Number.parseFloat(expenseForm.amount),
+        payment_method: expenseForm.paymentMethod,
+        vendor: expenseForm.vendor,
+      })
 
-    setExpenses([newExpense, ...expenses])
-    setShowAddModal(false)
-    setExpenseForm({
-      category: "",
-      description: "",
-      amount: "",
-      paymentMethod: "",
-      vendor: "",
-      date: new Date().toISOString().split("T")[0],
-    })
+      setExpenses([{ ...newExpense, paymentMethod: newExpense.payment_method || newExpense.paymentMethod }, ...expenses])
+      setShowAddModal(false)
+      setExpenseForm({
+        category: "",
+        description: "",
+        amount: "",
+        paymentMethod: "",
+        vendor: "",
+        date: new Date().toISOString().split("T")[0],
+      })
+    } catch (error) {
+      console.error("Failed to add expense:", error)
+      alert("Failed to add expense")
+    }
   }
+
+  const handleDeleteExpense = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this expense?")) return
+    try {
+      await deleteExpense(id)
+      setExpenses(expenses.filter(e => e.id !== id))
+    } catch (error) {
+      console.error("Failed to delete expense:", error)
+      alert("Failed to delete expense")
+    }
+  }
+
 
   const filteredExpenses = expenses.filter((expense) => {
     const matchesCategory = filterCategory === "all" || expense.category === filterCategory
@@ -434,7 +399,7 @@ export default function ExpensesPage() {
                             <Button variant="ghost" size="sm">
                               <Edit className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="sm" className="text-red-600">
+                            <Button variant="ghost" size="sm" className="text-red-600" onClick={() => handleDeleteExpense(expense.id)}>
                               <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
