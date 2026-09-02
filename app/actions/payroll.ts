@@ -13,14 +13,19 @@ export async function generatePayrollRun(periodStart: string, periodEnd: string)
         RETURNING *
       `;
       
-      // 2. Fetch active staff for the tenant
-      const staffList = await sql`SELECT * FROM staff WHERE is_active = true AND tenant_id = ${tenantId}`;
+      // 2. Fetch active staff for the tenant with their commission profiles
+      const staffList = await sql`
+        SELECT s.*, cp.commission_type, cp.base_rate 
+        FROM staff s
+        LEFT JOIN commission_profiles cp ON s.commission_profile_id = cp.id
+        WHERE s.is_active = true AND s.tenant_id = ${tenantId}
+      `;
       
       // 3. For each staff, calculate pay and create entry
       for (const staff of staffList) {
         // Calculate commissions
         const splits = await sql`
-          SELECT SUM(revenue_amount) as total_revenue
+          SELECT SUM(revenue_amount) as total_revenue, COUNT(s.id) as split_count
           FROM staff_commission_splits s
           JOIN invoices i ON s.invoice_id = i.id
           WHERE s.staff_id = ${staff.id} 
@@ -30,7 +35,41 @@ export async function generatePayrollRun(periodStart: string, periodEnd: string)
         `;
         
         const totalRevenue = parseFloat(splits[0]?.total_revenue || "0");
-        const commission = totalRevenue * 0.10; // Simple 10% commission
+        const splitCount = parseInt(splits[0]?.split_count || "0");
+        
+        let commission = 0;
+        
+        if (staff.commission_profile_id && staff.commission_type) {
+          const baseRate = parseFloat(staff.base_rate || "0");
+          
+          if (staff.commission_type === 'percentage') {
+            commission = totalRevenue * (baseRate / 100);
+          } else if (staff.commission_type === 'fixed') {
+            commission = splitCount * baseRate;
+          } else if (staff.commission_type === 'tiered') {
+            const tiers = await sql`
+              SELECT * FROM commission_tiers 
+              WHERE profile_id = ${staff.commission_profile_id} 
+              ORDER BY min_amount ASC
+            `;
+            
+            if (tiers.length > 0) {
+              for (const tier of tiers) {
+                const min = parseFloat(tier.min_amount);
+                const max = parseFloat(tier.max_amount);
+                const rate = parseFloat(tier.rate);
+                
+                if (totalRevenue > min) {
+                  const applicableRevenue = Math.min(totalRevenue, max) - min;
+                  commission += applicableRevenue * (rate / 100);
+                }
+              }
+            } else {
+              commission = totalRevenue * (baseRate / 100);
+            }
+          }
+        }
+        
         const basePay = parseFloat(staff.salary || "0");
         const totalPay = basePay + commission;
 
