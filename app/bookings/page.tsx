@@ -948,6 +948,12 @@ export default function BookingsPage({ searchParams }: { searchParams: { [key: s
             <Upload className="w-4 h-4 mr-2" />
             Bulk Upload
           </Button>
+          <Link href="/bookings/waitlist">
+            <Button variant="outline" className="gap-2 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-200">
+              <Clock className="w-4 h-4" />
+              Waitlist
+            </Button>
+          </Link>
           <Link href="/bookings/create">
             <Button className="gap-2">
               <Plus className="w-4 h-4" />

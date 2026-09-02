@@ -189,6 +189,17 @@ export default function PublicBookingPage({ params }: { params: Promise<{ slug: 
   const [submitting, setSubmitting] = useState(false)
   const [enquirySuccess, setEnquirySuccess] = useState(false)
 
+const [waitlistModalOpen, setWaitlistModalOpen] = useState(false)
+const [waitlistForm, setWaitlistForm] = useState({
+  name: "",
+  phone: "",
+  email: "",
+  time_preference: "any",
+  notes: ""
+})
+const [waitlistSubmitting, setWaitlistSubmitting] = useState(false)
+const [waitlistSuccess, setWaitlistSuccess] = useState(false)
+
 // Customer Portal Auth State
 const [portalCustomer, setPortalCustomer] = useState<PortalCustomer | null>(null)
 const [portalToken, setPortalToken] = useState<string | null>(null)
@@ -612,6 +623,110 @@ const handleEnquirySubmit = async (e: React.FormEvent) => {
       setSubmitting(false);
     }
   }
+
+const handleJoinWaitlist = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!waitlistForm.name || !waitlistForm.phone || !selectedDate) {
+      alert("Please provide name, phone, and ensure a date is selected.");
+      return;
+    }
+    setWaitlistSubmitting(true);
+    try {
+      const res = await fetch('/api/public/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId,
+          customer: {
+            name: waitlistForm.name,
+            phone: waitlistForm.phone,
+            email: waitlistForm.email
+          },
+          preferred_date: format(selectedDate, "yyyy-MM-dd"),
+          time_preference: waitlistForm.time_preference,
+          notes: waitlistForm.notes
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to join waitlist");
+      setWaitlistSuccess(true);
+    } catch (err: any) {
+      alert(err.message || "Failed to join waitlist");
+    } finally {
+      setWaitlistSubmitting(false);
+    }
+  }
+
+  const WaitlistModal = () => {
+    if (!waitlistModalOpen) return null;
+    return (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setWaitlistModalOpen(false); setWaitlistSuccess(false); }} />
+        <div className="relative bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
+          <button className="absolute top-4 right-4 text-gray-400 hover:text-gray-700" onClick={() => { setWaitlistModalOpen(false); setWaitlistSuccess(false); }}>
+            <X className="w-5 h-5" />
+          </button>
+          
+          {waitlistSuccess ? (
+            <div className="text-center py-8">
+              <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <CheckCircle className="w-10 h-10" />
+              </div>
+              <h2 className="text-2xl font-black mb-2">You're on the list!</h2>
+              <p className="text-gray-600">We'll notify you if a spot opens up on {selectedDate ? format(selectedDate, "MMMM do, yyyy") : ""}.</p>
+              <Button onClick={() => { setWaitlistModalOpen(false); setWaitlistSuccess(false); }} className="w-full mt-8 bg-black hover:bg-gray-800 text-white rounded-xl h-12 font-bold">
+                Done
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-black">Join Waitlist</h2>
+                <p className="text-gray-500 text-sm mt-1">
+                  For {selectedDate ? format(selectedDate, "MMM do, yyyy") : "selected date"}
+                </p>
+              </div>
+              <form onSubmit={handleJoinWaitlist} className="space-y-4">
+                <div>
+                  <Label className="font-semibold">Name *</Label>
+                  <Input required placeholder="Your name" value={waitlistForm.name} onChange={e => setWaitlistForm({...waitlistForm, name: e.target.value})} className="mt-1 h-12 rounded-2xl" />
+                </div>
+                <div>
+                  <Label className="font-semibold">Phone *</Label>
+                  <Input required type="tel" placeholder="Your phone number" value={waitlistForm.phone} onChange={e => setWaitlistForm({...waitlistForm, phone: e.target.value})} className="mt-1 h-12 rounded-2xl" />
+                </div>
+                <div>
+                  <Label className="font-semibold">Email (Optional)</Label>
+                  <Input type="email" placeholder="Your email" value={waitlistForm.email} onChange={e => setWaitlistForm({...waitlistForm, email: e.target.value})} className="mt-1 h-12 rounded-2xl" />
+                </div>
+                <div>
+                  <Label className="font-semibold">Time Preference</Label>
+                  <Select value={waitlistForm.time_preference} onValueChange={(val) => setWaitlistForm({...waitlistForm, time_preference: val})}>
+                    <SelectTrigger className="mt-1 h-12 rounded-2xl">
+                      <SelectValue placeholder="Any time" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="any">Any time</SelectItem>
+                      <SelectItem value="morning">Morning (before 12 PM)</SelectItem>
+                      <SelectItem value="afternoon">Afternoon (12 PM - 4 PM)</SelectItem>
+                      <SelectItem value="evening">Evening (after 4 PM)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="font-semibold">Notes (Optional)</Label>
+                  <Textarea placeholder="Any specific requirements?" value={waitlistForm.notes} onChange={e => setWaitlistForm({...waitlistForm, notes: e.target.value})} className="mt-1 rounded-2xl resize-none" rows={2} />
+                </div>
+                <Button type="submit" disabled={waitlistSubmitting} className="w-full h-12 rounded-2xl bg-black hover:bg-gray-800 text-base font-bold mt-4">
+                  {waitlistSubmitting ? 'Joining...' : 'Join Waitlist'}
+                </Button>
+              </form>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   if (loading) {
     
@@ -1814,9 +1929,13 @@ const ProfileDrawer = () => (
                    <div className="bg-gray-50 p-6 rounded-2xl text-center border border-gray-100">
                       <Clock className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                       <p className="font-bold text-gray-700">No time slots available for this day.</p>
-                      <p className="text-sm text-gray-500">Please select another date.</p>
+                      <p className="text-sm text-gray-500 mb-4">Please select another date, or join the waitlist.</p>
+                      <Button onClick={() => setWaitlistModalOpen(true)} className="bg-black text-white hover:bg-gray-800 rounded-xl px-6 py-2">
+                        Join Waitlist
+                      </Button>
                    </div>
                 ) : (
+                   <>
                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                      {timeSlots.map(time => {
                        const isSelected = selectedTime === time;
@@ -1849,6 +1968,13 @@ const ProfileDrawer = () => (
                        )
                      })}
                    </div>
+                   <div className="mt-6 flex flex-col items-center justify-center p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                      <p className="text-sm font-semibold text-gray-600 mb-3 text-center">Can't find a suitable time?</p>
+                      <Button variant="outline" onClick={() => setWaitlistModalOpen(true)} className="w-full sm:w-auto font-bold border-2 border-gray-200 rounded-xl h-11 px-8">
+                         Join Waitlist
+                      </Button>
+                   </div>
+                   </>
                 )}
               </div>
             )}
@@ -2114,6 +2240,7 @@ const ProfileDrawer = () => (
           </Card>
         </div>
       )}
+      <WaitlistModal />
     </div>
   )
 }
