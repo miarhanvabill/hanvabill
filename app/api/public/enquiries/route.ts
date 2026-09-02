@@ -23,11 +23,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Tenant not found or inactive" }, { status: 404 });
     }
 
+    const formattedNotes = `Email: ${email || 'N/A'}\nSubject: ${subject || 'General Enquiry'}\nMessage: ${message}`;
+
     const newEnquiry = await sql`
       INSERT INTO enquiries (
-        tenant_id, name, phone, email, subject, message, status
+        tenant_id, customer_name, phone_number, notes, status, source
       ) VALUES (
-        ${tenantId}, ${name}, ${phone}, ${email || null}, ${subject || 'General Enquiry'}, ${message}, 'new'
+        ${tenantId}, ${name}, ${phone}, ${formattedNotes}, 'new', 'public_portal'
       )
       RETURNING id
     `;
