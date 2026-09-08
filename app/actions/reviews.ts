@@ -1,7 +1,6 @@
-// app/actions/reviews.ts
-
 "use server"
-import { neon } from "@neondatabase/serverless"
+
+import { sql as baseSql } from "@/lib/db"
 
 import { withTenantAuth } from "@/lib/withTenantAuth"
 import { revalidatePath } from "next/cache"
@@ -107,10 +106,7 @@ export async function ensureReviewsTable(sql: any) {
 }
 
 export async function submitReviewPublic(tenantId: string, bookingId: number, rating: number, reviewText: string = '') {
-  // We can't use withTenantAuth because this is from the public invoice page!
-  // So we import neon directly.
-  
-  const sql = neon(process.env.DATABASE_URL!);
+  const sql = baseSql;
   
   try {
     await ensureReviewsTable(sql);

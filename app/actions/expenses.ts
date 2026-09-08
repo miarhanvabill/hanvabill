@@ -1,11 +1,9 @@
 'use server'
 
-import { neon } from '@neondatabase/serverless'
-import { withTenantAuth } from '@/lib/auth'
+import { withTenantAuth } from '@/lib/withTenantAuth'
 
 export async function createExpensesTable() {
-  return withTenantAuth(async ({ tenantId }) => {
-    const sql = neon(process.env.DATABASE_URL!)
+  return withTenantAuth(async ({ sql, tenantId }) => {
     await sql`
       CREATE TABLE IF NOT EXISTS expenses (
           id SERIAL PRIMARY KEY,
@@ -27,8 +25,7 @@ export async function createExpensesTable() {
 }
 
 export async function getExpenses() {
-  return withTenantAuth(async ({ tenantId }) => {
-    const sql = neon(process.env.DATABASE_URL!)
+  return withTenantAuth(async ({ sql, tenantId }) => {
     const data = await sql`
       SELECT * FROM expenses 
       WHERE tenant_id = ${tenantId}
@@ -39,8 +36,7 @@ export async function getExpenses() {
 }
 
 export async function addExpense(expenseData: any) {
-  return withTenantAuth(async ({ tenantId }) => {
-    const sql = neon(process.env.DATABASE_URL!)
+  return withTenantAuth(async ({ sql, tenantId }) => {
     const result = await sql`
       INSERT INTO expenses (
         tenant_id, date, category, description, amount, payment_method, vendor, receipt_url, status
@@ -56,8 +52,7 @@ export async function addExpense(expenseData: any) {
 }
 
 export async function updateExpenseStatus(id: number, status: string) {
-  return withTenantAuth(async ({ tenantId }) => {
-    const sql = neon(process.env.DATABASE_URL!)
+  return withTenantAuth(async ({ sql, tenantId }) => {
     const result = await sql`
       UPDATE expenses 
       SET status = ${status}, updated_at = CURRENT_TIMESTAMP
@@ -69,8 +64,7 @@ export async function updateExpenseStatus(id: number, status: string) {
 }
 
 export async function deleteExpense(id: number) {
-  return withTenantAuth(async ({ tenantId }) => {
-    const sql = neon(process.env.DATABASE_URL!)
+  return withTenantAuth(async ({ sql, tenantId }) => {
     await sql`
       DELETE FROM expenses 
       WHERE id = ${id} AND tenant_id = ${tenantId}

@@ -1,31 +1,66 @@
 // lib/withTenantAuth.ts
-import { auth } from "@clerk/nextjs/server"
+import { auth, clerkClient } from "@clerk/nextjs/server"
 import { getAuthenticatedSql } from "./db"
 
 export async function withTenantAuth<T>(
   handler: (params: {
-    sql: any,
-    tenantKey: string,
-    tenantId: string,
+    sql: any
+    tenantKey: string
+    tenantId: string
+    orgId?: string
     request?: Request
   }) => Promise<T>,
   request?: Request
 ): Promise<T> {
-  const { userId, orgId, orgSlug } = await auth()
+  try {
+    const authData = await auth()
+    let userId = authData?.userId
+    let orgId = authData?.orgId
+    let orgSlug = authData?.orgSlug
 
-  if (!userId) {
-    throw new Error("Unauthorized")
+    // 1. If user is authenticated but no active org is in session, auto-resolve their organization from Clerk
+    if (!orgId && userId) {
+      try {
+        const client = await clerkClient()
+        const userOrgs = await client.users.getOrganizationMembershipList({ userId })
+        if (userOrgs?.data && userOrgs.data.length > 0) {
+          const firstMembership = userOrgs.data[0]
+          orgId = firstMembership.organization.id
+          orgSlug = firstMembership.organization.slug || orgSlug
+        }
+      } catch (clerkErr) {
+        console.warn("[withTenantAuth] Failed to auto-resolve user org:", clerkErr)
+      }
+    }
+
+    if (!userId) {
+      throw new Error("Unauthorized")
+    }
+    if (!orgId && !orgSlug) {
+      throw new Error("Organization required")
+    }
+
+    // 2. If orgSlug is missing, try fetching it
+    if (orgId && !orgSlug) {
+      try {
+        const client = await clerkClient()
+        const org = await client.organizations.getOrganization({ organizationId: orgId })
+        if (org?.slug) {
+          orgSlug = org.slug
+        }
+      } catch (orgErr) {
+        console.warn("[withTenantAuth] Failed to fetch organization details:", orgErr)
+      }
+    }
+
+    const tenantKey = orgSlug || orgId || "default"
+    const { sql, tenantId } = await getAuthenticatedSql(tenantKey, orgId || undefined)
+
+    return await handler({ sql, tenantKey, tenantId, orgId: orgId || undefined, request })
+  } catch (err: any) {
+    console.error("[WITH_TENANT_AUTH_FATAL]", err?.message || err)
+    throw err
   }
-  if (!orgId) {
-    throw new Error("Organization required")
-  }
-
-  const tenantKey = orgSlug ?? orgId
-
-  // Get the tenant-aware SQL client and tenant metadata
-  const { sql, tenantId } = await getAuthenticatedSql(tenantKey)
-
-  return handler({ sql, tenantKey, tenantId, request })
 }
 
 // Make sure this is the only export from this file

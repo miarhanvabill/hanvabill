@@ -1,6 +1,5 @@
-// app/actions/invoices.ts
 "use server"
-import { neon } from "@neondatabase/serverless"
+import { sql as baseSql } from "@/lib/db"
 import { unstable_noStore as noStore } from "next/cache"
 
 import { withTenantAuth } from '@/lib/withTenantAuth';
@@ -165,8 +164,7 @@ export async function getInvoiceByShareToken(token: string) {
   noStore();
   try {
     // PUBLIC endpoint: Do not use withTenantAuth. Look up by unguessable token.
-    
-    const sql = neon(process.env.DATABASE_URL!);
+    const sql = baseSql;
     
     const result = await sql`
       SELECT i.*, c.full_name as customer_name, c.phone_number as customer_phone, c.email as customer_email

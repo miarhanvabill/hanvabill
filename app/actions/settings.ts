@@ -29,17 +29,19 @@ async function ensureStoreSettingsTable(sql: any) {
 }
 
 export async function getBusinessSettings(): Promise<BusinessSettings> {
-  return await withTenantAuth(async ({ sql, tenantId }) => {
-    return await cacheFetch(`business_settings:${tenantId}`, async () => {
+  try {
+    return await withTenantAuth(async ({ sql, tenantId }) => {
       try {
-        await ensureStoreSettingsTable(sql)
+        return await cacheFetch(`business_settings:${tenantId}`, async () => {
+          try {
+            await ensureStoreSettingsTable(sql)
 
-        const rows = await sql`
-          SELECT setting_key, setting_value, setting_type
-          FROM store_settings
-          WHERE tenant_id = ${tenantId}
-          ORDER BY setting_key
-        `
+            const rows = await sql`
+              SELECT setting_key, setting_value, setting_type
+              FROM store_settings
+              WHERE tenant_id = ${String(tenantId)}
+              ORDER BY setting_key
+            `
 
         const defaultSettings: BusinessSettings = {
         profile: {
@@ -409,7 +411,132 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
       }
     }
     }, 300)
+    } catch (cacheErr) {
+      console.warn("[getBusinessSettings] Cache/fetch error:", cacheErr)
+      return defaultSettings
+    }
   })
+  } catch (authErr) {
+    console.warn("[getBusinessSettings] Auth/tenant error, returning fallback:", authErr)
+    return {
+      profile: {
+        salonName: "Hanva salon",
+        ownerName: "Gaurav",
+        email: "gaurav@hanva.com",
+        phone: "+919321501389",
+        address: "123 Main Street, City, State 12345",
+        website: "www.hanva.com",
+        googleMyBusinessUrl: "",
+        description: "Premium salon services with affordable pricing",
+        logo: "",
+        coverImage: "",
+        socialMedia: { facebook: "", instagram: "", twitter: "", whatsapp: "+919321501289" },
+      },
+      business: {
+        openTime: "09:00",
+        closeTime: "20:00",
+        workingDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+        appointmentDuration: 30,
+        advanceBookingDays: 30,
+        cancellationPolicy: "24 hours advance notice required",
+        taxRate: 18,
+        serviceCharge: 0,
+        currency: "INR",
+        timezone: "Asia/Kolkata",
+        language: "English",
+        dateFormat: "DD/MM/YYYY",
+        timeFormat: "12-hour",
+      },
+      notifications: {
+        emailNotifications: true,
+        smsNotifications: true,
+        pushNotifications: true,
+        appointmentReminders: true,
+        paymentAlerts: true,
+        lowStockAlerts: true,
+        customerBirthdays: true,
+        marketingEmails: false,
+        staffNotifications: true,
+        reviewAlerts: true,
+        reminderTiming: "24",
+        emailTemplate: "default",
+        smsTemplate: "default",
+      },
+      payments: {
+        acceptCash: true,
+        acceptCards: true,
+        acceptUPI: true,
+        acceptWallets: true,
+        autoInvoicing: true,
+        paymentTerms: "immediate",
+        lateFee: 0,
+        discountLimit: 20,
+        taxInclusive: true,
+        roundingRules: "nearest",
+        receiptTemplate: "default",
+        paymentGateway: "razorpay",
+      },
+      whatsapp: {
+        enabled: false,
+        resellerToken: "",
+        phoneNumberId: "",
+        autoInvoice: false,
+        autoReminder: false,
+      },
+      security: {
+        twoFactorAuth: false,
+        sessionTimeout: 60,
+        passwordExpiry: 90,
+        loginAttempts: 5,
+        dataBackup: true,
+        auditLog: true,
+        ipRestriction: false,
+        encryptData: true,
+        autoLogout: true,
+        securityAlerts: true,
+        dataRetention: 365,
+        backupFrequency: "daily",
+      },
+      appearance: {
+        theme: "light",
+        primaryColor: "#3B82F6",
+        secondaryColor: "#6B7280",
+        accentColor: "#10B981",
+        fontSize: "medium",
+        compactMode: false,
+        showAnimations: true,
+        customLogo: "",
+        brandColors: true,
+        sidebarStyle: "expanded",
+        headerStyle: "default",
+        cardStyle: "elevated",
+      },
+      integrations: {
+        googleCalendar: false,
+        whatsappBusiness: false,
+        emailMarketing: false,
+        smsGateway: false,
+        paymentGateway: false,
+        socialMedia: false,
+        analytics: false,
+        cloudStorage: false,
+        apiAccess: false,
+        webhooks: false,
+      },
+      system: {
+        autoBackup: true,
+        backupLocation: "cloud",
+        dataSync: true,
+        offlineMode: false,
+        cacheSize: "medium",
+        performanceMode: "balanced",
+        debugMode: false,
+        maintenanceMode: false,
+        updateChannel: "stable",
+        errorReporting: true,
+      },
+    }
+  }
 }
 
 export async function updateBusinessSettings(

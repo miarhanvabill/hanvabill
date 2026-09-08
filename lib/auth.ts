@@ -1,14 +1,6 @@
 // lib/auth.ts
 import { auth } from "@clerk/nextjs/server"
-import { neon } from "@neondatabase/serverless"
-import type { NextRequest } from "next/server"
-
-// Validate database URL
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not defined in environment variables.")
-}
-
-const sql = neon(process.env.DATABASE_URL!)
+import { sql } from "@/lib/db"
 
 export interface TenantAuth {
   userId: string

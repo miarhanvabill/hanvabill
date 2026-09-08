@@ -49,9 +49,9 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     userId: null,
     name: "",
     email: "",
-    role: "Admin",
-    isAdmin: true,
-    permissions: ALL_SYSTEM_PERMISSIONS,
+    role: "Staff",
+    isAdmin: false,
+    permissions: STAFF_DEFAULT_PERMISSIONS,
   })
   const [isLoading, setIsLoading] = useState(true)
 
@@ -63,15 +63,6 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       }
     } catch (err) {
       console.error("Failed to load permissions:", err)
-      // Always fallback safely to admin on error so owner is never locked out
-      setData({
-        userId: null,
-        name: "Admin",
-        email: "",
-        role: "Admin",
-        isAdmin: true,
-        permissions: ALL_SYSTEM_PERMISSIONS,
-      })
     } finally {
       setIsLoading(false)
     }

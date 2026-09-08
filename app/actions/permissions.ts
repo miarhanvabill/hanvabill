@@ -52,6 +52,7 @@ export async function getMyPermissions(): Promise<CurrentUserPermissions> {
 
     return await withTenantAuth(async ({ sql, tenantId }) => {
       try {
+        const tid = String(tenantId)
         const userRows = await sql`
           SELECT 
             u.id,
@@ -63,11 +64,11 @@ export async function getMyPermissions(): Promise<CurrentUserPermissions> {
             (
               SELECT jsonb_agg(p.permission_id)
               FROM tenant_role_permissions p
-              WHERE p.role_id = u.role_id
+              WHERE p.role_id::text = u.role_id::text
             ) as role_permissions
           FROM tenant_users u
-          LEFT JOIN tenant_roles r ON u.role_id = r.id
-          WHERE u.tenant_id = ${tenantId} AND u.clerk_user_id = ${userId}
+          LEFT JOIN tenant_roles r ON u.role_id::text = r.id::text
+          WHERE u.tenant_id = ${tid} AND u.clerk_user_id = ${userId}
           LIMIT 1
         `
 
@@ -77,9 +78,9 @@ export async function getMyPermissions(): Promise<CurrentUserPermissions> {
           const isAdmin = roleName.toLowerCase() === "admin" || isClerkAdmin
 
           let perms: string[] = []
-          if (Array.isArray(u.custom_permissions) && u.custom_permissions.length > 0) {
+          if (Array.isArray(u.custom_permissions)) {
             perms = u.custom_permissions
-          } else if (Array.isArray(u.role_permissions) && u.role_permissions.length > 0) {
+          } else if (Array.isArray(u.role_permissions)) {
             perms = u.role_permissions
           } else {
             perms = isAdmin ? ALL_SYSTEM_PERMISSIONS : STAFF_DEFAULT_PERMISSIONS
@@ -95,7 +96,7 @@ export async function getMyPermissions(): Promise<CurrentUserPermissions> {
           }
         }
 
-        // Fallback for user in org but not in tenant_users table yet
+        // Fallback for user in org but not in tenant_users table yet: default to Staff
         return {
           userId,
           name: "Staff",
@@ -108,11 +109,11 @@ export async function getMyPermissions(): Promise<CurrentUserPermissions> {
         console.error("Error querying user permissions from DB:", dbErr)
         return {
           userId,
-          name: "Admin",
+          name: "Staff",
           email: "",
-          role: "Admin",
-          isAdmin: true,
-          permissions: ALL_SYSTEM_PERMISSIONS,
+          role: "Staff",
+          isAdmin: false,
+          permissions: STAFF_DEFAULT_PERMISSIONS,
         }
       }
     })
@@ -120,11 +121,11 @@ export async function getMyPermissions(): Promise<CurrentUserPermissions> {
     console.error("Error in getMyPermissions:", err)
     return {
       userId: null,
-      name: "Admin",
+      name: "Staff",
       email: "",
-      role: "Admin",
-      isAdmin: true,
-      permissions: ALL_SYSTEM_PERMISSIONS,
+      role: "Staff",
+      isAdmin: false,
+      permissions: STAFF_DEFAULT_PERMISSIONS,
     }
   }
 }
