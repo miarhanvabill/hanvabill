@@ -10,6 +10,9 @@ import {
 } from "@/app/actions/loyalty"
 
 export async function GET(request: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
   return await withTenantAuth(async ({ tenantId }) => {
     try {
       console.log("🔍 === DEBUG START ===")

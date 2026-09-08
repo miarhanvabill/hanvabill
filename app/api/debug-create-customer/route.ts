@@ -3,6 +3,9 @@ import { withTenantAuth } from "@/lib/withTenantAuth"
 import { getTenantSql } from "@/lib/db"
 
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
   try {
     return await withTenantAuth(async ({ tenantId, tenantKey }) => {
       // Create a SQL client with tenant context built into the connection

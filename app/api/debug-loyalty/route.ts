@@ -3,6 +3,9 @@ import { getCustomerLoyalty, getLoyaltySettings } from "@/app/actions/loyalty";
 import { withTenantAuth } from "@/lib/withTenantAuth";
 
 export async function GET(req: Request) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
   return await withTenantAuth(async ({ tenantId }) => {
     try {
       const { searchParams } = new URL(req.url);

@@ -50,7 +50,10 @@ export async function POST(req: NextRequest) {
       WHERE tenant_id = ${parseInt(tenantId)}
         AND phone = ${normalizedPhone}
         AND created_at > NOW() - INTERVAL '10 minutes'
-    `.catch(() => [{ count: 0 }])
+    `.catch((err) => {
+      console.error('Rate limit check failed:', err);
+      return [{ count: 999 }];
+    })
 
     if (Number(recentOTPs[0]?.count) >= 3) {
       return NextResponse.json({ error: 'Too many OTP requests. Please wait 10 minutes.' }, { status: 429 })

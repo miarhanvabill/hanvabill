@@ -20,13 +20,10 @@ const isPublicRoute = createRouteMatcher([
   "/api/analytics",
   "/test-analytics",
   "/api/health",
-  "/debug",
-  "/api/debug-migrations",
   "/inv/(.*)",
   "/login",
   "/api/webhooks(.*)",
   "/api/public/(.*)",
-  "/api/debug-schema",
   "/test-forms(.*)",
 ]);
 

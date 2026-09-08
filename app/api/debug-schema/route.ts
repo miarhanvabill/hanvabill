@@ -4,6 +4,9 @@ import { sql } from '@/lib/db';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
   try {
     await sql`
       CREATE TABLE IF NOT EXISTS notification_dismissals (

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
   return NextResponse.json({
     clerkSecretKey: process.env.CLERK_SECRET_KEY ? "SET" : "MISSING",
     clerkSecretKeyLength: process.env.CLERK_SECRET_KEY?.length || 0,
