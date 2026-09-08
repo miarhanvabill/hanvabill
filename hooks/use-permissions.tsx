@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useMemo } from "react"
 import { getMyPermissions, type CurrentUserPermissions } from "@/app/actions/permissions"
-import { ALL_SYSTEM_PERMISSIONS } from "@/app/actions/tenant-roles"
+import { ALL_SYSTEM_PERMISSIONS, STAFF_DEFAULT_PERMISSIONS } from "@/lib/permissions-constants"
 
 interface PermissionsContextType extends CurrentUserPermissions {
   isLoading: boolean

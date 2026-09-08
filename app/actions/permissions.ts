@@ -2,7 +2,7 @@
 
 import { auth } from "@clerk/nextjs/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
-import { ALL_SYSTEM_PERMISSIONS, STAFF_DEFAULT_PERMISSIONS } from "./tenant-roles"
+import { ALL_SYSTEM_PERMISSIONS, STAFF_DEFAULT_PERMISSIONS } from "@/lib/permissions-constants"
 
 export interface CurrentUserPermissions {
   userId: string | null

@@ -3,8 +3,7 @@
 import { clerkClient, auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
 import { withTenantAuth } from "@/lib/withTenantAuth"
-import { cacheDel } from "@/lib/cache"
-import { ALL_SYSTEM_PERMISSIONS, STAFF_DEFAULT_PERMISSIONS } from "./tenant-roles"
+import { ALL_SYSTEM_PERMISSIONS, STAFF_DEFAULT_PERMISSIONS } from "@/lib/permissions-constants"
 
 export interface TenantUser {
   id: string
