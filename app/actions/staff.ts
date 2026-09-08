@@ -37,7 +37,6 @@ export async function getStaff(): Promise<Staff[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     return await cacheFetch(`staff:${tenantId}`, async () => {
       try {
-        console.log("[v0] Attempting to fetch staff...")
 
         const staffResult = await sql`
           SELECT 
@@ -56,7 +55,6 @@ export async function getStaff(): Promise<Staff[]> {
           ORDER BY s.name
         `
 
-        console.log("[v0] Raw staffResult:", staffResult)
 
         const staffRows = staffResult as Staff[]
 
@@ -77,7 +75,6 @@ export async function getStaff(): Promise<Staff[]> {
           is_active: Boolean(staff.is_active),
         })) as Staff[]
 
-        console.log("[v0] Successfully fetched", formattedStaff.length, "staff members")
         return formattedStaff
       } catch (error) {
         console.error("[v0] Error fetching staff:", error)
