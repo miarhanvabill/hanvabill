@@ -155,7 +155,9 @@ async function ensureLoyaltySettingsSchema(sql: any, tenantId: string) {
 async function readSettings(sql: any, tenantId: string): Promise<LoyaltySettings> {
   await ensureLoyaltySettingsSchema(sql, tenantId)
   const result = await sql`
-    SELECT *
+    SELECT id, tenant_id, is_active, earn_on_purchase_enabled, points_per_rupee, 
+           max_redemption_percent, minimum_order_amount, cashback_percentage, 
+           welcome_bonus, referral_bonus, points_validity_days
     FROM loyalty_settings
     WHERE tenant_id = ${tenantId}
     ORDER BY id DESC

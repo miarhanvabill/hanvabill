@@ -20,6 +20,29 @@ export async function generatePayrollRun(periodStart: string, periodEnd: string)
         LEFT JOIN commission_profiles cp ON s.commission_profile_id = cp.id
         WHERE s.is_active = true AND s.tenant_id = ${tenantId}
       `;
+
+      // 2.5 Pre-fetch all commission tiers for the relevant profiles
+      const profileIds = staffList
+        .filter(s => s.commission_type === 'tiered' && s.commission_profile_id)
+        .map(s => s.commission_profile_id);
+      
+      const uniqueProfileIds = [...new Set(profileIds)];
+      const tiersMap = new Map();
+      
+      if (uniqueProfileIds.length > 0) {
+        const allTiers = await sql`
+          SELECT * FROM commission_tiers 
+          WHERE profile_id = ANY(${uniqueProfileIds}) 
+          ORDER BY min_amount ASC
+        `;
+        
+        for (const tier of allTiers) {
+          if (!tiersMap.has(tier.profile_id)) {
+            tiersMap.set(tier.profile_id, []);
+          }
+          tiersMap.get(tier.profile_id).push(tier);
+        }
+      }
       
       // 3. For each staff, calculate pay and create entry
       for (const staff of staffList) {
@@ -47,11 +70,7 @@ export async function generatePayrollRun(periodStart: string, periodEnd: string)
           } else if (staff.commission_type === 'fixed') {
             commission = splitCount * baseRate;
           } else if (staff.commission_type === 'tiered') {
-            const tiers = await sql`
-              SELECT * FROM commission_tiers 
-              WHERE profile_id = ${staff.commission_profile_id} 
-              ORDER BY min_amount ASC
-            `;
+            const tiers = tiersMap.get(staff.commission_profile_id) || [];
             
             if (tiers.length > 0) {
               for (const tier of tiers) {
