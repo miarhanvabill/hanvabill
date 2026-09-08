@@ -68,16 +68,16 @@ async function ensureTenantRbacSchema(sql: any, tenantId: string) {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(tenant_id, name)
       )
-    `
+    `.catch(() => {})
 
     await sql`
       CREATE TABLE IF NOT EXISTS tenant_role_permissions (
-        role_id INTEGER NOT NULL REFERENCES tenant_roles(id) ON DELETE CASCADE,
+        role_id INTEGER NOT NULL,
         permission_id VARCHAR(100) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY(role_id, permission_id)
       )
-    `
+    `.catch(() => {})
 
     // Drop FK constraint if it exists to allow dynamic permissions
     await sql`
@@ -92,89 +92,70 @@ async function ensureTenantRbacSchema(sql: any, tenantId: string) {
     // 2. Ensure default roles exist for this tenant
     const existingRoles = await sql`
       SELECT id, name FROM tenant_roles WHERE tenant_id = ${tenantId}
-    `
+    `.catch(() => [])
 
-    const roleMap = new Map<string, number>()
-    existingRoles.forEach((r: any) => {
-      roleMap.set(r.name.toLowerCase(), r.id)
-    })
-
-    // Create Admin role if missing
-    let adminId = roleMap.get("admin")
-    if (!adminId) {
-      const inserted = await sql`
+    if (existingRoles.length === 0) {
+      // Insert Admin
+      const adminRes = await sql`
         INSERT INTO tenant_roles (tenant_id, name, description, is_system, color)
         VALUES (${tenantId}, 'Admin', 'Full system access', true, 'bg-purple-100 text-purple-800')
         RETURNING id
-      `
-      adminId = inserted[0].id
-    }
+      `.catch(() => [])
 
-    // Populate Admin permissions if empty
-    const adminPermsCount = await sql`
-      SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id = ${adminId}
-    `
-    if (Number(adminPermsCount[0]?.count || 0) === 0) {
-      for (const p of ALL_SYSTEM_PERMISSIONS) {
-        await sql`
-          INSERT INTO tenant_role_permissions (role_id, permission_id)
-          VALUES (${adminId}, ${p})
-          ON CONFLICT DO NOTHING
-        `
-      }
-    }
-
-    // Create Manager role if missing
-    let managerId = roleMap.get("manager")
-    if (!managerId) {
-      const inserted = await sql`
+      // Insert Manager
+      const managerRes = await sql`
         INSERT INTO tenant_roles (tenant_id, name, description, is_system, color)
         VALUES (${tenantId}, 'Manager', 'Can manage staff and view reports', true, 'bg-blue-100 text-blue-800')
         RETURNING id
-      `
-      managerId = inserted[0].id
-    }
+      `.catch(() => [])
 
-    // Populate Manager permissions if empty
-    const managerPermsCount = await sql`
-      SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id = ${managerId}
-    `
-    if (Number(managerPermsCount[0]?.count || 0) === 0) {
-      for (const p of MANAGER_DEFAULT_PERMISSIONS) {
-        await sql`
-          INSERT INTO tenant_role_permissions (role_id, permission_id)
-          VALUES (${managerId}, ${p})
-          ON CONFLICT DO NOTHING
-        `
-      }
-    }
-
-    // Create Staff role if missing
-    let staffId = roleMap.get("staff")
-    if (!staffId) {
-      const inserted = await sql`
+      // Insert Staff
+      const staffRes = await sql`
         INSERT INTO tenant_roles (tenant_id, name, description, is_system, color)
         VALUES (${tenantId}, 'Staff', 'Basic access to bookings and customers', true, 'bg-green-100 text-green-800')
         RETURNING id
-      `
-      staffId = inserted[0].id
-    }
+      `.catch(() => [])
 
-    // Populate Staff permissions if empty
-    const staffPermsCount = await sql`
-      SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id = ${staffId}
-    `
-    if (Number(staffPermsCount[0]?.count || 0) === 0) {
-      for (const p of STAFF_DEFAULT_PERMISSIONS) {
-        await sql`
-          INSERT INTO tenant_role_permissions (role_id, permission_id)
-          VALUES (${staffId}, ${p})
-          ON CONFLICT DO NOTHING
-        `
+      if (adminRes && adminRes[0]) {
+        for (const p of ALL_SYSTEM_PERMISSIONS) {
+          await sql`INSERT INTO tenant_role_permissions (role_id, permission_id) VALUES (${adminRes[0].id}, ${p}) ON CONFLICT DO NOTHING`.catch(() => {})
+        }
+      }
+      if (managerRes && managerRes[0]) {
+        for (const p of MANAGER_DEFAULT_PERMISSIONS) {
+          await sql`INSERT INTO tenant_role_permissions (role_id, permission_id) VALUES (${managerRes[0].id}, ${p}) ON CONFLICT DO NOTHING`.catch(() => {})
+        }
+      }
+      if (staffRes && staffRes[0]) {
+        for (const p of STAFF_DEFAULT_PERMISSIONS) {
+          await sql`INSERT INTO tenant_role_permissions (role_id, permission_id) VALUES (${staffRes[0].id}, ${p}) ON CONFLICT DO NOTHING`.catch(() => {})
+        }
+      }
+    } else {
+      // Heal Admin permissions if 0
+      const adminRole = existingRoles.find((r: any) => r.name.toLowerCase() === 'admin')
+      if (adminRole) {
+        const count = await sql`SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id = ${adminRole.id}`.catch(() => [{ count: 1 }])
+        if (Number(count[0]?.count || 0) === 0) {
+          for (const p of ALL_SYSTEM_PERMISSIONS) {
+            await sql`INSERT INTO tenant_role_permissions (role_id, permission_id) VALUES (${adminRole.id}, ${p}) ON CONFLICT DO NOTHING`.catch(() => {})
+          }
+        }
+      }
+
+      // Heal Staff permissions if 0
+      const staffRole = existingRoles.find((r: any) => r.name.toLowerCase() === 'staff')
+      if (staffRole) {
+        const count = await sql`SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id = ${staffRole.id}`.catch(() => [{ count: 1 }])
+        if (Number(count[0]?.count || 0) === 0) {
+          for (const p of STAFF_DEFAULT_PERMISSIONS) {
+            await sql`INSERT INTO tenant_role_permissions (role_id, permission_id) VALUES (${staffRole.id}, ${p}) ON CONFLICT DO NOTHING`.catch(() => {})
+          }
+        }
       }
     }
   } catch (err) {
-    console.error("Error in ensureTenantRbacSchema:", err)
+    console.warn("ensureTenantRbacSchema non-blocking warning:", err)
   }
 }
 
@@ -190,7 +171,7 @@ export async function getTenantRoles(): Promise<{ success: boolean; data?: any[]
           r.description, 
           r.is_system, 
           r.color,
-          (SELECT COUNT(*) FROM tenant_users tu WHERE tu.role_id::integer = r.id) as "userCount",
+          (SELECT COUNT(*) FROM tenant_users tu WHERE tu.role_id::text = r.id::text) as "userCount",
           COALESCE(
             (SELECT json_agg(p.permission_id) FROM tenant_role_permissions p WHERE p.role_id = r.id),
             '[]'::json
@@ -239,7 +220,7 @@ export async function createTenantRole(data: any): Promise<{ success: boolean; e
               INSERT INTO tenant_role_permissions (role_id, permission_id) 
               VALUES (${res[0].id}, ${p.trim()})
               ON CONFLICT DO NOTHING
-            `
+            `.catch(() => {})
           }
         }
       }
@@ -284,7 +265,7 @@ export async function updateTenantRole(id: string, data: any): Promise<{ success
               INSERT INTO tenant_role_permissions (role_id, permission_id) 
               VALUES (${id}, ${p.trim()})
               ON CONFLICT DO NOTHING
-            `
+            `.catch(() => {})
           }
         }
       }

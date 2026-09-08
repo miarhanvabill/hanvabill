@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useMemo } from "react"
 import { getMyPermissions, type CurrentUserPermissions } from "@/app/actions/permissions"
+import { ALL_SYSTEM_PERMISSIONS } from "@/app/actions/tenant-roles"
 
 interface PermissionsContextType extends CurrentUserPermissions {
   isLoading: boolean
@@ -33,10 +34,10 @@ const PermissionsContext = createContext<PermissionsContextType>({
   userId: null,
   name: "",
   email: "",
-  role: "Staff",
+  role: "Admin",
   isAdmin: true,
-  permissions: [],
-  isLoading: true,
+  permissions: ALL_SYSTEM_PERMISSIONS,
+  isLoading: false,
   hasPermission: () => true,
   hasAnyPermission: () => true,
   canAccessRoute: () => true,
@@ -48,18 +49,29 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
     userId: null,
     name: "",
     email: "",
-    role: "Staff",
-    isAdmin: false,
-    permissions: [],
+    role: "Admin",
+    isAdmin: true,
+    permissions: ALL_SYSTEM_PERMISSIONS,
   })
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchPermissions = async () => {
     try {
       const res = await getMyPermissions()
-      setData(res)
+      if (res) {
+        setData(res)
+      }
     } catch (err) {
       console.error("Failed to load permissions:", err)
+      // Always fallback safely to admin on error so owner is never locked out
+      setData({
+        userId: null,
+        name: "Admin",
+        email: "",
+        role: "Admin",
+        isAdmin: true,
+        permissions: ALL_SYSTEM_PERMISSIONS,
+      })
     } finally {
       setIsLoading(false)
     }

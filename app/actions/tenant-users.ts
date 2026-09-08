@@ -3,8 +3,8 @@
 import { clerkClient, auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
 import { withTenantAuth } from "@/lib/withTenantAuth"
-import { cacheFetch, cacheDel } from "@/lib/cache"
-import { ALL_SYSTEM_PERMISSIONS } from "./tenant-roles"
+import { cacheDel } from "@/lib/cache"
+import { ALL_SYSTEM_PERMISSIONS, STAFF_DEFAULT_PERMISSIONS } from "./tenant-roles"
 
 export interface TenantUser {
   id: string
@@ -102,11 +102,11 @@ export async function getTenantUsers(): Promise<TenantUser[]> {
           u.role_id::text,
           r.name as role_name,
           u.custom_permissions,
-          COALESCE(
-            u.custom_permissions,
-            (SELECT json_agg(p.permission_id) FROM tenant_role_permissions p WHERE p.role_id = u.role_id),
-            '[]'::jsonb
-          ) as permissions,
+          (
+            SELECT jsonb_agg(p.permission_id)
+            FROM tenant_role_permissions p
+            WHERE p.role_id = u.role_id
+          ) as role_permissions,
           u.is_active,
           u.avatar_url,
           u.created_at
@@ -118,8 +118,16 @@ export async function getTenantUsers(): Promise<TenantUser[]> {
 
       return users.map((u: any) => {
         const isAdmin = u.role_name?.toLowerCase() === 'admin';
-        const rawPerms = Array.isArray(u.permissions) ? u.permissions : [];
-        const finalPerms = isAdmin && rawPerms.length === 0 ? ALL_SYSTEM_PERMISSIONS : rawPerms;
+        let finalPerms: string[] = [];
+        if (Array.isArray(u.custom_permissions) && u.custom_permissions.length > 0) {
+          finalPerms = u.custom_permissions;
+        } else if (Array.isArray(u.role_permissions) && u.role_permissions.length > 0) {
+          finalPerms = u.role_permissions;
+        } else if (isAdmin) {
+          finalPerms = ALL_SYSTEM_PERMISSIONS;
+        } else {
+          finalPerms = STAFF_DEFAULT_PERMISSIONS;
+        }
 
         return {
           id: u.id,

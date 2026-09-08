@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { canAccessRoute, isLoading } = usePermissions();
+  const { canAccessRoute, isLoading, isAdmin } = usePermissions();
 
   // Hide sidebar/header on public invoice and auth pages
   const isPublic = pathname?.startsWith('/inv/') || pathname?.startsWith('/sign-in') || pathname?.startsWith('/sign-up') || pathname?.startsWith('/terms-of-service') || pathname?.startsWith('/privacy-policy') || pathname?.startsWith('/unauthorized-sign-in') || pathname?.startsWith('/book/');
@@ -26,7 +26,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const isAllowed = canAccessRoute(pathname || "");
+  // Admins always have access, loading states never block, otherwise check permissions
+  const isRestricted = !isLoading && !isAdmin && !canAccessRoute(pathname || "");
   
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
@@ -63,7 +64,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             }
           >
-            {!isLoading && !isAllowed ? (
+            {isRestricted ? (
               <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm max-w-xl mx-auto my-12">
                 <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-4 text-red-600 dark:text-red-400">
                   <ShieldAlert className="w-8 h-8" />

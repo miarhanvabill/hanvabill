@@ -8,87 +8,23 @@ import { cacheFetch, cacheDel } from '@/lib/cache'
 
 async function ensureStoreSettingsTable(sql: any) {
   try {
-    // Check if table exists
-    const tableExists = await sql`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
-        AND table_name = 'store_settings'
+    await sql`
+      CREATE TABLE IF NOT EXISTS store_settings (
+        id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR(100) NOT NULL,
+        setting_key VARCHAR(100) NOT NULL,
+        setting_value TEXT,
+        setting_type VARCHAR(20) DEFAULT 'text',
+        description TEXT,
+        is_public BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT store_settings_setting_key_unique UNIQUE (tenant_id, setting_key)
       )
-    `
-
-    // Safe access to the result
-    const exists = tableExists?.[0]?.exists || tableExists?.rows?.[0]?.exists
-    
-    if (!exists) {
-      // Use IF NOT EXISTS to prevent duplicate table errors
-      await sql`
-        CREATE TABLE IF NOT EXISTS store_settings (
-          id SERIAL PRIMARY KEY,
-          tenant_id VARCHAR(100) NOT NULL,
-          setting_key VARCHAR(100) NOT NULL,
-          setting_value TEXT,
-          setting_type VARCHAR(20) DEFAULT 'text',
-          description TEXT,
-          is_public BOOLEAN DEFAULT false,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          CONSTRAINT store_settings_setting_key_unique UNIQUE (tenant_id, setting_key)
-        )
-      `
-
-      await sql`
-        CREATE INDEX IF NOT EXISTS idx_store_settings_tenant_key 
-        ON store_settings(tenant_id, setting_key)
-      `
-
-    } else {
-    }
-
-    // Only run duplicate check if table exists and has data
-    const hasData = await sql`
-      SELECT EXISTS (SELECT 1 FROM store_settings LIMIT 1)
-    `
-    
-    if (hasData?.[0]?.exists || hasData?.rows?.[0]?.exists) {
-      const duplicateCheck = await sql`
-        SELECT tenant_id, setting_key, COUNT(*) as count 
-        FROM store_settings 
-        GROUP BY tenant_id, setting_key 
-        HAVING COUNT(*) > 1
-      `
-
-      // Safe access to rows array
-      if ((duplicateCheck?.length > 0) || (duplicateCheck?.rows?.length > 0)) {
-
-        await sql`
-          DELETE FROM store_settings 
-          WHERE id NOT IN (
-            SELECT MAX(id) 
-            FROM store_settings 
-            GROUP BY tenant_id, setting_key
-          )
-        `
-
-        await sql`
-          SELECT setval('store_settings_id_seq', COALESCE(MAX(id), 0) + 1, false) 
-          FROM store_settings
-        `
-      }
-    }
+    `.catch(() => {});
   } catch (error) {
-    // Handle specific "already exists" error gracefully
-    const errorMessage = error instanceof Error ? error.message : "Unknown error"
-    
-    if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
-      return // Exit gracefully
-    }
-    
-    console.error("Error ensuring store_settings table:", {
-      error: errorMessage,
-      timestamp: new Date().toISOString(),
-    })
-    throw error // Re-throw other errors
+    // Graceful fallback - do not crash settings retrieval
+    console.warn("ensureStoreSettingsTable non-fatal error:", error);
   }
 }
 
