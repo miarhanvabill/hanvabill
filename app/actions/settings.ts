@@ -471,6 +471,7 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
           errorReporting: true,
         },
       }
+    }
     }, 300)
   })
 }

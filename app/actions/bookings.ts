@@ -330,9 +330,6 @@ export async function createBooking(formData: FormData) {
           // If still no match, get all available services for debugging
           if (serviceResult.length === 0) {
             const allServices = await sql`SELECT id, name FROM services WHERE tenant_id = ${tenantId} ORDER BY name`
-              "[v0] Available services:",
-              allServices.map((s) => s.name),
-            )
 
             return {
               success: false,
@@ -397,17 +394,6 @@ export async function createBooking(formData: FormData) {
       const bookingNumber = `BK${timestamp.toString().slice(-8)}${Math.floor(Math.random() * 100)
         .toString()
         .padStart(2, "0")}`
-
-        bookingNumber,
-        finalCustomerId,
-        finalStaffId,
-        finalResourceId,
-        finalServiceIds,
-        bookingDate: bookingDate.toString(),
-        bookingTime: bookingTime.toString(),
-        totalAmountNum,
-        status: status?.toString() || "pending",
-      })
 
       const [newBooking] = await sql`
         INSERT INTO bookings (
