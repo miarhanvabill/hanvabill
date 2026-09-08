@@ -28,7 +28,6 @@ export interface CommissionTier {
 export async function getCommissionProfiles(): Promise<CommissionProfile[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Attempting to fetch commission profiles...")
 
       const connectionTest = await sql`SELECT 1 as test`
       if (!connectionTest || connectionTest.length === 0) {
@@ -56,7 +55,6 @@ export async function getCommissionProfiles(): Promise<CommissionProfile[]> {
         ORDER BY cp.created_at DESC
       `
 
-      console.log("[v0] Raw commission profiles result:", profilesResult)
 
       const profiles = profilesResult.map((row: any) => ({
         id: row.id,
@@ -72,7 +70,6 @@ export async function getCommissionProfiles(): Promise<CommissionProfile[]> {
         created_at: row.created_at,
       })) as CommissionProfile[]
 
-      console.log("[v0] Successfully fetched", profiles.length, "commission profiles")
       return profiles
     } catch (error) {
       console.error("[v0] Error fetching commission profiles:", error)
@@ -86,7 +83,6 @@ export async function getCommissionProfiles(): Promise<CommissionProfile[]> {
 export async function createCommissionProfile(data: Omit<CommissionProfile, "id" | "staff_count" | "created_at">) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Attempting to create commission profile:", data)
 
       const result = await sql`
         INSERT INTO commission_profiles (
@@ -127,7 +123,6 @@ export async function createCommissionProfile(data: Omit<CommissionProfile, "id"
 export async function updateCommissionProfile(id: string, data: Partial<CommissionProfile>) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Attempting to update commission profile:", id, data)
 
       const result = await sql`
         UPDATE commission_profiles 
@@ -175,7 +170,6 @@ export async function updateCommissionProfile(id: string, data: Partial<Commissi
 export async function deleteCommissionProfile(id: string) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Attempting to delete commission profile:", id)
 
       // Check if any staff are using this profile
       const staffCheck = await sql`

@@ -2,6 +2,7 @@
 
 import { withTenantAuth } from "@/lib/withTenantAuth"
 import { revalidatePath } from "next/cache"
+import { cacheFetch, cacheDel } from '@/lib/cache'
 
 // Define the Staff interface to accurately reflect your EXISTING database schema
 export interface Staff {
@@ -34,63 +35,63 @@ export interface StaffStats {
 
 export async function getStaff(): Promise<Staff[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
-    try {
-      console.log("[v0] Attempting to fetch staff...")
+    return await cacheFetch(`staff:${tenantId}`, async () => {
+      try {
+        console.log("[v0] Attempting to fetch staff...")
 
-      const staffResult = await sql`
-        SELECT 
-          s.id, s.name, s.phone, s.email, s.role, s.salary, 
-          TO_CHAR(s.hire_date, 'YYYY-MM-DD') as hire_date,
-          s.is_active, s.address, s.emergency_contact, s.skills, s.commission_rate, s.avatar_url,
-          s.created_at::text,
-          s.updated_at::text,
-          a.status as attendance_status,
-          a.check_in_time,
-          a.check_out_time
-        FROM staff s
-        LEFT JOIN attendance a ON s.id = a.staff_id AND a.date = CURRENT_DATE AND a.tenant_id = ${tenantId}
-        WHERE s.is_active = true 
-          AND s.tenant_id = ${tenantId}
-        ORDER BY s.name
-      `
+        const staffResult = await sql`
+          SELECT 
+            s.id, s.name, s.phone, s.email, s.role, s.salary, 
+            TO_CHAR(s.hire_date, 'YYYY-MM-DD') as hire_date,
+            s.is_active, s.address, s.emergency_contact, s.skills, s.commission_rate, s.avatar_url,
+            s.created_at::text,
+            s.updated_at::text,
+            a.status as attendance_status,
+            a.check_in_time,
+            a.check_out_time
+          FROM staff s
+          LEFT JOIN attendance a ON s.id = a.staff_id AND a.date = CURRENT_DATE AND a.tenant_id = ${tenantId}
+          WHERE s.is_active = true 
+            AND s.tenant_id = ${tenantId}
+          ORDER BY s.name
+        `
 
-      console.log("[v0] Raw staffResult:", staffResult)
+        console.log("[v0] Raw staffResult:", staffResult)
 
-      const staffRows = staffResult as Staff[]
+        const staffRows = staffResult as Staff[]
 
-      if (!Array.isArray(staffRows)) {
-        console.error("[v0] Staff rows is not an array:", staffRows)
-        throw new Error("Invalid database response format")
+        if (!Array.isArray(staffRows)) {
+          console.error("[v0] Staff rows is not an array:", staffRows)
+          throw new Error("Invalid database response format")
+        }
+
+        if (staffRows.length === 0) {
+          console.warn("[v0] No active staff found in database")
+          return []
+        }
+
+        const formattedStaff = staffRows.map((staff) => ({
+          ...staff,
+          id: Number(staff.id) || 0,
+          salary: staff.salary ? Number(staff.salary) : null,
+          is_active: Boolean(staff.is_active),
+        })) as Staff[]
+
+        console.log("[v0] Successfully fetched", formattedStaff.length, "staff members")
+        return formattedStaff
+      } catch (error) {
+        console.error("[v0] Error fetching staff:", error)
+        throw new Error(`Failed to fetch staff: ${error instanceof Error ? error.message : "Unknown database error"}`)
       }
-
-      if (staffRows.length === 0) {
-        console.warn("[v0] No active staff found in database")
-        return []
-      }
-
-      const formattedStaff = staffRows.map((staff) => ({
-        ...staff,
-        id: Number(staff.id) || 0,
-        salary: staff.salary ? Number(staff.salary) : null,
-        is_active: Boolean(staff.is_active),
-      })) as Staff[]
-
-      console.log("[v0] Successfully fetched", formattedStaff.length, "staff members")
-      return formattedStaff
-    } catch (error) {
-      console.error("[v0] Error fetching staff:", error)
-      throw new Error(`Failed to fetch staff: ${error instanceof Error ? error.message : "Unknown database error"}`)
-    }
+    }, 120)
   })
 }
 
 export async function getStaffStats(): Promise<StaffStats> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Attempting to fetch staff stats...")
 
       const currentMonth = new Date().toISOString().slice(0, 7) // YYYY-MM format
-      console.log("[v0] Current month for stats:", currentMonth)
 
       const [totalResult, activeResult, onLeaveResult, newThisMonthResult] = await Promise.all([
         sql`SELECT COUNT(*) as count FROM staff WHERE tenant_id = ${tenantId}`,
@@ -99,7 +100,6 @@ export async function getStaffStats(): Promise<StaffStats> {
         sql`SELECT COUNT(*) as count FROM staff WHERE TO_CHAR(hire_date, 'YYYY-MM') = ${currentMonth} AND tenant_id = ${tenantId}`,
       ])
 
-      console.log("[v0] Raw stats results:", { totalResult, activeResult, onLeaveResult, newThisMonthResult })
 
       const total = Number(totalResult[0]?.count) || 0
       const active = Number(activeResult[0]?.count) || 0
@@ -113,7 +113,6 @@ export async function getStaffStats(): Promise<StaffStats> {
         newThisMonth,
       }
 
-      console.log("[v0] Successfully fetched staff stats:", stats)
       return stats
     } catch (error) {
       console.error("[v0] Error fetching staff stats:", error)
@@ -130,7 +129,6 @@ export async function getStaffMember(id: number) {
         return null
       }
 
-      console.log(`[v0] Attempting to fetch staff member with ID: ${id}`)
       const staffResult = await sql`
         SELECT 
           id, name, phone, email, role, salary, 
@@ -141,7 +139,6 @@ export async function getStaffMember(id: number) {
         FROM staff WHERE id = ${id} AND tenant_id = ${tenantId}
       `
 
-      console.log("[v0] Raw staff member result:", staffResult)
 
       const staffRows = staffResult as Staff[]
 
@@ -174,7 +171,6 @@ export async function createStaff(data: Omit<Staff, "id" | "created_at" | "updat
         return { success: false, message: "Name and phone are required" }
       }
 
-      console.log("[v0] Attempting to create staff with data:", data)
       const result = await sql`
         INSERT INTO staff (
           tenant_id, name, phone, email, role, salary, hire_date, 
@@ -196,7 +192,6 @@ export async function createStaff(data: Omit<Staff, "id" | "created_at" | "updat
           updated_at 
       `
 
-      console.log("[v0] Raw create staff result:", result)
 
       const staffRows = result as Staff[]
 
@@ -214,6 +209,7 @@ export async function createStaff(data: Omit<Staff, "id" | "created_at" | "updat
 
       revalidatePath("/staff")
       revalidatePath("/manage/staff")
+      await cacheDel(`staff:${tenantId}`);
       return { success: true, message: "Staff member created successfully!", data: formattedStaff }
     } catch (error) {
       console.error("[v0] Error creating staff:", error)
@@ -232,7 +228,6 @@ export async function updateStaff(id: number, data: Partial<Staff>) {
         return { success: false, message: "Invalid staff ID" }
       }
 
-      console.log(`[v0] Attempting to update staff member ID: ${id} with data:`, data)
       const profileId = (data as any).commission_profile_id ?? null
       const result = await sql`
         UPDATE staff 
@@ -260,7 +255,6 @@ export async function updateStaff(id: number, data: Partial<Staff>) {
           updated_at 
       `
 
-      console.log("[v0] Raw update staff result:", result)
 
       const staffRows = result as Staff[]
 
@@ -279,6 +273,7 @@ export async function updateStaff(id: number, data: Partial<Staff>) {
       revalidatePath("/staff")
       revalidatePath("/manage/staff")
       revalidatePath(`/staff/${id}`)
+      await cacheDel(`staff:${tenantId}`);
       return { success: true, message: "Staff member updated successfully!", data: formattedStaff }
     } catch (error) {
       console.error("[v0] Error updating staff:", error)
@@ -297,7 +292,6 @@ export async function deleteStaff(id: number) {
         return { success: false, message: "Invalid staff ID" }
       }
 
-      console.log(`[v0] Attempting to deactivate staff member ID: ${id}`)
       const result = await sql`
         UPDATE staff 
         SET is_active = false, updated_at = CURRENT_TIMESTAMP
@@ -311,7 +305,6 @@ export async function deleteStaff(id: number) {
         return { success: false, message: "Staff member not found" }
       }
 
-      console.log("[v0] Staff deactivation successful.")
       revalidatePath("/staff")
       revalidatePath("/manage/staff")
       return { success: true, message: "Staff member deactivated successfully!" }
@@ -336,7 +329,6 @@ export async function getStaffPerformance(staffId: number, startDate: string, en
         throw new Error("Start date and end date are required")
       }
 
-      console.log(`[v0] Attempting to fetch staff performance for ID: ${staffId} from ${startDate} to ${endDate}`)
       const performanceResult = await sql`
         SELECT 
           s.name,
@@ -355,7 +347,6 @@ export async function getStaffPerformance(staffId: number, startDate: string, en
         GROUP BY s.id, s.name
       `
 
-      console.log("[v0] Raw staff performance result:", performanceResult)
 
       const performanceRows = performanceResult
 

@@ -38,7 +38,6 @@ export interface CustomerMembership {
 export async function getActiveMemberships(): Promise<MembershipPlan[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Fetching active memberships from database")
       await sql`ALTER TABLE membership_plans ADD COLUMN IF NOT EXISTS image_url TEXT;`
       const result = await sql`
         SELECT 
@@ -65,7 +64,6 @@ export async function getActiveMemberships(): Promise<MembershipPlan[]> {
         ORDER BY sales_count DESC, mp.created_at DESC
       `
 
-      console.log("[v0] Active memberships SQL result:", result)
 
       const rows = result.rows || result
       if (!rows || !Array.isArray(rows)) {
@@ -93,7 +91,6 @@ export async function getActiveMemberships(): Promise<MembershipPlan[]> {
 export async function getAllMembershipPlans(): Promise<MembershipPlan[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Fetching all membership plans from database")
       await sql`ALTER TABLE membership_plans ADD COLUMN IF NOT EXISTS image_url TEXT;`
       const result = await sql`
         SELECT 
@@ -114,12 +111,8 @@ export async function getAllMembershipPlans(): Promise<MembershipPlan[]> {
         ORDER BY created_at DESC
       `
 
-      console.log("[v0] SQL query result:", result)
-      console.log("[v0] Result type:", typeof result)
 
       const rows = result.rows || result
-      console.log("[v0] Rows:", rows)
-      console.log("[v0] Is rows array:", Array.isArray(rows))
 
       if (!rows || !Array.isArray(rows)) {
         console.error("[v0] SQL result rows is not an array:", rows)
@@ -145,7 +138,6 @@ export async function getAllMembershipPlans(): Promise<MembershipPlan[]> {
 export async function getCustomerMemberships(): Promise<CustomerMembership[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Fetching customer memberships from database")
       const result = await sql`
         SELECT 
           cm.id,
@@ -170,12 +162,8 @@ export async function getCustomerMemberships(): Promise<CustomerMembership[]> {
         ORDER BY cm.created_at DESC
       `
 
-      console.log("[v0] Customer memberships SQL result:", result)
-      console.log("[v0] Result type:", typeof result)
 
       const rows = result.rows || result
-      console.log("[v0] Rows:", rows)
-      console.log("[v0] Is rows array:", Array.isArray(rows))
 
       if (!rows || !Array.isArray(rows)) {
         console.error("[v0] SQL result rows is not an array:", rows)

@@ -38,7 +38,6 @@ export async function getStaffAvailability(): Promise<{
 }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Fetching staff availability for tenant:", tenantId)
 
       const rows = await sql`
         SELECT
@@ -78,7 +77,6 @@ export async function getStaffAvailability(): Promise<{
         updated_at: row.updated_at || null,
       })) as StaffAvailability[]
 
-      console.log("[v0] Successfully fetched", availability.length, "availability records")
       return { success: true, availability }
     } catch (error) {
       console.error("[v0] Error fetching staff availability:", error)
@@ -100,7 +98,6 @@ export async function getStaffList(): Promise<{
 }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Fetching staff list for tenant:", tenantId)
 
       const rows = await sql`
         SELECT id, name, role, email, phone, status
@@ -119,7 +116,6 @@ export async function getStaffList(): Promise<{
         status: row.status || "active",
       })) as Staff[]
 
-      console.log("[v0] Successfully fetched", staff.length, "staff members")
       return { success: true, staff }
     } catch (error) {
       console.error("[v0] Error fetching staff list:", error)
@@ -143,7 +139,6 @@ export async function saveStaffAvailability(
         return { success: false, message: "Staff ID and day of week are required" }
       }
 
-      console.log("[v0] Upserting staff availability for tenant:", tenantId, "data:", data)
 
       // Upsert: update if (staff_id, day_of_week) already exists, otherwise insert
       const result = await sql`
@@ -216,7 +211,6 @@ export async function updateStaffAvailability(
         return { success: false, message: "Invalid availability ID" }
       }
 
-      console.log(`[v0] Updating staff availability ID: ${id} for tenant: ${tenantId}`)
 
       const result = await sql`
         UPDATE staff_availability
@@ -281,7 +275,6 @@ export async function deleteStaffAvailability(
         return { success: false, message: "Invalid availability ID" }
       }
 
-      console.log(`[v0] Deleting staff availability ID: ${id} for tenant: ${tenantId}`)
 
       const result = await sql`
         DELETE FROM staff_availability

@@ -260,7 +260,6 @@ export async function getBookingById(id: string): Promise<Booking | null> {
 export async function createBooking(formData: FormData) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Creating booking with form data:", Object.fromEntries(formData.entries()))
 
       // Handle both direct booking (with IDs) and customer portal booking (with names/details)
       const customerId = formData.get("customerId")
@@ -315,7 +314,6 @@ export async function createBooking(formData: FormData) {
         }
 
         if (serviceNames) {
-          console.log("[v0] Looking for service with name:", serviceNames.toString())
 
           // First try exact match (case-insensitive)
           let serviceResult = await sql`
@@ -332,7 +330,6 @@ export async function createBooking(formData: FormData) {
           // If still no match, get all available services for debugging
           if (serviceResult.length === 0) {
             const allServices = await sql`SELECT id, name FROM services WHERE tenant_id = ${tenantId} ORDER BY name`
-            console.log(
               "[v0] Available services:",
               allServices.map((s) => s.name),
             )
@@ -344,7 +341,6 @@ export async function createBooking(formData: FormData) {
           }
 
           finalServiceIds = [Number(serviceResult[0].id)]
-          console.log("[v0] Found service:", serviceResult[0].name, "with ID:", serviceResult[0].id)
         } else {
           return {
             success: false,
@@ -402,7 +398,6 @@ export async function createBooking(formData: FormData) {
         .toString()
         .padStart(2, "0")}`
 
-      console.log("[v0] Creating booking with:", {
         bookingNumber,
         finalCustomerId,
         finalStaffId,
@@ -451,7 +446,6 @@ export async function createBooking(formData: FormData) {
       }
 
       const bookingId = Number(newBooking.id)
-      console.log("[v0] Created booking with ID:", bookingId)
 
       // Add services to booking
       for (const serviceId of finalServiceIds) {
@@ -463,7 +457,6 @@ export async function createBooking(formData: FormData) {
             INSERT INTO booking_services (tenant_id, booking_id, service_id, quantity, price)
             VALUES (${tenantId}, ${bookingId}, ${serviceId}, 1, ${servicePrice})
           `
-          console.log("[v0] Added service", serviceId, "to booking", bookingId)
         } catch (serviceError) {
           console.error(`[v0] Error adding service ${serviceId} to booking:`, serviceError)
           // Continue with other services instead of failing completely
@@ -518,7 +511,6 @@ export async function createBooking(formData: FormData) {
       revalidatePath("/appointments")
       revalidatePath(`/customers/${finalCustomerId}`)
 
-      console.log("[v0] Booking created successfully:", bookingNumber)
       return {
         success: true,
         bookingId: bookingId,

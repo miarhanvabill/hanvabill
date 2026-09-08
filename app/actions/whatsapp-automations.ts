@@ -382,7 +382,6 @@ export async function testSendAutomationTemplate(id: number, phone: string) {
 export async function runPendingAutomationsCron() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log(`[Actions] Running pending automations cron for tenant ${tenantId}`)
       const summary = await runAutomationsCronForTenant(sql, tenantId)
 
       revalidatePath("/whatsapp")

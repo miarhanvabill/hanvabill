@@ -5,6 +5,7 @@
 import { withTenantAuth } from '@/lib/withTenantAuth'
 import { revalidatePath } from "next/cache"
 import { CSVParser, serviceValidationRules, type CSVParseResult } from "@/lib/csv-parser"
+import { cacheFetch, cacheDel } from '@/lib/cache'
 
 export interface Service {
   id: number
@@ -21,43 +22,45 @@ export interface Service {
 
 export async function getServices(): Promise<Service[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
-    try {
-      // One-off schema change
-      await sql`ALTER TABLE services ADD COLUMN IF NOT EXISTS image_url TEXT;`
-      await sql`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS image_url TEXT;`
+    return await cacheFetch(`services:${tenantId}`, async () => {
       try {
-        await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS image_url TEXT;`
-      } catch (e) {
-        // Ignore if inventory_items doesn't exist
-      }
+        // One-off schema change
+        await sql`ALTER TABLE services ADD COLUMN IF NOT EXISTS image_url TEXT;`
+        await sql`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS image_url TEXT;`
+        try {
+          await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS image_url TEXT;`
+        } catch (e) {
+          // Ignore if inventory_items doesn't exist
+        }
 
-      const result = await sql`
-        SELECT 
-          s.id,
-          s.name,
-          s.price,
-          s.duration_minutes,
-          s.category,
-          s.description,
-          s.is_active,
-          s.code,
-          s.image_url,
-          s.created_at,
-          (
-            SELECT COUNT(*) 
-            FROM booking_services bs 
-            JOIN bookings b ON bs.booking_id = b.id 
-            WHERE bs.service_id = s.id AND b.tenant_id = ${tenantId} AND b.status = 'completed'
-          ) as sales_count
-        FROM services s
-        WHERE s.tenant_id = ${tenantId}
-        ORDER BY sales_count DESC, s.created_at DESC
-      `
-      return result as Service[]
-    } catch (error) {
-      console.error("Error fetching services:", error)
-      return []
-    }
+        const result = await sql`
+          SELECT 
+            s.id,
+            s.name,
+            s.price,
+            s.duration_minutes,
+            s.category,
+            s.description,
+            s.is_active,
+            s.code,
+            s.image_url,
+            s.created_at,
+            (
+              SELECT COUNT(*) 
+              FROM booking_services bs 
+              JOIN bookings b ON bs.booking_id = b.id 
+              WHERE bs.service_id = s.id AND b.tenant_id = ${tenantId} AND b.status = 'completed'
+            ) as sales_count
+          FROM services s
+          WHERE s.tenant_id = ${tenantId}
+          ORDER BY sales_count DESC, s.created_at DESC
+        `
+        return result as Service[]
+      } catch (error) {
+        console.error("Error fetching services:", error)
+        return []
+      }
+    }, 120)
   })
 }
 
@@ -121,6 +124,7 @@ export async function createService(formData: FormData) {
 
       revalidatePath("/services")
       revalidatePath("/manage/services")
+      await cacheDel(`services:${tenantId}`);
 
       return {
         success: true,
@@ -171,6 +175,7 @@ export async function updateService(id: number, formData: FormData) {
 
       revalidatePath("/services")
       revalidatePath("/manage/services")
+      await cacheDel(`services:${tenantId}`);
 
       return {
         success: true,
@@ -194,6 +199,7 @@ export async function deleteService(id: number) {
 
       revalidatePath("/services")
       revalidatePath("/manage/services")
+      await cacheDel(`services:${tenantId}`);
 
       return {
         success: true,
@@ -221,6 +227,7 @@ export async function toggleServiceStatus(id: number, isActive: boolean) {
 
       revalidatePath("/services")
       revalidatePath("/manage/services")
+      await cacheDel(`services:${tenantId}`);
 
       return {
         success: true,
@@ -379,6 +386,7 @@ export async function bulkUploadServices(
       // Revalidate paths to refresh the UI
       revalidatePath("/services")
       revalidatePath("/manage/services")
+      await cacheDel(`services:${tenantId}`);
 
       let message = `Successfully imported ${insertedCount} services`
       if (skippedCount > 0) {

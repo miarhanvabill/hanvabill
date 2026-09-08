@@ -49,7 +49,6 @@ async function ensureLoyaltySettingsSchema(sql: any, tenantId: string) {
   try {
      await sql`ALTER TABLE loyalty_settings ADD COLUMN IF NOT EXISTS tenant_id TEXT`;
   } catch (error: any) {
-    console.log('Adding tenant_id to loyalty_settings:', error.message);
   }
 
   // Add missing columns (safe with IF NOT EXISTS)
@@ -60,7 +59,6 @@ async function ensureLoyaltySettingsSchema(sql: any, tenantId: string) {
     await sql`ALTER TABLE loyalty_settings ADD COLUMN IF NOT EXISTS minimum_order_amount NUMERIC NOT NULL DEFAULT 0`
   } catch (error: any) {
     // Ignore errors if columns already exist
-    console.log('Schema update for loyalty_settings table:', error.message)
   }
 
   // Customers table modifications
@@ -90,7 +88,6 @@ async function ensureLoyaltySettingsSchema(sql: any, tenantId: string) {
     }
   } catch (error: any) {
     // Ignore errors if columns already exist or update fails
-    console.log('Schema update for customers table:', error.message)
   }
 
   // Loyalty transactions table modifications
@@ -113,7 +110,6 @@ async function ensureLoyaltySettingsSchema(sql: any, tenantId: string) {
     await sql`ALTER TABLE loyalty_transactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
     // Note: tenant_id column for loyalty_transactions should ideally be populated via application logic or a separate migration for existing data.
   } catch (error: any) {
-    console.log('Schema update for loyalty_transactions table:', error.message)
   }
 
   // Gift cards tables
@@ -154,7 +150,6 @@ async function ensureLoyaltySettingsSchema(sql: any, tenantId: string) {
     await sql`CREATE INDEX IF NOT EXISTS idx_loyalty_txn_tenant_customer_id ON loyalty_transactions(tenant_id, customer_id)`
     await sql`CREATE INDEX IF NOT EXISTS idx_loyalty_txn_tenant_created_at ON loyalty_transactions(tenant_id, created_at)`
   } catch (error: any) {
-    console.log('Index creation:', error.message)
   }
 }
 async function readSettings(sql: any, tenantId: string): Promise<LoyaltySettings> {
@@ -255,7 +250,6 @@ export async function getLoyaltyStats(tenantId?: string): Promise<LoyaltyStats> 
       `
       totalMembers = Number(r[0]?.c || 0)
     } catch (error1: any) {
-      console.log('Primary member count failed, trying fallback:', error1.message);
       try {
         const r2 = await sql`
           SELECT COUNT(DISTINCT customer_id)::int AS c

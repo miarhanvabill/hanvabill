@@ -42,11 +42,9 @@ export async function getAllResources(): Promise<Resource[]> {
       await sql`UPDATE business_resources SET tenant_id = 1 WHERE tenant_id IS NULL`
       await sql`ALTER TABLE business_resources ADD COLUMN IF NOT EXISTS location VARCHAR(255) DEFAULT 'Main Floor'`
     } catch (migrationError) {
-      console.log("[v0] business_resources migration check:", migrationError)
     }
 
     try {
-      console.log("[v0] Fetching all resources from database for tenant:", tenantId)
       const result = await sql`
         SELECT 
           id::text,
@@ -66,10 +64,8 @@ export async function getAllResources(): Promise<Resource[]> {
         ORDER BY created_at DESC
       `
 
-      console.log("[v0] Raw SQL result:", result)
 
       if (!result || !Array.isArray(result)) {
-        console.log("[v0] SQL result is not an array:", result)
         return []
       }
 
@@ -89,7 +85,6 @@ export async function getAllResources(): Promise<Resource[]> {
         updated_at: row.updated_at,
       }))
 
-      console.log("[v0] Processed resources:", resources.length)
       return resources
     } catch (error) {
       console.error("[v0] Error fetching resources:", error)
@@ -103,7 +98,6 @@ export async function createResource(
 ): Promise<Resource | null> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Creating resource for tenant:", tenantId, data)
       const result = await sql`
         INSERT INTO business_resources (
           tenant_id, name, type, description, location, capacity, is_bookable, hourly_rate, maintenance_schedule, is_active
@@ -123,7 +117,6 @@ export async function createResource(
       `
 
       if (!result || !Array.isArray(result) || result.length === 0) {
-        console.log("[v0] Failed to create resource")
         return null
       }
 
@@ -153,7 +146,6 @@ export async function createResource(
 export async function updateResource(id: string, data: Partial<Resource>): Promise<Resource | null> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Updating resource for tenant:", tenantId, id, data)
       const result = await sql`
         UPDATE business_resources 
         SET 
@@ -172,7 +164,6 @@ export async function updateResource(id: string, data: Partial<Resource>): Promi
       `
 
       if (!result || !Array.isArray(result) || result.length === 0) {
-        console.log("[v0] Failed to update resource")
         return null
       }
 
@@ -202,7 +193,6 @@ export async function updateResource(id: string, data: Partial<Resource>): Promi
 export async function deleteResource(id: string): Promise<boolean> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Deleting resource for tenant:", tenantId, id)
       const result = await sql`
         UPDATE business_resources 
         SET is_active = false, updated_at = CURRENT_TIMESTAMP
@@ -220,7 +210,6 @@ export async function deleteResource(id: string): Promise<boolean> {
 export async function getResourceBookings(): Promise<ResourceBooking[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Fetching resource bookings for tenant:", tenantId)
       // For now, return empty array since we don't have booking-resource relationship in schema
       // This would need to be implemented when booking system is enhanced
       // When implemented, ensure proper tenant filtering on joined tables
@@ -235,7 +224,6 @@ export async function getResourceBookings(): Promise<ResourceBooking[]> {
 export async function getResourceStats() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Fetching resource stats for tenant:", tenantId)
       const result = await sql`
         SELECT 
           COUNT(*) as total_resources,

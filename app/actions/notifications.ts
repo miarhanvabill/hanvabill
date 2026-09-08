@@ -30,7 +30,6 @@ export interface NotificationStats {
 export async function getAllNotifications(): Promise<Notification[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Fetching all notifications from database for tenant:", tenantId)
 
       const result = await sql`
         SELECT 
@@ -42,9 +41,6 @@ export async function getAllNotifications(): Promise<Notification[]> {
         ORDER BY created_at DESC
       `
 
-      console.log("[v0] SQL result type:", typeof result)
-      console.log("[v0] SQL result is array:", Array.isArray(result))
-      console.log("[v0] SQL result has rows:", result && typeof result === "object" && "rows" in result)
 
       // Handle PostgreSQL result object structure
       const rows = Array.isArray(result)
@@ -54,11 +50,9 @@ export async function getAllNotifications(): Promise<Notification[]> {
           : []
 
       if (!Array.isArray(rows)) {
-        console.log("[v0] SQL result is not an array:", result)
         return []
       }
 
-      console.log("[v0] Found notifications:", rows.length)
       return rows.map((row: any) => ({
         ...row,
         created_at: row.created_at?.toISOString() || new Date().toISOString(),
@@ -74,7 +68,6 @@ export async function getAllNotifications(): Promise<Notification[]> {
 export async function getNotificationStats(): Promise<NotificationStats> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Fetching notification stats for tenant:", tenantId)
 
       const result = await sql`
         SELECT 
@@ -98,7 +91,6 @@ export async function getNotificationStats(): Promise<NotificationStats> {
           : []
 
       if (!Array.isArray(rows) || rows.length === 0) {
-        console.log("[v0] No stats data found")
         return {
           total: 0,
           unread: 0,
@@ -127,7 +119,6 @@ export async function getNotificationStats(): Promise<NotificationStats> {
         byType,
       }
 
-      console.log("[v0] Notification stats:", stats)
       return stats
     } catch (error) {
       console.error("[v0] Error fetching notification stats:", error)
@@ -145,7 +136,6 @@ export async function getNotificationStats(): Promise<NotificationStats> {
 export async function markNotificationAsRead(id: number): Promise<{ success: boolean; message: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Marking notification as read:", id, "for tenant:", tenantId)
 
       const result = await sql`
         UPDATE notifications 
@@ -160,10 +150,8 @@ export async function markNotificationAsRead(id: number): Promise<{ success: boo
           : 0
 
       if (rowCount > 0) {
-        console.log("[v0] Notification marked as read successfully")
         return { success: true, message: "Notification marked as read" }
       } else {
-        console.log("[v0] Notification not found")
         return { success: false, message: "Notification not found" }
       }
     } catch (error) {
@@ -176,7 +164,6 @@ export async function markNotificationAsRead(id: number): Promise<{ success: boo
 export async function markAllNotificationsAsRead(): Promise<{ success: boolean; message: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Marking all notifications as read for tenant:", tenantId)
 
       const result = await sql`
         UPDATE notifications 
@@ -190,7 +177,6 @@ export async function markAllNotificationsAsRead(): Promise<{ success: boolean; 
           ? result.rowCount
           : 0
 
-      console.log("[v0] Marked notifications as read:", rowCount)
       return { success: true, message: `Marked ${rowCount} notifications as read` }
     } catch (error) {
       console.error("[v0] Error marking all notifications as read:", error)
@@ -206,7 +192,6 @@ export async function markAllAsRead(): Promise<{ success: boolean; message: stri
 export async function deleteNotification(id: number): Promise<{ success: boolean; message: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Deleting notification:", id, "for tenant:", tenantId)
 
       const result = await sql`
         DELETE FROM notifications 
@@ -220,10 +205,8 @@ export async function deleteNotification(id: number): Promise<{ success: boolean
           : 0
 
       if (rowCount > 0) {
-        console.log("[v0] Notification deleted successfully")
         return { success: true, message: "Notification deleted" }
       } else {
-        console.log("[v0] Notification not found")
         return { success: false, message: "Notification not found" }
       }
     } catch (error) {
@@ -238,7 +221,6 @@ export async function createNotification(
 ): Promise<{ success: boolean; message: string; id?: number }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Creating new notification for tenant:", tenantId, "Title:", notification.title)
 
       const result = await sql`
         INSERT INTO notifications (
@@ -262,10 +244,8 @@ export async function createNotification(
 
       if (Array.isArray(rows) && rows.length > 0) {
         const newId = rows[0].id
-        console.log("[v0] Notification created with ID:", newId)
         return { success: true, message: "Notification created", id: newId }
       } else {
-        console.log("[v0] Failed to create notification")
         return { success: false, message: "Failed to create notification" }
       }
     } catch (error) {
@@ -278,7 +258,6 @@ export async function createNotification(
 export async function getUnreadNotifications(): Promise<Notification[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Fetching unread notifications for tenant:", tenantId)
 
       const result = await sql`
         SELECT 
@@ -299,11 +278,9 @@ export async function getUnreadNotifications(): Promise<Notification[]> {
           : []
 
       if (!Array.isArray(rows)) {
-        console.log("[v0] SQL result is not an array:", result)
         return []
       }
 
-      console.log("[v0] Found unread notifications:", rows.length)
       return rows.map((row: any) => ({
         ...row,
         created_at: row.created_at?.toISOString() || new Date().toISOString(),

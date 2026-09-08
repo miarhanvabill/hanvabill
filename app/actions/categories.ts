@@ -2,6 +2,7 @@
 
 import { withTenantAuth } from "@/lib/withTenantAuth"
 import { revalidatePath } from "next/cache"
+import { cacheFetch, cacheDel } from '@/lib/cache'
 
 export interface Category {
   id: number
@@ -17,47 +18,49 @@ export interface Category {
 
 export async function getCategories(): Promise<Category[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
-    try {
-      const result = await sql`
-        SELECT 
-          c.id,
-          c.name,
-          c.description,
-          c.parent_id,
-          p.name as parent_name,
-          c.is_active,
-          COALESCE((
-            SELECT COUNT(*) 
-            FROM products 
-            WHERE category_id = c.id AND tenant_id = ${tenantId}
-          ), 0) as product_count,
-          c.created_at,
-          c.updated_at
-        FROM categories c
-        LEFT JOIN categories p ON c.parent_id::integer = p.id AND p.tenant_id = ${tenantId}
-        WHERE c.tenant_id = ${tenantId}
-        ORDER BY c.name ASC
-      `
+    return await cacheFetch(`categories:${tenantId}`, async () => {
+      try {
+        const result = await sql`
+          SELECT 
+            c.id,
+            c.name,
+            c.description,
+            c.parent_id,
+            p.name as parent_name,
+            c.is_active,
+            COALESCE((
+              SELECT COUNT(*) 
+              FROM products 
+              WHERE category_id = c.id AND tenant_id = ${tenantId}
+            ), 0) as product_count,
+            c.created_at,
+            c.updated_at
+          FROM categories c
+          LEFT JOIN categories p ON c.parent_id::integer = p.id AND p.tenant_id = ${tenantId}
+          WHERE c.tenant_id = ${tenantId}
+          ORDER BY c.name ASC
+        `
 
-      if (!Array.isArray(result)) {
-        return []
+        if (!Array.isArray(result)) {
+          return []
+        }
+
+        return result.map((row: any) => ({
+          id: Number(row.id),
+          name: String(row.name || ""),
+          description: row.description || null,
+          parent_id: row.parent_id ? Number(row.parent_id) : null,
+          parent_name: row.parent_name || null,
+          is_active: Boolean(row.is_active),
+          product_count: Number(row.product_count) || 0,
+          created_at: String(row.created_at || ""),
+          updated_at: String(row.updated_at || ""),
+        }))
+      } catch (error) {
+        console.error("Error in getCategories:", error)
+        throw new Error(`Failed to fetch categories: ${error instanceof Error ? error.message : "Unknown error"}`)
       }
-
-      return result.map((row: any) => ({
-        id: Number(row.id),
-        name: String(row.name || ""),
-        description: row.description || null,
-        parent_id: row.parent_id ? Number(row.parent_id) : null,
-        parent_name: row.parent_name || null,
-        is_active: Boolean(row.is_active),
-        product_count: Number(row.product_count) || 0,
-        created_at: String(row.created_at || ""),
-        updated_at: String(row.updated_at || ""),
-      }))
-    } catch (error) {
-      console.error("Error in getCategories:", error)
-      throw new Error(`Failed to fetch categories: ${error instanceof Error ? error.message : "Unknown error"}`)
-    }
+    }, 300)
   })
 }
 
@@ -92,6 +95,7 @@ export async function createCategory(data: {
       `
 
       revalidatePath("/manage/categories")
+      await cacheDel(`categories:${tenantId}`);
       return { success: true, message: "Category created successfully" }
     } catch (error) {
       console.error("Error creating category:", error)
@@ -145,6 +149,7 @@ export async function updateCategory(
       }
 
       revalidatePath("/manage/categories")
+      await cacheDel(`categories:${tenantId}`);
       return { success: true, message: "Category updated successfully" }
     } catch (error) {
       console.error("Error updating category:", error)
@@ -193,6 +198,7 @@ export async function deleteCategory(id: number) {
       }
 
       revalidatePath("/manage/categories")
+      await cacheDel(`categories:${tenantId}`);
       return { success: true, message: "Category deleted successfully" }
     } catch (error) {
       console.error("Error deleting category:", error)

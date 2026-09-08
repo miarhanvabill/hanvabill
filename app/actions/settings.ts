@@ -4,6 +4,7 @@
 
 import { withTenantAuth } from "@/lib/withTenantAuth"
 import type { BusinessSettings } from "@/types/settings"
+import { cacheFetch, cacheDel } from '@/lib/cache'
 
 async function ensureStoreSettingsTable(sql: any) {
   try {
@@ -41,9 +42,7 @@ async function ensureStoreSettingsTable(sql: any) {
         ON store_settings(tenant_id, setting_key)
       `
 
-      console.log("Created store_settings table with tenant constraints")
     } else {
-      console.log("store_settings table already exists")
     }
 
     // Only run duplicate check if table exists and has data
@@ -61,7 +60,6 @@ async function ensureStoreSettingsTable(sql: any) {
 
       // Safe access to rows array
       if ((duplicateCheck?.length > 0) || (duplicateCheck?.rows?.length > 0)) {
-        console.log("Found duplicates, cleaning up...")
 
         await sql`
           DELETE FROM store_settings 
@@ -83,7 +81,6 @@ async function ensureStoreSettingsTable(sql: any) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
     
     if (errorMessage.includes('already exists') || errorMessage.includes('duplicate')) {
-      console.log("Store settings table already exists (safe to ignore)")
       return // Exit gracefully
     }
     
@@ -97,17 +94,18 @@ async function ensureStoreSettingsTable(sql: any) {
 
 export async function getBusinessSettings(): Promise<BusinessSettings> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
-    try {
-      await ensureStoreSettingsTable(sql)
+    return await cacheFetch(`business_settings:${tenantId}`, async () => {
+      try {
+        await ensureStoreSettingsTable(sql)
 
-      const rows = await sql`
-        SELECT setting_key, setting_value, setting_type
-        FROM store_settings
-        WHERE tenant_id = ${tenantId}
-        ORDER BY setting_key
-      `
+        const rows = await sql`
+          SELECT setting_key, setting_value, setting_type
+          FROM store_settings
+          WHERE tenant_id = ${tenantId}
+          ORDER BY setting_key
+        `
 
-      const defaultSettings: BusinessSettings = {
+        const defaultSettings: BusinessSettings = {
         profile: {
           salonName: "Hanva salon",
           ownerName: "Gaurav",
@@ -473,7 +471,7 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
           errorReporting: true,
         },
       }
-    }
+    }, 300)
   })
 }
 
@@ -616,6 +614,7 @@ export async function updateBusinessSettings(
             ? `${section} settings partially updated (${successCount} success, ${errorCount} failed)`
             : `${section} settings updated successfully`
 
+        await cacheDel(`business_settings:${tenantId}`);
         return { success: true, message }
       } else {
         return {
@@ -644,6 +643,7 @@ export async function updateAllSettings(settings: BusinessSettings): Promise<{ s
         await updateBusinessSettings(section, data)
       }
 
+      await cacheDel(`business_settings:${tenantId}`);
       return { success: true, message: "All settings updated successfully" }
     } catch (error) {
       console.error("Error updating all settings:", error)

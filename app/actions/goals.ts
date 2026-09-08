@@ -27,7 +27,6 @@ export interface Goal {
 export async function getGoals(): Promise<{ success: boolean; goals: Goal[]; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Fetching goals from database...")
 
       const result = await sql`
         SELECT 
@@ -91,7 +90,6 @@ export async function getGoals(): Promise<{ success: boolean; goals: Goal[]; err
         ORDER BY sg.created_at DESC
       `
 
-      console.log("[v0] Raw goals result length:", result?.length)
 
       // Neon returns array directly (not result.rows)
       const rows = Array.isArray(result) ? result : []
@@ -102,7 +100,6 @@ export async function getGoals(): Promise<{ success: boolean; goals: Goal[]; err
         reward_amount: Number.parseFloat(row.reward_amount) || 0,
       }))
 
-      console.log("[v0] Successfully fetched goals:", goals.length)
       return { success: true, goals }
     } catch (error) {
       console.error("[v0] Error fetching goals:", error)
@@ -126,7 +123,6 @@ export async function createGoal(goalData: {
 }): Promise<{ success: boolean; goal?: Goal; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Creating goal:", goalData)
 
       // Neon returns array directly
       const result = await sql`
@@ -142,7 +138,6 @@ export async function createGoal(goalData: {
       const newId = Array.isArray(result) && result.length > 0 ? result[0].id : null
 
       if (newId) {
-        console.log("[v0] Goal created successfully with ID:", newId)
         revalidatePath("/manage/goals")
 
         // Fetch the created goal with staff info
@@ -208,7 +203,6 @@ export async function updateGoal(
 ): Promise<{ success: boolean; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Updating goal:", id, goalData)
 
       await sql`
         UPDATE staff_goals 
@@ -225,7 +219,6 @@ export async function updateGoal(
         AND tenant_id = ${tenantId}
       `
 
-      console.log("[v0] Goal updated successfully")
       revalidatePath("/manage/goals")
       return { success: true }
     } catch (error) {
@@ -241,7 +234,6 @@ export async function updateGoal(
 export async function deleteGoal(id: number): Promise<{ success: boolean; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Deleting goal:", id)
 
       await sql`
         DELETE FROM staff_goals 
@@ -249,7 +241,6 @@ export async function deleteGoal(id: number): Promise<{ success: boolean; error?
         AND tenant_id = ${tenantId}
       `
 
-      console.log("[v0] Goal deleted successfully")
       revalidatePath("/manage/goals")
       return { success: true }
     } catch (error) {
@@ -268,7 +259,6 @@ export async function updateGoalProgress(
 ): Promise<{ success: boolean; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Updating goal progress:", id, currentValue)
 
       await sql`
         UPDATE staff_goals 
@@ -280,7 +270,6 @@ export async function updateGoalProgress(
         AND tenant_id = ${tenantId}
       `
 
-      console.log("[v0] Goal progress updated successfully")
       revalidatePath("/manage/goals")
       return { success: true }
     } catch (error) {

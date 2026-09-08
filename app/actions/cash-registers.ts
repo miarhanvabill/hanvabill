@@ -33,7 +33,6 @@ export interface CashTransaction {
 export async function getCashRegisters() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Fetching cash registers from database for tenant:", tenantId)
 
       // Fetch registers with tenant_id filter
       const registersResult = await sql`
@@ -98,7 +97,6 @@ export async function createCashTransaction(data: {
 }) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      console.log("[v0] Creating cash transaction for tenant:", tenantId, "Data:", data)
 
       // First verify the register belongs to this tenant and get shift
       const registerCheck = await sql`
