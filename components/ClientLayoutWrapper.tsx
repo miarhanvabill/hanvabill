@@ -7,6 +7,7 @@ import { ConsentBanner } from "@/components/compliance/ConsentBanner";
 import { OfflineBanner } from "@/components/offline-banner";
 import { Toaster } from "@/components/toaster";
 import { ThemeProvider } from "@/contexts/theme-context";
+import { PermissionsProvider } from "@/hooks/use-permissions";
 
 function handleGlobalError(error: Error, info: any) {
   console.error("Global error caught:", error, info);
@@ -16,11 +17,13 @@ export default function ClientLayoutWrapper({ children }: { children: React.Reac
   return (
     <ErrorBoundary onError={handleGlobalError}>
       <ThemeProvider>
-        <SettingsProvider>
-          <ServiceWorkerProvider>
-            {children}
-          </ServiceWorkerProvider>
-        </SettingsProvider>
+        <PermissionsProvider>
+          <SettingsProvider>
+            <ServiceWorkerProvider>
+              {children}
+            </ServiceWorkerProvider>
+          </SettingsProvider>
+        </PermissionsProvider>
       </ThemeProvider>
       <Toaster />
       <ConsentBanner />

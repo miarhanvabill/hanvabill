@@ -2,6 +2,46 @@
 
 import { revalidatePath } from "next/cache"
 import { withTenantAuth } from "@/lib/withTenantAuth"
+import { cacheDel } from "@/lib/cache"
+
+export const ALL_SYSTEM_PERMISSIONS = [
+  "dashboard.view", "dashboard.analytics", "dashboard.export",
+  "customers.view", "customers.create", "customers.edit", "customers.delete", "customers.export", "customers.import",
+  "bookings.view", "bookings.create", "bookings.edit", "bookings.cancel", "bookings.reschedule", "bookings.bulk_operations",
+  "sales.view", "sales.create", "sales.refund", "sales.discount", "sales.void", "sales.reports",
+  "inventory.view", "inventory.manage", "inventory.adjust", "inventory.purchase", "inventory.suppliers",
+  "staff.view", "staff.create", "staff.edit", "staff.delete", "staff.schedules", "staff.payroll",
+  "reports.view", "reports.advanced", "reports.export", "reports.financial", "reports.custom",
+  "settings.view", "settings.edit", "settings.backup", "settings.integrations",
+  "users.view", "users.create", "users.edit", "users.delete", "users.roles", "users.permissions",
+  "services.view", "services.create", "services.edit", "services.delete",
+  "marketing.view", "marketing.manage",
+  "reviews.view", "reviews.manage"
+]
+
+export const STAFF_DEFAULT_PERMISSIONS = [
+  "dashboard.view",
+  "bookings.view",
+  "bookings.create",
+  "bookings.edit",
+  "customers.view",
+  "customers.create",
+  "sales.view",
+  "sales.create",
+  "services.view",
+]
+
+export const MANAGER_DEFAULT_PERMISSIONS = [
+  "dashboard.view", "dashboard.analytics",
+  "customers.view", "customers.create", "customers.edit", "customers.export",
+  "bookings.view", "bookings.create", "bookings.edit", "bookings.cancel", "bookings.reschedule",
+  "sales.view", "sales.create", "sales.discount", "sales.reports",
+  "inventory.view", "inventory.manage", "inventory.adjust",
+  "staff.view", "staff.schedules",
+  "services.view",
+  "reports.view",
+  "reviews.view",
+]
 
 export interface TenantRole {
   id: string
@@ -13,45 +53,135 @@ export interface TenantRole {
   permissions: string[]
 }
 
+async function ensureTenantRbacSchema(sql: any, tenantId: string) {
+  try {
+    // 1. Ensure tables exist
+    await sql`
+      CREATE TABLE IF NOT EXISTS tenant_roles (
+        id SERIAL PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        is_system BOOLEAN DEFAULT FALSE,
+        color VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(tenant_id, name)
+      )
+    `
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS tenant_role_permissions (
+        role_id INTEGER NOT NULL REFERENCES tenant_roles(id) ON DELETE CASCADE,
+        permission_id VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY(role_id, permission_id)
+      )
+    `
+
+    // Drop FK constraint if it exists to allow dynamic permissions
+    await sql`
+      ALTER TABLE tenant_role_permissions DROP CONSTRAINT IF EXISTS tenant_role_permissions_permission_id_fkey
+    `.catch(() => {})
+
+    // Ensure custom_permissions column on tenant_users
+    await sql`
+      ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS custom_permissions JSONB DEFAULT NULL
+    `.catch(() => {})
+
+    // 2. Ensure default roles exist for this tenant
+    const existingRoles = await sql`
+      SELECT id, name FROM tenant_roles WHERE tenant_id = ${tenantId}
+    `
+
+    const roleMap = new Map<string, number>()
+    existingRoles.forEach((r: any) => {
+      roleMap.set(r.name.toLowerCase(), r.id)
+    })
+
+    // Create Admin role if missing
+    let adminId = roleMap.get("admin")
+    if (!adminId) {
+      const inserted = await sql`
+        INSERT INTO tenant_roles (tenant_id, name, description, is_system, color)
+        VALUES (${tenantId}, 'Admin', 'Full system access', true, 'bg-purple-100 text-purple-800')
+        RETURNING id
+      `
+      adminId = inserted[0].id
+    }
+
+    // Populate Admin permissions if empty
+    const adminPermsCount = await sql`
+      SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id = ${adminId}
+    `
+    if (Number(adminPermsCount[0]?.count || 0) === 0) {
+      for (const p of ALL_SYSTEM_PERMISSIONS) {
+        await sql`
+          INSERT INTO tenant_role_permissions (role_id, permission_id)
+          VALUES (${adminId}, ${p})
+          ON CONFLICT DO NOTHING
+        `
+      }
+    }
+
+    // Create Manager role if missing
+    let managerId = roleMap.get("manager")
+    if (!managerId) {
+      const inserted = await sql`
+        INSERT INTO tenant_roles (tenant_id, name, description, is_system, color)
+        VALUES (${tenantId}, 'Manager', 'Can manage staff and view reports', true, 'bg-blue-100 text-blue-800')
+        RETURNING id
+      `
+      managerId = inserted[0].id
+    }
+
+    // Populate Manager permissions if empty
+    const managerPermsCount = await sql`
+      SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id = ${managerId}
+    `
+    if (Number(managerPermsCount[0]?.count || 0) === 0) {
+      for (const p of MANAGER_DEFAULT_PERMISSIONS) {
+        await sql`
+          INSERT INTO tenant_role_permissions (role_id, permission_id)
+          VALUES (${managerId}, ${p})
+          ON CONFLICT DO NOTHING
+        `
+      }
+    }
+
+    // Create Staff role if missing
+    let staffId = roleMap.get("staff")
+    if (!staffId) {
+      const inserted = await sql`
+        INSERT INTO tenant_roles (tenant_id, name, description, is_system, color)
+        VALUES (${tenantId}, 'Staff', 'Basic access to bookings and customers', true, 'bg-green-100 text-green-800')
+        RETURNING id
+      `
+      staffId = inserted[0].id
+    }
+
+    // Populate Staff permissions if empty
+    const staffPermsCount = await sql`
+      SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id = ${staffId}
+    `
+    if (Number(staffPermsCount[0]?.count || 0) === 0) {
+      for (const p of STAFF_DEFAULT_PERMISSIONS) {
+        await sql`
+          INSERT INTO tenant_role_permissions (role_id, permission_id)
+          VALUES (${staffId}, ${p})
+          ON CONFLICT DO NOTHING
+        `
+      }
+    }
+  } catch (err) {
+    console.error("Error in ensureTenantRbacSchema:", err)
+  }
+}
+
 export async function getTenantRoles(): Promise<{ success: boolean; data?: any[]; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      // First ensure default roles exist
-      const checkRoles = await sql`SELECT id FROM tenant_roles WHERE tenant_id = ${tenantId}`
-      
-      if (checkRoles.length === 0) {
-        // Insert default roles
-        const defaultRoles = [
-          { name: 'Admin', description: 'Full system access', is_system: true, color: 'red' },
-          { name: 'Manager', description: 'Can manage staff and view reports', is_system: true, color: 'blue' },
-          { name: 'Staff', description: 'Basic access to bookings and customers', is_system: true, color: 'green' }
-        ]
-        
-        for (const role of defaultRoles) {
-          const res = await sql`
-            INSERT INTO tenant_roles (tenant_id, name, description, is_system, color)
-            VALUES (${tenantId}, ${role.name}, ${role.description}, ${role.is_system}, ${role.color})
-            RETURNING id
-          `
-          
-          if (role.name === 'Admin') {
-            await sql`
-              INSERT INTO tenant_role_permissions (role_id, permission_id)
-              SELECT ${res[0].id}, id FROM tenant_permissions
-            `
-          } else if (role.name === 'Manager') {
-            await sql`
-              INSERT INTO tenant_role_permissions (role_id, permission_id)
-              SELECT ${res[0].id}, id FROM tenant_permissions WHERE level IN ('basic', 'advanced')
-            `
-          } else {
-            await sql`
-              INSERT INTO tenant_role_permissions (role_id, permission_id)
-              SELECT ${res[0].id}, id FROM tenant_permissions WHERE level = 'basic'
-            `
-          }
-        }
-      }
+      await ensureTenantRbacSchema(sql, tenantId)
       
       const roles = await sql`
         SELECT 
@@ -93,20 +223,28 @@ export async function getTenantPermissions(): Promise<{ success: boolean; data?:
 export async function createTenantRole(data: any): Promise<{ success: boolean; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureTenantRbacSchema(sql, tenantId)
       const { name, description, color, permissions } = data
       
       const res = await sql`
         INSERT INTO tenant_roles (tenant_id, name, description, color, is_system) 
-        VALUES (${tenantId}, ${name}, ${description}, ${color}, false) 
+        VALUES (${tenantId}, ${name}, ${description || ''}, ${color || 'bg-blue-100 text-blue-800'}, false) 
         RETURNING id
       `
       
-      if (permissions && permissions.length > 0) {
+      if (Array.isArray(permissions) && permissions.length > 0) {
         for (const p of permissions) {
-           await sql`INSERT INTO tenant_role_permissions (role_id, permission_id) VALUES (${res[0].id}, ${p})`
+          if (typeof p === 'string' && p.trim()) {
+            await sql`
+              INSERT INTO tenant_role_permissions (role_id, permission_id) 
+              VALUES (${res[0].id}, ${p.trim()})
+              ON CONFLICT DO NOTHING
+            `
+          }
         }
       }
       
+      cacheDel(`tenant_users:${tenantId}`)
       revalidatePath("/user-management")
       return { success: true }
     } catch (error: any) {
@@ -119,31 +257,39 @@ export async function createTenantRole(data: any): Promise<{ success: boolean; e
 export async function updateTenantRole(id: string, data: any): Promise<{ success: boolean; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureTenantRbacSchema(sql, tenantId)
       const { name, description, color, permissions } = data
       
       const check = await sql`SELECT is_system FROM tenant_roles WHERE id = ${id} AND tenant_id = ${tenantId}`
       if (check.length > 0 && check[0].is_system) {
-         await sql`
+        await sql`
           UPDATE tenant_roles 
-          SET description = ${description}, color = ${color}, updated_at = NOW() 
+          SET description = ${description || ''}, color = ${color || 'bg-blue-100 text-blue-800'}, updated_at = NOW() 
           WHERE id = ${id} AND tenant_id = ${tenantId}
         `
       } else {
         await sql`
           UPDATE tenant_roles 
-          SET name = ${name}, description = ${description}, color = ${color}, updated_at = NOW() 
+          SET name = ${name}, description = ${description || ''}, color = ${color || 'bg-blue-100 text-blue-800'}, updated_at = NOW() 
           WHERE id = ${id} AND tenant_id = ${tenantId}
         `
       }
       
       await sql`DELETE FROM tenant_role_permissions WHERE role_id = ${id}`
       
-      if (permissions && permissions.length > 0) {
+      if (Array.isArray(permissions) && permissions.length > 0) {
         for (const p of permissions) {
-           await sql`INSERT INTO tenant_role_permissions (role_id, permission_id) VALUES (${id}, ${p})`
+          if (typeof p === 'string' && p.trim()) {
+            await sql`
+              INSERT INTO tenant_role_permissions (role_id, permission_id) 
+              VALUES (${id}, ${p.trim()})
+              ON CONFLICT DO NOTHING
+            `
+          }
         }
       }
       
+      cacheDel(`tenant_users:${tenantId}`)
       revalidatePath("/user-management")
       return { success: true }
     } catch (error: any) {

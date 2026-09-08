@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { usePermissions } from "@/hooks/use-permissions"
 import {
   LayoutDashboard,
   Users,
@@ -114,6 +115,7 @@ const menuItems = [
 export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const pathname = usePathname()
+  const { canAccessRoute, isLoading } = usePermissions()
 
   const isActive = (href: string) => {
     if (href === "/") {
@@ -121,6 +123,9 @@ export default function Sidebar() {
     }
     return pathname.startsWith(href)
   }
+
+  // Filter menu items based on active user's permissions
+  const visibleMenuItems = menuItems.filter((item) => canAccessRoute(item.href))
 
   return (
     <div
@@ -151,7 +156,7 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 p-4 bg-white overflow-y-auto">
         <ul className="space-y-2">
-          {menuItems.map((item, index) => {
+          {visibleMenuItems.map((item) => {
             const Icon = item.icon
             const active = isActive(item.href)
 
@@ -199,15 +204,7 @@ export default function Sidebar() {
             </div>
           </>
         )}
-        {isCollapsed && (
-          <div className="flex justify-center">
-            <Crown className="w-5 h-5 text-purple-600" />
-          </div>
-        )}
       </div>
     </div>
   )
 }
-
-// Also export as named export for compatibility
-export { Sidebar }

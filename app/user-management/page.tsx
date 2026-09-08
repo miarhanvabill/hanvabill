@@ -573,46 +573,66 @@ export default function UserManagementPage() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const tenantUsers = await getTenantUsers()
+      const [tenantUsers, tenantRolesResponse] = await Promise.all([
+        getTenantUsers(),
+        getTenantRoles()
+      ]);
       
-      const mappedUsers: User[] = tenantUsers.map((tu) => ({
-        id: tu.id,
-        name: tu.name,
-        email: tu.email || "",
-        phone: tu.phone || "",
-        role: tu.role_id || "customer_service",
-        permissions: [],
-        isActive: tu.is_active,
-        createdAt: tu.created_at,
-        avatar: tu.avatar_url || undefined,
-      }))
-      
-      const tenantRolesResponse = await getTenantRoles();
       const tenantRolesData = tenantRolesResponse.success ? tenantRolesResponse.data || [] : [];
       const mappedRoles: Role[] = tenantRolesData.map(tr => ({
-        id: tr.id,
+        id: String(tr.id),
         name: tr.name,
         description: tr.description || "",
-        permissions: tr.permissions,
+        permissions: Array.isArray(tr.permissions) ? tr.permissions : [],
         isSystem: tr.is_system,
-        userCount: mappedUsers.filter(u => u.role === tr.id).length,
+        userCount: 0,
         color: tr.color || "bg-gray-100 text-gray-800",
         icon: tr.is_system ? "Crown" : "Briefcase",
         createdAt: tr.created_at,
         createdBy: "System"
-      }))
+      }));
+
+      const mappedUsers: User[] = tenantUsers.map((tu: any) => {
+        const role = mappedRoles.find(
+          (r) => r.id === String(tu.role_id) || r.name.toLowerCase() === String(tu.role_name || tu.role_id).toLowerCase()
+        );
+        
+        let userPerms: string[] = [];
+        if (Array.isArray(tu.permissions) && tu.permissions.length > 0) {
+          userPerms = tu.permissions;
+        } else if (role && Array.isArray(role.permissions)) {
+          userPerms = role.permissions;
+        }
+
+        return {
+          id: tu.id,
+          name: tu.name,
+          email: tu.email || "",
+          phone: tu.phone || "",
+          role: role ? role.id : (String(tu.role_id) || (mappedRoles[0]?.id || "")),
+          permissions: userPerms,
+          isActive: tu.is_active,
+          createdAt: tu.created_at,
+          avatar: tu.avatar_url || undefined,
+          customRole: role ? !role.isSystem : false,
+        };
+      });
+
+      mappedRoles.forEach(r => {
+        r.userCount = mappedUsers.filter(u => u.role === r.id).length;
+      });
       
-      setUsers(mappedUsers)
-      setRoles(mappedRoles)
+      setUsers(mappedUsers);
+      setRoles(mappedRoles);
     } catch (error) {
-      console.error("Failed to load users:", error)
+      console.error("Failed to load users:", error);
       toast({
         title: "Error",
         description: "Failed to load users.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -621,68 +641,96 @@ export default function UserManagementPage() {
   }, [])
 
   const handleCreateUser = () => {
+    const defaultRole = roles[0];
     const newUser: User = {
       id: Date.now().toString(),
       name: "",
       email: "",
       phone: "",
-      role: "customer_service",
-      permissions: [],
+      role: defaultRole ? defaultRole.id : "1",
+      permissions: defaultRole ? [...defaultRole.permissions] : [],
       isActive: true,
       createdAt: new Date().toISOString().split("T")[0],
       department: "",
       employeeId: "",
-    }
+    };
 
-    setSelectedUser(newUser)
-    setIsEditingUser(false)
-    setShowUserDialog(true)
+    setSelectedUser(newUser);
+    setIsEditingUser(false);
+    setShowUserDialog(true);
   }
 
   const handleEditUser = (user: User) => {
-    setSelectedUser(user)
-    setIsEditingUser(true)
-    setShowUserDialog(true)
+    const role = roles.find(r => r.id === user.role);
+    const permissions = (user.permissions && user.permissions.length > 0)
+      ? [...user.permissions]
+      : (role ? [...role.permissions] : []);
+
+    setSelectedUser({
+      ...user,
+      permissions
+    });
+    setIsEditingUser(true);
+    setShowUserDialog(true);
   }
 
   const handleSaveUser = async () => {
     if (selectedUser) {
       try {
+        let res;
         if (users.find((u) => u.id === selectedUser.id)) {
           // Update existing user
-          await updateTenantUser(selectedUser.id, {
+          res = await updateTenantUser(selectedUser.id, {
             name: selectedUser.name,
             email: selectedUser.email,
             phone: selectedUser.phone,
             role_id: selectedUser.role,
+            permissions: selectedUser.permissions,
             is_active: selectedUser.isActive
-          })
+          });
+          if (res && !res.success) {
+            toast({
+              title: "Error Updating User",
+              description: res.error || "Failed to update user",
+              variant: "destructive"
+            });
+            return;
+          }
           toast({
             title: "User Updated",
             description: `${selectedUser.name} has been updated successfully.`,
-          })
+          });
         } else {
           // Add new user
-          await createTenantUser({
+          res = await createTenantUser({
             name: selectedUser.name,
             email: selectedUser.email,
             phone: selectedUser.phone,
             role_id: selectedUser.role,
-          })
+            permissions: selectedUser.permissions,
+          });
+          if (res && !res.success) {
+            toast({
+              title: "Error Creating User",
+              description: res.error || "Failed to create user",
+              variant: "destructive"
+            });
+            return;
+          }
           toast({
             title: "User Created",
             description: `${selectedUser.name} has been added to the system.`,
-          })
+          });
         }
-        setShowUserDialog(false)
-        loadData()
+        setShowUserDialog(false);
+        loadData();
       } catch (error) {
-        console.error("Failed to save user:", error)
+        console.error("Failed to save user:", error);
         toast({
           title: "Error",
           description: "Failed to save user.",
           variant: "destructive",
-        })
+        });
       }
     }
   }
@@ -757,40 +805,47 @@ export default function UserManagementPage() {
   const handleSaveRole = async () => {
     if (selectedRole) {
       try {
+        let res;
         if (roles.find((r) => r.id === selectedRole.id)) {
           // Update existing role
-          await updateTenantRole(selectedRole.id, {
+          res = await updateTenantRole(selectedRole.id, {
             name: selectedRole.name,
             description: selectedRole.description,
             color: selectedRole.color,
             permissions: selectedRole.permissions,
-          })
-          toast({
-            title: "Role Updated",
-            description: `${selectedRole.name} role has been updated successfully.`,
-          })
+          });
         } else {
           // Add new role
-          await createTenantRole({
+          res = await createTenantRole({
             name: selectedRole.name,
             description: selectedRole.description,
             color: selectedRole.color,
             permissions: selectedRole.permissions,
-          })
-          toast({
-            title: "Role Created",
-            description: `${selectedRole.name} role has been created successfully.`,
-          })
+          });
         }
-        setShowRoleDialog(false)
-        loadData()
+
+        if (res && !res.success) {
+          toast({
+            title: "Failed to save role",
+            description: res.error || "An error occurred while saving the role.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        toast({
+          title: "Role Saved",
+          description: `${selectedRole.name} role has been saved successfully.`,
+        });
+        setShowRoleDialog(false);
+        loadData();
       } catch (error) {
-        console.error("Failed to save role:", error)
+        console.error("Failed to save role:", error);
         toast({
           title: "Error",
           description: "Failed to save role.",
           variant: "destructive",
-        })
+        });
       }
     }
   }
