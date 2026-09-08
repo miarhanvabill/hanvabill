@@ -1,5 +1,6 @@
 "use server"
 
+import { clerkClient, auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
 import { withTenantAuth } from "@/lib/withTenantAuth"
 import { cacheFetch, cacheDel } from "@/lib/cache"
@@ -18,7 +19,68 @@ export interface TenantUser {
 }
 
 export async function getTenantUsers(): Promise<TenantUser[]> {
+  const { orgId } = await auth();
+  
   return await withTenantAuth(async ({ sql, tenantId }) => {
+    // 1. Sync Clerk members to local DB
+    if (orgId) {
+      try {
+        const client = await clerkClient();
+        const membershipsResp = await client.organizations.getOrganizationMembershipList({
+          organizationId: orgId,
+        });
+        
+        const clerkMembers = membershipsResp.data;
+        
+        for (const membership of clerkMembers) {
+          const clerkUserId = membership.publicUserData?.userId;
+          const name = membership.publicUserData?.firstName 
+            ? `${membership.publicUserData.firstName} ${membership.publicUserData.lastName || ''}`.trim() 
+            : membership.publicUserData?.identifier || "Unknown";
+          const email = membership.publicUserData?.identifier || null;
+          const avatarUrl = membership.publicUserData?.imageUrl || null;
+          const role = membership.role === 'org:admin' ? 'admin' : 'member'; // Fallback mapping if no local role
+
+          if (!clerkUserId) continue;
+
+          // Upsert into tenant_users manually to avoid constraint issues
+          const existing = await sql`SELECT id, role_id FROM tenant_users WHERE tenant_id = ${tenantId} AND (clerk_user_id = ${clerkUserId} OR email = ${email})`;
+          
+          if (existing.length === 0) {
+            // Find default role IDs
+            const roleName = membership.role === 'org:admin' ? 'Admin' : 'Staff';
+            const roleRes = await sql`SELECT id FROM tenant_roles WHERE tenant_id = ${tenantId} AND name = ${roleName} LIMIT 1`;
+            const defaultRoleId = roleRes.length > 0 ? roleRes[0].id : null;
+
+            await sql`
+              INSERT INTO tenant_users (
+                tenant_id, clerk_user_id, name, email, avatar_url, is_active, role_id
+              ) VALUES (
+                ${tenantId}, ${clerkUserId}, ${name}, ${email}, ${avatarUrl}, true, ${defaultRoleId}
+              ) ON CONFLICT DO NOTHING
+            `;
+          } else {
+            // If they don't have a role, maybe assign one based on Clerk?
+            let updateRoleSql = sql``;
+            if (!existing[0].role_id && membership.role === 'org:admin') {
+               const roleRes = await sql`SELECT id FROM tenant_roles WHERE tenant_id = ${tenantId} AND name = 'Admin' LIMIT 1`;
+               if (roleRes.length > 0) {
+                 await sql`UPDATE tenant_users SET role_id = ${roleRes[0].id} WHERE id = ${existing[0].id}`;
+               }
+            }
+
+            await sql`
+              UPDATE tenant_users 
+              SET name = ${name}, avatar_url = ${avatarUrl}, clerk_user_id = ${clerkUserId}
+              WHERE id = ${existing[0].id}
+            `;
+          }
+        }
+      } catch (clerkError) {
+        console.error("Error syncing clerk members:", clerkError);
+      }
+    }
+
     return await cacheFetch(`tenant_users:${tenantId}`, async () => {
       try {
         const users = await sql`
@@ -45,6 +107,7 @@ export async function getTenantUsers(): Promise<TenantUser[]> {
     })
   });
 }
+
 
 export async function createTenantUser(data: {
   name: string
