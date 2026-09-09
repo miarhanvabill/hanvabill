@@ -574,11 +574,11 @@ export default function UserManagementPage() {
     try {
       setLoading(true)
       const [tenantUsers, tenantRolesResponse] = await Promise.all([
-        getTenantUsers(),
-        getTenantRoles()
+        getTenantUsers().catch(() => []),
+        getTenantRoles().catch(() => ({ success: false, data: [] }))
       ]);
       
-      const tenantRolesData = tenantRolesResponse.success ? tenantRolesResponse.data || [] : [];
+      const tenantRolesData = tenantRolesResponse?.success ? tenantRolesResponse.data || [] : [];
       const mappedRoles: Role[] = tenantRolesData.map(tr => ({
         id: String(tr.id),
         name: tr.name,
@@ -592,13 +592,13 @@ export default function UserManagementPage() {
         createdBy: "System"
       }));
 
-      const mappedUsers: User[] = tenantUsers.map((tu: any) => {
+      const mappedUsers: User[] = (tenantUsers || []).map((tu: any) => {
         const role = mappedRoles.find(
           (r) => r.id === String(tu.role_id) || r.name.toLowerCase() === String(tu.role_name || tu.role_id).toLowerCase()
         );
         
         let userPerms: string[] = [];
-        if (Array.isArray(tu.permissions) && tu.permissions.length > 0) {
+        if (Array.isArray(tu.permissions)) {
           userPerms = tu.permissions;
         } else if (role && Array.isArray(role.permissions)) {
           userPerms = role.permissions;

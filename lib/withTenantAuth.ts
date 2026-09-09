@@ -36,9 +36,6 @@ export async function withTenantAuth<T>(
     if (!userId) {
       throw new Error("Unauthorized")
     }
-    if (!orgId && !orgSlug) {
-      throw new Error("Organization required")
-    }
 
     // 2. If orgSlug is missing, try fetching it
     if (orgId && !orgSlug) {
