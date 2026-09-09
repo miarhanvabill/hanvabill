@@ -609,6 +609,8 @@ export default function UserManagementPage() {
           name: tu.name,
           email: tu.email || "",
           phone: tu.phone || "",
+          department: tu.department || "",
+          employeeId: tu.employee_id || tu.employeeId || "",
           role: role ? role.id : (String(tu.role_id) || (mappedRoles[0]?.id || "")),
           permissions: userPerms,
           isActive: tu.is_active,
@@ -684,6 +686,8 @@ export default function UserManagementPage() {
             name: selectedUser.name,
             email: selectedUser.email,
             phone: selectedUser.phone,
+            department: selectedUser.department,
+            employee_id: selectedUser.employeeId,
             role_id: selectedUser.role,
             permissions: selectedUser.permissions,
             is_active: selectedUser.isActive
@@ -706,6 +710,8 @@ export default function UserManagementPage() {
             name: selectedUser.name,
             email: selectedUser.email,
             phone: selectedUser.phone,
+            department: selectedUser.department,
+            employee_id: selectedUser.employeeId,
             role_id: selectedUser.role,
             permissions: selectedUser.permissions,
           });

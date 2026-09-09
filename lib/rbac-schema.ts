@@ -58,6 +58,8 @@ export async function ensureTenantRbacSchema(sql: any, tenantId: string) {
         name TEXT NOT NULL,
         email TEXT,
         phone TEXT,
+        department VARCHAR(100),
+        employee_id VARCHAR(100),
         role_id INTEGER,
         is_active BOOLEAN DEFAULT true,
         avatar_url TEXT,
@@ -70,6 +72,8 @@ export async function ensureTenantRbacSchema(sql: any, tenantId: string) {
     await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS custom_permissions JSONB DEFAULT NULL;`.catch(() => {})
     await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS clerk_user_id TEXT;`.catch(() => {})
     await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS avatar_url TEXT;`.catch(() => {})
+    await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS department VARCHAR(100);`.catch(() => {})
+    await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS employee_id VARCHAR(100);`.catch(() => {})
 
     // Create helpful indexes
     await sql`CREATE INDEX IF NOT EXISTS idx_tenant_users_tenant ON tenant_users(tenant_id);`.catch(() => {})

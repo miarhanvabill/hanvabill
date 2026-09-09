@@ -13,6 +13,8 @@ export interface TenantUser {
   name: string
   email: string | null
   phone: string | null
+  department?: string | null
+  employee_id?: string | null
   role_id: string | null
   role_name?: string | null
   permissions: string[]
@@ -113,6 +115,8 @@ export async function getTenantUsers(): Promise<TenantUser[]> {
             u.name,
             u.email,
             u.phone,
+            u.department,
+            u.employee_id,
             u.role_id::text,
             r.name as role_name,
             u.custom_permissions,
@@ -150,6 +154,8 @@ export async function getTenantUsers(): Promise<TenantUser[]> {
             name: u.name,
             email: u.email,
             phone: u.phone,
+            department: u.department || null,
+            employee_id: u.employee_id || null,
             role_id: u.role_id,
             role_name: u.role_name,
             permissions: finalPerms,
@@ -173,6 +179,9 @@ export async function createTenantUser(data: {
   name: string
   email?: string
   phone?: string
+  department?: string
+  employee_id?: string
+  employeeId?: string
   role_id?: string | number
   permissions?: string[]
 }) {
@@ -180,6 +189,9 @@ export async function createTenantUser(data: {
     return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
       try {
         const tid = String(tenantId);
+        await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS department VARCHAR(100);`.catch(() => {})
+        await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS employee_id VARCHAR(100);`.catch(() => {})
+
         let numericRoleId: number | null = null;
         if (data.role_id) {
           const parsed = parseInt(String(data.role_id), 10);
@@ -192,14 +204,15 @@ export async function createTenantUser(data: {
         }
 
         const permsJson = data.permissions && data.permissions.length > 0 ? JSON.stringify(data.permissions) : null;
+        const empId = data.employee_id !== undefined ? data.employee_id : data.employeeId;
 
         const result = await sql`
           INSERT INTO tenant_users (
-            tenant_id, name, email, phone, role_id, is_active, custom_permissions
+            tenant_id, name, email, phone, department, employee_id, role_id, is_active, custom_permissions
           ) VALUES (
-            ${tid}, ${data.name}, ${data.email || null}, ${data.phone || null}, ${numericRoleId}, true, ${permsJson ? sql`${permsJson}::jsonb` : null}
+            ${tid}, ${data.name}, ${data.email || null}, ${data.phone || null}, ${data.department || null}, ${empId || null}, ${numericRoleId}, true, ${permsJson ? sql`${permsJson}::jsonb` : null}
           )
-          RETURNING id::text, name, email, role_id::text, is_active
+          RETURNING id::text, name, email, role_id::text, department, employee_id, is_active
         `
         
         await cacheDel(`tenant_users:${tenantId}`)
@@ -220,6 +233,9 @@ export async function updateTenantUser(id: string, data: {
   name?: string
   email?: string
   phone?: string
+  department?: string
+  employee_id?: string
+  employeeId?: string
   role_id?: string | number | null
   permissions?: string[]
   is_active?: boolean
@@ -230,6 +246,8 @@ export async function updateTenantUser(id: string, data: {
         const tid = String(tenantId);
         const userIdStr = String(id).trim();
         await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS custom_permissions JSONB DEFAULT NULL;`.catch(() => {})
+        await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS department VARCHAR(100);`.catch(() => {})
+        await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS employee_id VARCHAR(100);`.catch(() => {})
 
         if (data.name !== undefined) {
           await sql`UPDATE tenant_users SET name = ${data.name} WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})`
@@ -239,6 +257,13 @@ export async function updateTenantUser(id: string, data: {
         }
         if (data.phone !== undefined) {
           await sql`UPDATE tenant_users SET phone = ${data.phone || null} WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})`
+        }
+        if (data.department !== undefined) {
+          await sql`UPDATE tenant_users SET department = ${data.department || null} WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})`
+        }
+        const empId = data.employee_id !== undefined ? data.employee_id : data.employeeId;
+        if (empId !== undefined) {
+          await sql`UPDATE tenant_users SET employee_id = ${empId || null} WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})`
         }
         if (data.role_id !== undefined) {
           let numericRoleId: number | null = null;
