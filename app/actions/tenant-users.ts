@@ -3,6 +3,7 @@
 import { clerkClient, auth } from "@clerk/nextjs/server"
 import { revalidatePath } from "next/cache"
 import { withTenantAuth } from "@/lib/withTenantAuth"
+import { cacheDel } from "@/lib/cache"
 import { ALL_SYSTEM_PERMISSIONS, STAFF_DEFAULT_PERMISSIONS } from "@/lib/permissions-constants"
 
 export interface TenantUser {
@@ -175,34 +176,44 @@ export async function createTenantUser(data: {
   role_id?: string | number
   permissions?: string[]
 }) {
-  return await withTenantAuth(async ({ sql, tenantId }) => {
-    const tid = String(tenantId);
-    let numericRoleId: number | null = null;
-    if (data.role_id) {
-      const parsed = parseInt(String(data.role_id), 10);
-      if (!isNaN(parsed)) {
-        numericRoleId = parsed;
-      } else {
-        const roleMatch = await sql`SELECT id FROM tenant_roles WHERE tenant_id = ${tid} AND LOWER(name) = LOWER(${String(data.role_id)}) LIMIT 1`;
-        if (roleMatch.length > 0) numericRoleId = roleMatch[0].id;
+  try {
+    return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
+      try {
+        const tid = String(tenantId);
+        let numericRoleId: number | null = null;
+        if (data.role_id) {
+          const parsed = parseInt(String(data.role_id), 10);
+          if (!isNaN(parsed)) {
+            numericRoleId = parsed;
+          } else {
+            const roleMatch = await sql`SELECT id FROM tenant_roles WHERE (tenant_id = ${tid} OR tenant_id = ${tenantKey}) AND LOWER(name) = LOWER(${String(data.role_id)}) LIMIT 1`.catch(() => []);
+            if (roleMatch.length > 0) numericRoleId = roleMatch[0].id;
+          }
+        }
+
+        const permsJson = data.permissions && data.permissions.length > 0 ? JSON.stringify(data.permissions) : null;
+
+        const result = await sql`
+          INSERT INTO tenant_users (
+            tenant_id, name, email, phone, role_id, is_active, custom_permissions
+          ) VALUES (
+            ${tid}, ${data.name}, ${data.email || null}, ${data.phone || null}, ${numericRoleId}, true, ${permsJson ? sql`${permsJson}::jsonb` : null}
+          )
+          RETURNING id::text, name, email, role_id::text, is_active
+        `
+        
+        await cacheDel(`tenant_users:${tenantId}`)
+        revalidatePath("/user-management")
+        return { success: true, user: result[0] }
+      } catch (err: any) {
+        console.error("Error in createTenantUser inner:", err)
+        return { success: false, error: err?.message || "Failed to create user" }
       }
-    }
-
-    const permsJson = data.permissions && data.permissions.length > 0 ? JSON.stringify(data.permissions) : null;
-
-    const result = await sql`
-      INSERT INTO tenant_users (
-        tenant_id, name, email, phone, role_id, is_active, custom_permissions
-      ) VALUES (
-        ${tid}, ${data.name}, ${data.email || null}, ${data.phone || null}, ${numericRoleId}, true, ${permsJson ? sql`${permsJson}::jsonb` : null}
-      )
-      RETURNING id::text, name, email, role_id::text, is_active
-    `
-    
-    cacheDel(`tenant_users:${tenantId}`)
-    revalidatePath("/user-management")
-    return { success: true, user: result[0] }
-  });
+    });
+  } catch (err: any) {
+    console.error("Fatal error in createTenantUser:", err)
+    return { success: false, error: err?.message || "Failed to create user" }
+  }
 }
 
 export async function updateTenantUser(id: string, data: {
@@ -213,79 +224,104 @@ export async function updateTenantUser(id: string, data: {
   permissions?: string[]
   is_active?: boolean
 }) {
-  return await withTenantAuth(async ({ sql, tenantId }) => {
-    try {
-      const tid = String(tenantId);
-      const userIdStr = String(id).trim();
-      await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS custom_permissions JSONB DEFAULT NULL;`.catch(() => {})
+  try {
+    return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
+      try {
+        const tid = String(tenantId);
+        const userIdStr = String(id).trim();
+        await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS custom_permissions JSONB DEFAULT NULL;`.catch(() => {})
 
-      if (data.name !== undefined) {
-        await sql`UPDATE tenant_users SET name = ${data.name} WHERE id::text = ${userIdStr} AND tenant_id = ${tid}`
-      }
-      if (data.email !== undefined) {
-        await sql`UPDATE tenant_users SET email = ${data.email || null} WHERE id::text = ${userIdStr} AND tenant_id = ${tid}`
-      }
-      if (data.phone !== undefined) {
-        await sql`UPDATE tenant_users SET phone = ${data.phone || null} WHERE id::text = ${userIdStr} AND tenant_id = ${tid}`
-      }
-      if (data.role_id !== undefined) {
-        let numericRoleId: number | null = null;
-        if (data.role_id) {
-          const parsed = parseInt(String(data.role_id), 10);
-          if (!isNaN(parsed)) {
-            numericRoleId = parsed;
-          } else {
-            const roleMatch = await sql`SELECT id FROM tenant_roles WHERE tenant_id = ${tid} AND LOWER(name) = LOWER(${String(data.role_id)}) LIMIT 1`;
-            if (roleMatch.length > 0) numericRoleId = roleMatch[0].id;
-          }
+        if (data.name !== undefined) {
+          await sql`UPDATE tenant_users SET name = ${data.name} WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})`
         }
-        await sql`UPDATE tenant_users SET role_id = ${numericRoleId} WHERE id::text = ${userIdStr} AND tenant_id = ${tid}`
-      }
-      if (data.permissions !== undefined) {
-        const permsJson = JSON.stringify(data.permissions);
-        await sql`UPDATE tenant_users SET custom_permissions = ${permsJson}::jsonb WHERE id::text = ${userIdStr} AND tenant_id = ${tid}`
-      }
-      if (data.is_active !== undefined) {
-        await sql`UPDATE tenant_users SET is_active = ${data.is_active} WHERE id::text = ${userIdStr} AND tenant_id = ${tid}`
-      }
+        if (data.email !== undefined) {
+          await sql`UPDATE tenant_users SET email = ${data.email || null} WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})`
+        }
+        if (data.phone !== undefined) {
+          await sql`UPDATE tenant_users SET phone = ${data.phone || null} WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})`
+        }
+        if (data.role_id !== undefined) {
+          let numericRoleId: number | null = null;
+          if (data.role_id) {
+            const parsed = parseInt(String(data.role_id), 10);
+            if (!isNaN(parsed)) {
+              numericRoleId = parsed;
+            } else {
+              const roleMatch = await sql`SELECT id FROM tenant_roles WHERE (tenant_id = ${tid} OR tenant_id = ${tenantKey}) AND LOWER(name) = LOWER(${String(data.role_id)}) LIMIT 1`.catch(() => []);
+              if (roleMatch.length > 0) numericRoleId = roleMatch[0].id;
+            }
+          }
+          await sql`UPDATE tenant_users SET role_id = ${numericRoleId} WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})`
+        }
+        if (data.permissions !== undefined) {
+          const permsJson = JSON.stringify(data.permissions);
+          await sql`UPDATE tenant_users SET custom_permissions = ${permsJson}::jsonb WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})`
+        }
+        if (data.is_active !== undefined) {
+          await sql`UPDATE tenant_users SET is_active = ${data.is_active} WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})`
+        }
 
-      cacheDel(`tenant_users:${tenantId}`)
-      revalidatePath("/user-management")
-      return { success: true }
-    } catch (err: any) {
-      console.error("Error in updateTenantUser:", err)
-      return { success: false, error: err.message }
-    }
-  });
+        await cacheDel(`tenant_users:${tenantId}`)
+        revalidatePath("/user-management")
+        return { success: true }
+      } catch (err: any) {
+        console.error("Error in updateTenantUser:", err)
+        return { success: false, error: err?.message || "Failed to update user" }
+      }
+    });
+  } catch (err: any) {
+    console.error("Fatal error in updateTenantUser:", err)
+    return { success: false, error: err?.message || "Failed to update user" }
+  }
 }
 
 export async function deleteTenantUser(id: string) {
-  return await withTenantAuth(async ({ sql, tenantId }) => {
-    const tid = String(tenantId);
-    const userIdStr = String(id).trim();
-    await sql`
-      DELETE FROM tenant_users 
-      WHERE id::text = ${userIdStr} AND tenant_id = ${tid}
-    `
-    
-    cacheDel(`tenant_users:${tenantId}`)
-    revalidatePath("/user-management")
-    return { success: true }
-  });
+  try {
+    return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
+      try {
+        const tid = String(tenantId);
+        const userIdStr = String(id).trim();
+        await sql`
+          DELETE FROM tenant_users 
+          WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})
+        `
+        
+        await cacheDel(`tenant_users:${tenantId}`)
+        revalidatePath("/user-management")
+        return { success: true }
+      } catch (err: any) {
+        console.error("Error in deleteTenantUser:", err)
+        return { success: false, error: err?.message || "Failed to delete user" }
+      }
+    });
+  } catch (err: any) {
+    console.error("Fatal error in deleteTenantUser:", err)
+    return { success: false, error: err?.message || "Failed to delete user" }
+  }
 }
 
 export async function toggleTenantUserStatus(id: string, currentStatus: boolean) {
-  return await withTenantAuth(async ({ sql, tenantId }) => {
-    const tid = String(tenantId);
-    const userIdStr = String(id).trim();
-    await sql`
-      UPDATE tenant_users 
-      SET is_active = ${!currentStatus}
-      WHERE id::text = ${userIdStr} AND tenant_id = ${tid}
-    `
-    
-    cacheDel(`tenant_users:${tenantId}`)
-    revalidatePath("/user-management")
-    return { success: true, is_active: !currentStatus }
-  });
+  try {
+    return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
+      try {
+        const tid = String(tenantId);
+        const userIdStr = String(id).trim();
+        await sql`
+          UPDATE tenant_users 
+          SET is_active = ${!currentStatus}
+          WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})
+        `
+        
+        await cacheDel(`tenant_users:${tenantId}`)
+        revalidatePath("/user-management")
+        return { success: true, is_active: !currentStatus }
+      } catch (err: any) {
+        console.error("Error in toggleTenantUserStatus:", err)
+        return { success: false, error: err?.message || "Failed to toggle status" }
+      }
+    });
+  } catch (err: any) {
+    console.error("Fatal error in toggleTenantUserStatus:", err)
+    return { success: false, error: err?.message || "Failed to toggle status" }
+  }
 }

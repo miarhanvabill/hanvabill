@@ -134,7 +134,7 @@ export async function ensureTenantRbacSchema(sql: any, tenantId: string) {
     // Seed/Heal permissions for Admin if 0
     if (roleMap['admin']) {
       const adminId = roleMap['admin']
-      const count = await sql`SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id::text = ${String(adminId)}`.catch(() => [{ count: 1 }])
+      const count = await sql`SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id::text = ${String(adminId)}`.catch(() => [{ count: 0 }])
       if (Number(count[0]?.count || 0) === 0) {
         for (const p of ALL_SYSTEM_PERMISSIONS) {
           await sql`INSERT INTO tenant_role_permissions (role_id, permission_id) VALUES (${adminId}, ${p}) ON CONFLICT DO NOTHING`.catch(() => {})
@@ -145,7 +145,7 @@ export async function ensureTenantRbacSchema(sql: any, tenantId: string) {
     // Seed/Heal permissions for Manager if 0
     if (roleMap['manager']) {
       const mgrId = roleMap['manager']
-      const count = await sql`SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id::text = ${String(mgrId)}`.catch(() => [{ count: 1 }])
+      const count = await sql`SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id::text = ${String(mgrId)}`.catch(() => [{ count: 0 }])
       if (Number(count[0]?.count || 0) === 0) {
         for (const p of MANAGER_DEFAULT_PERMISSIONS) {
           await sql`INSERT INTO tenant_role_permissions (role_id, permission_id) VALUES (${mgrId}, ${p}) ON CONFLICT DO NOTHING`.catch(() => {})
@@ -156,7 +156,7 @@ export async function ensureTenantRbacSchema(sql: any, tenantId: string) {
     // Seed/Heal permissions for Staff if 0
     if (roleMap['staff']) {
       const staffId = roleMap['staff']
-      const count = await sql`SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id::text = ${String(staffId)}`.catch(() => [{ count: 1 }])
+      const count = await sql`SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id::text = ${String(staffId)}`.catch(() => [{ count: 0 }])
       if (Number(count[0]?.count || 0) === 0) {
         for (const p of STAFF_DEFAULT_PERMISSIONS) {
           await sql`INSERT INTO tenant_role_permissions (role_id, permission_id) VALUES (${staffId}, ${p}) ON CONFLICT DO NOTHING`.catch(() => {})
@@ -167,7 +167,7 @@ export async function ensureTenantRbacSchema(sql: any, tenantId: string) {
     // Seed/Heal permissions for Member if 0
     if (roleMap['member']) {
       const memberId = roleMap['member']
-      const count = await sql`SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id::text = ${String(memberId)}`.catch(() => [{ count: 1 }])
+      const count = await sql`SELECT COUNT(*) as count FROM tenant_role_permissions WHERE role_id::text = ${String(memberId)}`.catch(() => [{ count: 0 }])
       if (Number(count[0]?.count || 0) === 0) {
         for (const p of STAFF_DEFAULT_PERMISSIONS) {
           await sql`INSERT INTO tenant_role_permissions (role_id, permission_id) VALUES (${memberId}, ${p}) ON CONFLICT DO NOTHING`.catch(() => {})

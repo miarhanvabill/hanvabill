@@ -1234,7 +1234,7 @@ export default function UserManagementPage() {
                             className="flex-1 bg-transparent"
                           >
                             <Edit className="w-4 h-4 mr-2" />
-                            {role.isSystem ? "View" : "Edit"}
+                            {role.isSystem && role.name.toLowerCase() === 'admin' ? "View" : "Edit"}
                           </Button>
                           {!role.isSystem && (
                             <Button
@@ -1433,7 +1433,9 @@ export default function UserManagementPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="w-5 h-5" />
-              {isEditingRole ? "Edit Custom Role" : "Create Custom Role"}
+              {isEditingRole 
+                ? (selectedRole?.isSystem && selectedRole?.name.toLowerCase() === 'admin' ? "View Admin Role" : `Edit ${selectedRole?.name || 'Role'}`)
+                : "Create Custom Role"}
             </DialogTitle>
           </DialogHeader>
           {selectedRole && (
@@ -1454,7 +1456,7 @@ export default function UserManagementPage() {
                   <Select
                     value={selectedRole.color}
                     onValueChange={(value) => setSelectedRole({ ...selectedRole, color: value })}
-                    disabled={selectedRole.isSystem}
+                    disabled={selectedRole.isSystem && selectedRole.name.toLowerCase() === 'admin'}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -1466,6 +1468,7 @@ export default function UserManagementPage() {
                       <SelectItem value="bg-orange-100 text-orange-800">Orange</SelectItem>
                       <SelectItem value="bg-pink-100 text-pink-800">Pink</SelectItem>
                       <SelectItem value="bg-yellow-100 text-yellow-800">Yellow</SelectItem>
+                      <SelectItem value="bg-emerald-100 text-emerald-800">Emerald</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1477,6 +1480,7 @@ export default function UserManagementPage() {
                   id="roleDescription"
                   value={selectedRole.description}
                   onChange={(e) => setSelectedRole({ ...selectedRole, description: e.target.value })}
+                  disabled={selectedRole.isSystem && selectedRole.name.toLowerCase() === 'admin'}
                   placeholder="Describe the role and its responsibilities"
                   rows={3}
                 />
@@ -1490,7 +1494,9 @@ export default function UserManagementPage() {
                   Role Permissions ({selectedRole.permissions.length})
                 </Label>
                 <p className="text-sm text-gray-500 mb-4">
-                  Select the permissions that users with this role should have.
+                  {selectedRole.isSystem && selectedRole.name.toLowerCase() === 'admin' 
+                    ? "The Admin role has full, unrestricted access to all system features." 
+                    : "Select the permissions that users with this role should have."}
                 </p>
 
                 <div className="space-y-6 max-h-80 overflow-y-auto border rounded-lg p-4">
@@ -1532,7 +1538,7 @@ export default function UserManagementPage() {
                                 })
                               }
                             }}
-                            disabled={selectedRole.isSystem}
+                            disabled={selectedRole.isSystem && selectedRole.name.toLowerCase() === 'admin'}
                             className="text-xs"
                           >
                             {category.permissions.every((p) => selectedRole.permissions.includes(p.id))
@@ -1553,7 +1559,7 @@ export default function UserManagementPage() {
                                   : selectedRole.permissions.filter((p) => p !== permission.id)
                                 setSelectedRole({ ...selectedRole, permissions: updatedPermissions })
                               }}
-                              disabled={selectedRole.isSystem}
+                              disabled={selectedRole.isSystem && selectedRole.name.toLowerCase() === 'admin'}
                             />
                             <div className="flex-1">
                               <Label htmlFor={`role-${permission.id}`} className="text-sm font-medium">
@@ -1576,7 +1582,11 @@ export default function UserManagementPage() {
                 </Button>
                 <Button
                   onClick={handleSaveRole}
-                  disabled={selectedRole.isSystem || !selectedRole.name || !selectedRole.description}
+                  disabled={
+                    (selectedRole.isSystem && selectedRole.name.toLowerCase() === 'admin') ||
+                    !selectedRole.name || 
+                    !selectedRole.description
+                  }
                 >
                   <CheckCircle2 className="w-4 h-4 mr-2" />
                   {isEditingRole ? "Update Role" : "Create Role"}

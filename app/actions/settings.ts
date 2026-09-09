@@ -6,24 +6,147 @@ import { withTenantAuth } from "@/lib/withTenantAuth"
 import type { BusinessSettings } from "@/types/settings"
 import { cacheFetch, cacheDel } from '@/lib/cache'
 
+const DEFAULT_BUSINESS_SETTINGS: BusinessSettings = {
+  profile: {
+    salonName: "Hanva salon",
+    ownerName: "Gaurav",
+    email: "gaurav@hanva.com",
+    phone: "+919321501389",
+    address: "123 Main Street, City, State 12345",
+    website: "www.hanva.com",
+    googleMyBusinessUrl: "",
+    description: "Premium salon services with affordable pricing",
+    logo: "",
+    coverImage: "",
+    socialMedia: {
+      facebook: "",
+      instagram: "",
+      twitter: "",
+      whatsapp: "+919321501289",
+    },
+  },
+  business: {
+    openTime: "09:00",
+    closeTime: "20:00",
+    workingDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+    appointmentDuration: 30,
+    advanceBookingDays: 30,
+    cancellationPolicy: "24 hours advance notice required",
+    taxRate: 18,
+    serviceCharge: 0,
+    currency: "INR",
+    timezone: "Asia/Kolkata",
+    language: "English",
+    dateFormat: "DD/MM/YYYY",
+    timeFormat: "12-hour",
+  },
+  notifications: {
+    emailNotifications: true,
+    smsNotifications: true,
+    pushNotifications: true,
+    appointmentReminders: true,
+    paymentAlerts: true,
+    lowStockAlerts: true,
+    customerBirthdays: true,
+    marketingEmails: false,
+    staffNotifications: true,
+    reviewAlerts: true,
+    reminderTiming: "24",
+    emailTemplate: "default",
+    smsTemplate: "default",
+  },
+  payments: {
+    acceptCash: true,
+    acceptCards: true,
+    acceptUPI: true,
+    acceptWallets: true,
+    autoInvoicing: true,
+    paymentTerms: "immediate",
+    lateFee: 0,
+    discountLimit: 20,
+    taxInclusive: true,
+    roundingRules: "nearest",
+    receiptTemplate: "default",
+    paymentGateway: "razorpay",
+  },
+  whatsapp: {
+    enabled: false,
+    resellerToken: "",
+    phoneNumberId: "",
+    autoInvoice: false,
+    autoReminder: false,
+  },
+  security: {
+    twoFactorAuth: false,
+    sessionTimeout: 60,
+    passwordExpiry: 90,
+    loginAttempts: 5,
+    dataBackup: true,
+    auditLog: true,
+    ipRestriction: false,
+    encryptData: true,
+    autoLogout: true,
+    securityAlerts: true,
+    dataRetention: 365,
+    backupFrequency: "daily",
+  },
+  appearance: {
+    theme: "light",
+    primaryColor: "#3B82F6",
+    secondaryColor: "#6B7280",
+    accentColor: "#10B981",
+    fontSize: "medium",
+    compactMode: false,
+    showAnimations: true,
+    customLogo: "",
+    brandColors: true,
+    sidebarStyle: "expanded",
+    headerStyle: "default",
+    cardStyle: "elevated",
+  },
+  integrations: {
+    googleCalendar: false,
+    whatsappBusiness: false,
+    emailMarketing: false,
+    smsGateway: false,
+    paymentGateway: false,
+    socialMedia: false,
+    analytics: false,
+    cloudStorage: false,
+    apiAccess: false,
+    webhooks: false,
+  },
+  system: {
+    autoBackup: true,
+    backupLocation: "cloud",
+    dataSync: true,
+    offlineMode: false,
+    cacheSize: "medium",
+    performanceMode: "balanced",
+    debugMode: false,
+    maintenanceMode: false,
+    updateChannel: "stable",
+    errorReporting: true,
+  },
+}
+
 async function ensureStoreSettingsTable(sql: any) {
   try {
     await sql`
       CREATE TABLE IF NOT EXISTS store_settings (
         id SERIAL PRIMARY KEY,
-        tenant_id VARCHAR(100) NOT NULL,
+        tenant_id VARCHAR(100) NOT NULL DEFAULT '1',
         setting_key VARCHAR(100) NOT NULL,
         setting_value TEXT,
         setting_type VARCHAR(20) DEFAULT 'text',
         description TEXT,
         is_public BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT store_settings_setting_key_unique UNIQUE (tenant_id, setting_key)
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `.catch(() => {});
+    await sql`ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT '1';`.catch(() => {});
   } catch (error) {
-    // Graceful fallback - do not crash settings retrieval
     console.warn("ensureStoreSettingsTable non-fatal error:", error);
   }
 }
@@ -41,501 +164,115 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
               FROM store_settings
               WHERE tenant_id = ${String(tenantId)}
               ORDER BY setting_key
-            `
+            `.catch(() => [])
 
-        const defaultSettings: BusinessSettings = {
-        profile: {
-          salonName: "Hanva salon",
-          ownerName: "Gaurav",
-          email: "gaurav@hanva.com",
-          phone: "+919321501389",
-          address: "123 Main Street, City, State 12345",
-          website: "www.hanva.com",
-          googleMyBusinessUrl: "",
-          description: "Premium salon services with affordable pricing",
-          logo: "",
-          coverImage: "",
-          socialMedia: {
-            facebook: "",
-            instagram: "",
-            twitter: "",
-            whatsapp: "+919321501289",
-          },
-        },
-        business: {
-          openTime: "09:00",
-          closeTime: "20:00",
-          workingDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
-          appointmentDuration: 30,
-          advanceBookingDays: 30,
-          cancellationPolicy: "24 hours advance notice required",
-          taxRate: 18,
-          serviceCharge: 0,
-          currency: "INR",
-          timezone: "Asia/Kolkata",
-          language: "English",
-          dateFormat: "DD/MM/YYYY",
-          timeFormat: "12-hour",
-        },
-        notifications: {
-          emailNotifications: true,
-          smsNotifications: true,
-          pushNotifications: true,
-          appointmentReminders: true,
-          paymentAlerts: true,
-          lowStockAlerts: true,
-          customerBirthdays: true,
-          marketingEmails: false,
-          staffNotifications: true,
-          reviewAlerts: true,
-          reminderTiming: "24",
-          emailTemplate: "default",
-          smsTemplate: "default",
-        },
-        payments: {
-          acceptCash: true,
-          acceptCards: true,
-          acceptUPI: true,
-          acceptWallets: true,
-          autoInvoicing: true,
-          paymentTerms: "immediate",
-          lateFee: 0,
-          discountLimit: 20,
-          taxInclusive: true,
-          roundingRules: "nearest",
-          receiptTemplate: "default",
-          paymentGateway: "razorpay",
-        },
-        whatsapp: {
-          enabled: false,
-          resellerToken: "",
-          phoneNumberId: "",
-          autoInvoice: false,
-          autoReminder: false,
-        },
-        security: {
-          twoFactorAuth: false,
-          sessionTimeout: 60,
-          passwordExpiry: 90,
-          loginAttempts: 5,
-          dataBackup: true,
-          auditLog: true,
-          ipRestriction: false,
-          encryptData: true,
-          autoLogout: true,
-          securityAlerts: true,
-          dataRetention: 365,
-          backupFrequency: "daily",
-        },
-        appearance: {
-          theme: "light",
-          primaryColor: "#3B82F6",
-          secondaryColor: "#6B7280",
-          accentColor: "#10B981",
-          fontSize: "medium",
-          compactMode: false,
-          showAnimations: true,
-          customLogo: "",
-          brandColors: true,
-          sidebarStyle: "expanded",
-          headerStyle: "default",
-          cardStyle: "elevated",
-        },
-        integrations: {
-          googleCalendar: false,
-          whatsappBusiness: false,
-          emailMarketing: false,
-          smsGateway: false,
-          paymentGateway: false,
-          socialMedia: false,
-          analytics: false,
-          cloudStorage: false,
-          apiAccess: false,
-          webhooks: false,
-        },
-        system: {
-          autoBackup: true,
-          backupLocation: "cloud",
-          dataSync: true,
-          offlineMode: false,
-          cacheSize: "medium",
-          performanceMode: "balanced",
-          debugMode: false,
-          maintenanceMode: false,
-          updateChannel: "stable",
-          errorReporting: true,
-        },
-      }
+            const settings: BusinessSettings = JSON.parse(JSON.stringify(DEFAULT_BUSINESS_SETTINGS))
 
-      const settings = { ...defaultSettings }
-
-      if (!Array.isArray(rows)) {
-        console.warn("Database returned non-array result, using defaults")
-        return settings
-      }
-
-      for (const row of rows) {
-        try {
-          if (!row || typeof row !== "object") {
-            console.warn("Invalid row object found:", row)
-            continue
-          }
-
-          const { setting_key, setting_value, setting_type } = row
-
-          if (!setting_key || typeof setting_key !== "string" || setting_key.trim() === "") {
-            console.warn("Invalid or empty setting_key found:", { setting_key, row_id: row.id })
-            continue
-          }
-
-          if (setting_value === null || setting_value === undefined) {
-            console.warn("Null setting_value found for key:", setting_key)
-            continue
-          }
-
-          const keys = setting_key.includes(".") ? setting_key.split(".") : []
-
-          if (keys.length < 2 || keys.length > 3) {
-            console.warn("Invalid setting key structure:", setting_key)
-            continue
-          }
-
-          if (keys.length === 2) {
-            const [section, key] = keys
-
-            if (!section || !key || !settings[section as keyof BusinessSettings]) {
-              console.warn("Unknown settings section or invalid key:", { section, key })
-              continue
+            if (!Array.isArray(rows) || rows.length === 0) {
+              return settings
             }
 
-            let value = setting_value
+            for (const row of rows) {
+              try {
+                if (!row || typeof row !== "object") continue
 
-            try {
-              if (setting_type === "boolean") {
-                value = setting_value === "true" || setting_value === true
-              } else if (setting_type === "number") {
-                const numValue = Number.parseFloat(setting_value)
-                value = isNaN(numValue) ? 0 : numValue
-              } else if (setting_type === "json") {
-                try {
-                  value = JSON.parse(setting_value)
-                } catch (jsonError) {
-                  console.warn(`Failed to parse JSON for ${setting_key}:`, jsonError)
-                  value = setting_value
+                const { setting_key, setting_value, setting_type } = row
+
+                if (!setting_key || typeof setting_key !== "string" || setting_key.trim() === "") {
+                  continue
                 }
-              }
-            } catch (parseError) {
-              console.warn(`Error parsing value for ${setting_key}:`, parseError)
-              value = setting_value
-            }
 
-            const sectionObj = settings[section as keyof BusinessSettings] as any
-            if (sectionObj && typeof sectionObj === "object") {
-              sectionObj[key] = value
-            }
-          } else if (keys.length === 3) {
-            const [section, subsection, key] = keys
-
-            if (!section || !subsection || !key) {
-              console.warn("Invalid nested key structure:", { section, subsection, key })
-              continue
-            }
-
-            const sectionObj = settings[section as keyof BusinessSettings] as any
-            if (!sectionObj || typeof sectionObj !== "object") {
-              console.warn("Unknown settings section:", section)
-              continue
-            }
-
-            if (!sectionObj[subsection] || typeof sectionObj[subsection] !== "object") {
-              console.warn("Unknown settings subsection:", { section, subsection })
-              continue
-            }
-
-            let value = setting_value
-
-            try {
-              if (setting_type === "boolean") {
-                value = setting_value === "true" || setting_value === true
-              } else if (setting_type === "number") {
-                const numValue = Number.parseFloat(setting_value)
-                value = isNaN(numValue) ? 0 : numValue
-              } else if (setting_type === "json") {
-                try {
-                  value = JSON.parse(setting_value)
-                } catch (jsonError) {
-                  console.warn(`Failed to parse JSON for ${setting_key}:`, jsonError)
-                  value = setting_value
+                if (setting_value === null || setting_value === undefined) {
+                  continue
                 }
+
+                const keys = setting_key.includes(".") ? setting_key.split(".") : []
+
+                if (keys.length < 2 || keys.length > 3) {
+                  continue
+                }
+
+                if (keys.length === 2) {
+                  const [section, key] = keys
+
+                  if (!section || !key || !settings[section as keyof BusinessSettings]) {
+                    continue
+                  }
+
+                  let value = setting_value
+
+                  try {
+                    if (setting_type === "boolean") {
+                      value = setting_value === "true" || setting_value === true
+                    } else if (setting_type === "number") {
+                      const numValue = Number.parseFloat(setting_value)
+                      value = isNaN(numValue) ? 0 : numValue
+                    } else if (setting_type === "json") {
+                      try {
+                        value = JSON.parse(setting_value)
+                      } catch {
+                        value = setting_value
+                      }
+                    }
+                  } catch {
+                    value = setting_value
+                  }
+
+                  const sectionObj = settings[section as keyof BusinessSettings] as any
+                  if (sectionObj && typeof sectionObj === "object") {
+                    sectionObj[key] = value
+                  }
+                } else if (keys.length === 3) {
+                  const [section, subsection, key] = keys
+
+                  if (!section || !subsection || !key) continue
+
+                  const sectionObj = settings[section as keyof BusinessSettings] as any
+                  if (!sectionObj || typeof sectionObj !== "object") continue
+
+                  if (!sectionObj[subsection] || typeof sectionObj[subsection] !== "object") continue
+
+                  let value = setting_value
+
+                  try {
+                    if (setting_type === "boolean") {
+                      value = setting_value === "true" || setting_value === true
+                    } else if (setting_type === "number") {
+                      const numValue = Number.parseFloat(setting_value)
+                      value = isNaN(numValue) ? 0 : numValue
+                    } else if (setting_type === "json") {
+                      try {
+                        value = JSON.parse(setting_value)
+                      } catch {
+                        value = setting_value
+                      }
+                    }
+                  } catch {
+                    value = setting_value
+                  }
+
+                  sectionObj[subsection][key] = value
+                }
+              } catch (rowError) {
+                console.warn("Error processing settings row:", rowError)
+                continue
               }
-            } catch (parseError) {
-              console.warn(`Error parsing value for ${setting_key}:`, parseError)
-              value = setting_value
             }
 
-            sectionObj[subsection][key] = value
+            return settings
+          } catch (error) {
+            console.error("Error fetching business settings rows:", error)
+            return DEFAULT_BUSINESS_SETTINGS
           }
-        } catch (rowError) {
-          console.warn("Error processing settings row:", {
-            error: rowError instanceof Error ? rowError.message : "Unknown error",
-            row: row,
-          })
-          continue
-        }
+        }, 300)
+      } catch (cacheErr) {
+        console.warn("[getBusinessSettings] Cache/fetch error:", cacheErr)
+        return DEFAULT_BUSINESS_SETTINGS
       }
-
-      return settings
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error"
-      console.error("Error fetching business settings:", {
-        error: errorMessage,
-        timestamp: new Date().toISOString(),
-      })
-
-      // Return default settings on error
-      return {
-        profile: {
-          salonName: "Hanva salon",
-          ownerName: "Gaurav",
-          email: "gaurav@hanva.com",
-          phone: "+919321501389",
-          address: "123 Main Street, City, State 12345",
-          website: "www.hanva.com",
-          googleMyBusinessUrl: "",
-          description: "Premium salon services with affordable pricing",
-          logo: "",
-          coverImage: "",
-          socialMedia: {
-            facebook: "",
-            instagram: "",
-            twitter: "",
-            whatsapp: "+919321501289",
-          },
-        },
-        business: {
-          openTime: "09:00",
-          closeTime: "20:00",
-          workingDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
-          appointmentDuration: 30,
-          advanceBookingDays: 30,
-          cancellationPolicy: "24 hours advance notice required",
-          taxRate: 18,
-          serviceCharge: 0,
-          currency: "INR",
-          timezone: "Asia/Kolkata",
-          language: "English",
-          dateFormat: "DD/MM/YYYY",
-          timeFormat: "12-hour",
-        },
-        notifications: {
-          emailNotifications: true,
-          smsNotifications: true,
-          pushNotifications: true,
-          appointmentReminders: true,
-          paymentAlerts: true,
-          lowStockAlerts: true,
-          customerBirthdays: true,
-          marketingEmails: false,
-          staffNotifications: true,
-          reviewAlerts: true,
-          reminderTiming: "24",
-          emailTemplate: "default",
-          smsTemplate: "default",
-        },
-        payments: {
-          acceptCash: true,
-          acceptCards: true,
-          acceptUPI: true,
-          acceptWallets: true,
-          autoInvoicing: true,
-          paymentTerms: "immediate",
-          lateFee: 0,
-          discountLimit: 20,
-          taxInclusive: true,
-          roundingRules: "nearest",
-          receiptTemplate: "default",
-          paymentGateway: "razorpay",
-        },
-        security: {
-          twoFactorAuth: false,
-          sessionTimeout: 60,
-          passwordExpiry: 90,
-          loginAttempts: 5,
-          dataBackup: true,
-          auditLog: true,
-          ipRestriction: false,
-          encryptData: true,
-          autoLogout: true,
-          securityAlerts: true,
-          dataRetention: 365,
-          backupFrequency: "daily",
-        },
-        appearance: {
-          theme: "light",
-          primaryColor: "#3B82F6",
-          secondaryColor: "#6B7280",
-          accentColor: "#10B981",
-          fontSize: "medium",
-          compactMode: false,
-          showAnimations: true,
-          customLogo: "",
-          brandColors: true,
-          sidebarStyle: "expanded",
-          headerStyle: "default",
-          cardStyle: "elevated",
-        },
-        integrations: {
-          googleCalendar: false,
-          whatsappBusiness: false,
-          emailMarketing: false,
-          smsGateway: false,
-          paymentGateway: false,
-          socialMedia: false,
-          analytics: false,
-          cloudStorage: false,
-          apiAccess: false,
-          webhooks: false,
-        },
-        system: {
-          autoBackup: true,
-          backupLocation: "cloud",
-          dataSync: true,
-          offlineMode: false,
-          cacheSize: "medium",
-          performanceMode: "balanced",
-          debugMode: false,
-          maintenanceMode: false,
-          updateChannel: "stable",
-          errorReporting: true,
-        },
-      }
-    }
-    }, 300)
-    } catch (cacheErr) {
-      console.warn("[getBusinessSettings] Cache/fetch error:", cacheErr)
-      return defaultSettings
-    }
-  })
+    })
   } catch (authErr) {
     console.warn("[getBusinessSettings] Auth/tenant error, returning fallback:", authErr)
-    return {
-      profile: {
-        salonName: "Hanva salon",
-        ownerName: "Gaurav",
-        email: "gaurav@hanva.com",
-        phone: "+919321501389",
-        address: "123 Main Street, City, State 12345",
-        website: "www.hanva.com",
-        googleMyBusinessUrl: "",
-        description: "Premium salon services with affordable pricing",
-        logo: "",
-        coverImage: "",
-        socialMedia: { facebook: "", instagram: "", twitter: "", whatsapp: "+919321501289" },
-      },
-      business: {
-        openTime: "09:00",
-        closeTime: "20:00",
-        workingDays: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
-        appointmentDuration: 30,
-        advanceBookingDays: 30,
-        cancellationPolicy: "24 hours advance notice required",
-        taxRate: 18,
-        serviceCharge: 0,
-        currency: "INR",
-        timezone: "Asia/Kolkata",
-        language: "English",
-        dateFormat: "DD/MM/YYYY",
-        timeFormat: "12-hour",
-      },
-      notifications: {
-        emailNotifications: true,
-        smsNotifications: true,
-        pushNotifications: true,
-        appointmentReminders: true,
-        paymentAlerts: true,
-        lowStockAlerts: true,
-        customerBirthdays: true,
-        marketingEmails: false,
-        staffNotifications: true,
-        reviewAlerts: true,
-        reminderTiming: "24",
-        emailTemplate: "default",
-        smsTemplate: "default",
-      },
-      payments: {
-        acceptCash: true,
-        acceptCards: true,
-        acceptUPI: true,
-        acceptWallets: true,
-        autoInvoicing: true,
-        paymentTerms: "immediate",
-        lateFee: 0,
-        discountLimit: 20,
-        taxInclusive: true,
-        roundingRules: "nearest",
-        receiptTemplate: "default",
-        paymentGateway: "razorpay",
-      },
-      whatsapp: {
-        enabled: false,
-        resellerToken: "",
-        phoneNumberId: "",
-        autoInvoice: false,
-        autoReminder: false,
-      },
-      security: {
-        twoFactorAuth: false,
-        sessionTimeout: 60,
-        passwordExpiry: 90,
-        loginAttempts: 5,
-        dataBackup: true,
-        auditLog: true,
-        ipRestriction: false,
-        encryptData: true,
-        autoLogout: true,
-        securityAlerts: true,
-        dataRetention: 365,
-        backupFrequency: "daily",
-      },
-      appearance: {
-        theme: "light",
-        primaryColor: "#3B82F6",
-        secondaryColor: "#6B7280",
-        accentColor: "#10B981",
-        fontSize: "medium",
-        compactMode: false,
-        showAnimations: true,
-        customLogo: "",
-        brandColors: true,
-        sidebarStyle: "expanded",
-        headerStyle: "default",
-        cardStyle: "elevated",
-      },
-      integrations: {
-        googleCalendar: false,
-        whatsappBusiness: false,
-        emailMarketing: false,
-        smsGateway: false,
-        paymentGateway: false,
-        socialMedia: false,
-        analytics: false,
-        cloudStorage: false,
-        apiAccess: false,
-        webhooks: false,
-      },
-      system: {
-        autoBackup: true,
-        backupLocation: "cloud",
-        dataSync: true,
-        offlineMode: false,
-        cacheSize: "medium",
-        performanceMode: "balanced",
-        debugMode: false,
-        maintenanceMode: false,
-        updateChannel: "stable",
-        errorReporting: true,
-      },
-    }
+    return DEFAULT_BUSINESS_SETTINGS
   }
 }
 
