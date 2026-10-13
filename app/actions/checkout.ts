@@ -27,6 +27,17 @@ export interface FinalizeCheckoutInput {
   redeem_points?: number
   points_earned_client?: number
   gift_cards?: Array<{ code: string; amount: number }>
+  product_consumptions?: Array<{
+    inventory_id?: number
+    product_id?: number
+    name: string
+    sku?: string
+    quantity: number
+    unit?: string
+    service_name?: string
+    staff_name?: string
+    notes?: string
+  }>
   idempotency_key?: string | null
   booking_id?: number
 }
@@ -343,6 +354,118 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
         }
       } catch (err) {
         console.error("Failed to insert staff commission splits:", err)
+      }
+
+      // --- Deduct Inventory Stock (Retail Products & Salon Consumptions) ---
+      try {
+        // 1. Deduct retail products sold in cart
+        for (const item of productItems) {
+          const qty = Number(item.quantity) || 1
+          await sql`
+            UPDATE inventory SET 
+              quantity = GREATEST(0, quantity - ${qty}),
+              status = CASE 
+                WHEN GREATEST(0, quantity - ${qty}) = 0 THEN 'out_of_stock'
+                WHEN GREATEST(0, quantity - ${qty}) <= COALESCE(reorder_level, min_stock_level, 5) THEN 'low_stock'
+                ELSE 'active'
+              END,
+              updated_at = NOW()
+            WHERE (id = ${item.id} OR LOWER(name) = LOWER(${item.name})) AND tenant_id = ${tenantId}
+          `.catch(() => {})
+
+          await sql`
+            UPDATE products SET 
+              stock_quantity = GREATEST(0, stock_quantity - ${qty}),
+              updated_at = NOW()
+            WHERE (id = ${item.id} OR LOWER(name) = LOWER(${item.name})) AND tenant_id = ${tenantId}
+          `.catch(() => {})
+
+          // Record in inventory_adjustments
+          await sql`
+            INSERT INTO inventory_adjustments (
+              tenant_id, product_id, adjustment_type, quantity, reason, notes, created_at
+            ) VALUES (
+              ${tenantId}, ${item.id}, 'decrease', ${qty},
+              ${'POS Sale #' + invoiceNumber}, ${'Retail product sold to ' + customer.full_name}, NOW()
+            )
+          `.catch(() => {})
+        }
+
+        // 2. Deduct in-salon service product consumptions (e.g. 30 ml hair color, 50 ml developer, 15 ml shampoo)
+        if (input.product_consumptions && input.product_consumptions.length > 0) {
+          for (const consumption of input.product_consumptions) {
+            const deductQty = Math.max(0, Number(consumption.quantity) || 0)
+            const unit = consumption.unit || "ml"
+            const name = consumption.name || "Salon Product"
+            const sku = consumption.sku || null
+
+            // Deduct from inventory
+            if (consumption.inventory_id) {
+              await sql`
+                UPDATE inventory SET
+                  quantity = GREATEST(0, quantity - ${deductQty}),
+                  status = CASE 
+                    WHEN GREATEST(0, quantity - ${deductQty}) = 0 THEN 'out_of_stock'
+                    WHEN GREATEST(0, quantity - ${deductQty}) <= COALESCE(reorder_level, min_stock_level, 5) THEN 'low_stock'
+                    ELSE 'active'
+                  END,
+                  updated_at = NOW()
+                WHERE id = ${consumption.inventory_id} AND tenant_id = ${tenantId}
+              `.catch(() => {})
+            } else if (sku) {
+              await sql`
+                UPDATE inventory SET
+                  quantity = GREATEST(0, quantity - ${deductQty}),
+                  status = CASE 
+                    WHEN GREATEST(0, quantity - ${deductQty}) = 0 THEN 'out_of_stock'
+                    WHEN GREATEST(0, quantity - ${deductQty}) <= COALESCE(reorder_level, min_stock_level, 5) THEN 'low_stock'
+                    ELSE 'active'
+                  END,
+                  updated_at = NOW()
+                WHERE (UPPER(sku) = UPPER(${sku}) OR UPPER(barcode) = UPPER(${sku})) AND tenant_id = ${tenantId}
+              `.catch(() => {})
+            } else {
+              await sql`
+                UPDATE inventory SET
+                  quantity = GREATEST(0, quantity - ${deductQty}),
+                  status = CASE 
+                    WHEN GREATEST(0, quantity - ${deductQty}) = 0 THEN 'out_of_stock'
+                    WHEN GREATEST(0, quantity - ${deductQty}) <= COALESCE(reorder_level, min_stock_level, 5) THEN 'low_stock'
+                    ELSE 'active'
+                  END,
+                  updated_at = NOW()
+                WHERE LOWER(name) = LOWER(${name}) AND tenant_id = ${tenantId}
+              `.catch(() => {})
+            }
+
+            // Record in product_consumptions table
+            await sql`
+              INSERT INTO product_consumptions (
+                tenant_id, invoice_id, booking_id, inventory_id, product_id,
+                product_name, sku, quantity_deducted, unit, service_name, staff_name, notes, created_at
+              ) VALUES (
+                ${tenantId}, ${invoice.id}, ${bookingId}, ${consumption.inventory_id || null},
+                ${consumption.product_id || null}, ${name}, ${sku}, ${deductQty},
+                ${unit}, ${consumption.service_name || null}, ${consumption.staff_name || null},
+                ${consumption.notes || 'Service Consumption'}, NOW()
+              )
+            `.catch(() => {})
+
+            // Also record in inventory_adjustments
+            await sql`
+              INSERT INTO inventory_adjustments (
+                tenant_id, product_id, adjustment_type, quantity, reason, notes, created_at
+              ) VALUES (
+                ${tenantId}, ${consumption.inventory_id || consumption.product_id || invoice.id}, 'decrease', ${deductQty},
+                ${'Service Consumption: ' + (consumption.service_name || 'In-Salon Service')},
+                ${(consumption.staff_name ? 'Used by ' + consumption.staff_name + ': ' : '') + deductQty + ' ' + unit + ' of ' + name},
+                NOW()
+              )
+            `.catch(() => {})
+          }
+        }
+      } catch (stockErr) {
+        console.error("Failed to deduct inventory stock during checkout:", stockErr)
       }
 
       const pointsRedeemed = Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, input.redeem_points || 0))

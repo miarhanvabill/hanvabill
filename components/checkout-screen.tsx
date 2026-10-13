@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
-import { CreditCard, Banknote, Smartphone, Percent, Receipt, User, ShoppingCart, Tag, Star } from "lucide-react"
+import { CreditCard, Banknote, Smartphone, Percent, Receipt, User, ShoppingCart, Tag, Star, Beaker, Plus, Trash2, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react"
 
 import { CouponSelector } from "@/components/coupon-selector"
 import LoyaltyCheckout from "@/components/loyalty-checkout"
@@ -20,6 +20,18 @@ import { calculateTier, type CustomerLoyalty as UiCustomerLoyalty } from "@/lib/
 import { formatCurrency } from "@/lib/currency"
 import { getBusinessSettings } from "@/app/actions/settings"
 import { getActiveCustomerMembership } from "@/app/actions/memberships"
+
+export interface ProductConsumptionItem {
+  id: string
+  inventory_id?: number
+  name: string
+  sku?: string
+  quantity: number
+  unit: string
+  service_name?: string
+  staff_name?: string
+  notes?: string
+}
 
 interface Customer {
   id: number
@@ -114,6 +126,69 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
   const giftCardDiscount = useMemo(() => giftCards.reduce((s, g) => s + (g.amount || 0), 0), [giftCards])
 
   const [taxRate, setTaxRate] = useState<number>(18)
+
+  // Salon Product Consumption / Auto-Deduction State
+  const [isConsumptionOpen, setIsConsumptionOpen] = useState(false)
+  const [productConsumptions, setProductConsumptions] = useState<ProductConsumptionItem[]>([])
+  const [inventoryList, setInventoryList] = useState<any[]>([])
+
+  useEffect(() => {
+    fetch("/api/inventory")
+      .then((r) => r.json())
+      .then((res) => {
+        if (res?.success && Array.isArray(res.data)) {
+          setAvailableInventoryList(res.data)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const setAvailableInventoryList = (data: any[]) => {
+    setInventoryList(data)
+  }
+
+  const handleAddConsumptionRow = () => {
+    const newId = `cons-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const defaultService = cartItems.find((i) => i.type === "service")?.name || ""
+    const defaultStaff = cartItems[0]?.staff_name || ""
+    setProductConsumptions((prev) => [
+      ...prev,
+      {
+        id: newId,
+        name: "",
+        quantity: 30,
+        unit: "ml",
+        service_name: defaultService,
+        staff_name: defaultStaff,
+      },
+    ])
+    setIsConsumptionOpen(true)
+  }
+
+  const handleUpdateConsumptionRow = (id: string, patch: Partial<ProductConsumptionItem>) => {
+    setProductConsumptions((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item
+        const updated = { ...item, ...patch }
+        if (patch.inventory_id !== undefined) {
+          const matched = inventoryList.find((inv) => Number(inv.id) === Number(patch.inventory_id))
+          if (matched) {
+            updated.name = matched.name || matched.item_name
+            updated.sku = matched.sku || matched.barcode
+            if (matched.volume_unit) updated.unit = matched.volume_unit
+            else if (matched.unit && ["ml", "gm", "pcs", "tubes", "sachets"].includes(matched.unit)) {
+              updated.unit = matched.unit
+            }
+          }
+        }
+        return updated
+      })
+    )
+  }
+
+  const handleRemoveConsumptionRow = (id: string) => {
+    setProductConsumptions((prev) => prev.filter((item) => item.id !== id))
+  }
 
   useEffect(() => {
     getBusinessSettings().then(settings => {
@@ -329,6 +404,18 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
         gift_cards: giftCards,
         idempotency_key: idempotencyKeyRef.current,
         booking_id: bookingId,
+        product_consumptions: productConsumptions
+          .filter((c) => c.name && c.quantity > 0)
+          .map((c) => ({
+            inventory_id: c.inventory_id,
+            name: c.name,
+            sku: c.sku,
+            quantity: c.quantity,
+            unit: c.unit,
+            service_name: c.service_name,
+            staff_name: c.staff_name,
+            notes: c.notes,
+          })),
       }
       const res = await fetch("/api/checkout/finalize", {
         method: "POST",
@@ -501,6 +588,170 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Salon Product Consumption / Auto-Deduction */}
+          <div className="rounded-lg border border-purple-200 bg-purple-50/40 dark:bg-purple-950/20 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-md bg-purple-600 text-white shadow-sm">
+                  <Beaker className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    Salon Product Consumption
+                    {productConsumptions.length > 0 && (
+                      <Badge variant="outline" className="text-xs bg-purple-100 text-purple-700 border-purple-300">
+                        {productConsumptions.length} {productConsumptions.length === 1 ? "item" : "items"}
+                      </Badge>
+                    )}
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Auto-deducts product used (in ml, gm, pcs) directly from salon inventory.
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleAddConsumptionRow}
+                className="h-8 gap-1.5 text-xs border-purple-300 text-purple-700 hover:bg-purple-100 hover:text-purple-800"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add Product
+              </Button>
+            </div>
+
+            {productConsumptions.length > 0 ? (
+              <div className="space-y-3 pt-2">
+                {productConsumptions.map((consumption, idx) => (
+                  <div
+                    key={consumption.id}
+                    className="p-3 bg-white dark:bg-slate-900 rounded-md border border-purple-200/80 shadow-xs space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-purple-900 dark:text-purple-200">
+                        Item #{idx + 1}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => handleRemoveConsumptionRow(consumption.id)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                      {/* Product Selector / Name */}
+                      <div className="sm:col-span-6 space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Product (from inventory)</Label>
+                        <Select
+                          value={consumption.inventory_id ? String(consumption.inventory_id) : "custom"}
+                          onValueChange={(val) => {
+                            if (val === "custom") {
+                              handleUpdateConsumptionRow(consumption.id, { inventory_id: undefined, name: "" })
+                            } else {
+                              handleUpdateConsumptionRow(consumption.id, { inventory_id: Number(val) })
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Select product..." />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-60">
+                            <SelectItem value="custom">-- Custom Product Name --</SelectItem>
+                            {inventoryList.map((inv) => (
+                              <SelectItem key={inv.id} value={String(inv.id)}>
+                                {inv.name || inv.item_name} ({inv.quantity} {inv.unit} left)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {(!consumption.inventory_id || consumption.name === "") && (
+                          <Input
+                            placeholder="Enter product name (e.g. Majirel 5.1)"
+                            value={consumption.name}
+                            onChange={(e) => handleUpdateConsumptionRow(consumption.id, { name: e.target.value })}
+                            className="h-7 text-xs mt-1"
+                          />
+                        )}
+                      </div>
+
+                      {/* Quantity */}
+                      <div className="sm:col-span-3 space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Qty Deducted</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          min="0.1"
+                          placeholder="30"
+                          value={consumption.quantity || ""}
+                          onChange={(e) =>
+                            handleUpdateConsumptionRow(consumption.id, { quantity: Number(e.target.value) || 0 })
+                          }
+                          className="h-8 text-xs font-semibold"
+                        />
+                      </div>
+
+                      {/* Unit */}
+                      <div className="sm:col-span-3 space-y-1">
+                        <Label className="text-[11px] text-muted-foreground">Unit</Label>
+                        <Select
+                          value={consumption.unit || "ml"}
+                          onValueChange={(val) => handleUpdateConsumptionRow(consumption.id, { unit: val })}
+                        >
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="ml">ml (Milliliters)</SelectItem>
+                            <SelectItem value="gm">gm (Grams)</SelectItem>
+                            <SelectItem value="pcs">pcs (Pieces)</SelectItem>
+                            <SelectItem value="tubes">tubes</SelectItem>
+                            <SelectItem value="sachets">sachets</SelectItem>
+                            <SelectItem value="drops">drops / pumps</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Secondary details: Service and Staff */}
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground">For Service (Optional)</Label>
+                        <Input
+                          placeholder="Service name"
+                          value={consumption.service_name || ""}
+                          onChange={(e) =>
+                            handleUpdateConsumptionRow(consumption.id, { service_name: e.target.value })
+                          }
+                          className="h-6 text-[11px]"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground">Used By Stylist (Optional)</Label>
+                        <Input
+                          placeholder="Staff stylist"
+                          value={consumption.staff_name || ""}
+                          onChange={(e) =>
+                            handleUpdateConsumptionRow(consumption.id, { staff_name: e.target.value })
+                          }
+                          className="h-6 text-[11px]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] text-purple-700/80 dark:text-purple-300/80 italic">
+                Optional: Click &quot;Add Product&quot; to log color, bleach, shampoo, or developer used during this service.
+              </p>
+            )}
           </div>
 
           {/* Totals */}
