@@ -26,7 +26,7 @@ export async function GET(req: Request) {
 
   for (const ddl of indexes) {
     try {
-      await sql.query(ddl);
+      await (sql as any)(ddl);
       results.push(`✅ ${ddl.split(' ON ')[1]}`);
     } catch (e: any) {
       results.push(`❌ ${ddl.split(' ON ')[1]}: ${e.message}`);

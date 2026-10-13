@@ -11,8 +11,11 @@ export interface Booking {
   customer_id: number
   staff_id: number
   service_name: string // Aggregated from booking_services and services
+  service_names?: string
   staff_name: string // Derived from staff table
+  staff_names?: string
   customer_name: string // Derived from customers table
+  customer_phone?: string
   booking_date: string
   booking_time: string
   total_amount: number
@@ -170,31 +173,26 @@ export async function getBookingStats(startDate?: string, endDate?: string): Pro
         `bookings:stats:${startDate || "all"}:${endDate || "all"}`, 
         async () => {
           const today = new Date().toISOString().split("T")[0]
-          const [
-            totalResult,
-            todayResult,
-            pendingResult,
-            confirmedResult,
-            completedResult,
-            cancelledResult,
-            revenueResult,
-          ] = await Promise.all([
-            sql`SELECT COUNT(*) as count FROM bookings WHERE tenant_id = ${tenantId}`,
-            sql`SELECT COUNT(*) as count FROM bookings WHERE tenant_id = ${tenantId} AND DATE(booking_date) = ${today}`,
-            sql`SELECT COUNT(*) as count FROM bookings WHERE tenant_id = ${tenantId} AND status = 'pending'`,
-            sql`SELECT COUNT(*) as count FROM bookings WHERE tenant_id = ${tenantId} AND status = 'confirmed'`,
-            sql`SELECT COUNT(*) as count FROM bookings WHERE tenant_id = ${tenantId} AND status = 'completed'`,
-            sql`SELECT COUNT(*) as count FROM bookings WHERE tenant_id = ${tenantId} AND status = 'cancelled'`,
-            sql`SELECT COALESCE(SUM(total_amount), 0) as revenue FROM bookings WHERE tenant_id = ${tenantId} AND status IN ('completed', 'confirmed')`,
-          ])
+          const [statsRow] = await sql`
+            SELECT
+              COUNT(*)::int as total,
+              COUNT(*) FILTER (WHERE DATE(booking_date) = ${today}::date)::int as today,
+              COUNT(*) FILTER (WHERE status = 'pending')::int as pending,
+              COUNT(*) FILTER (WHERE status = 'confirmed')::int as confirmed,
+              COUNT(*) FILTER (WHERE status = 'completed')::int as completed,
+              COUNT(*) FILTER (WHERE status = 'cancelled')::int as cancelled,
+              COALESCE(SUM(total_amount) FILTER (WHERE status IN ('completed', 'confirmed')), 0)::float as revenue
+            FROM bookings
+            WHERE tenant_id = ${tenantId}
+          `
           return {
-            total: Number(totalResult[0]?.count) || 0,
-            today: Number(todayResult[0]?.count) || 0,
-            pending: Number(pendingResult[0]?.count) || 0,
-            confirmed: Number(confirmedResult[0]?.count) || 0,
-            completed: Number(completedResult[0]?.count) || 0,
-            cancelled: Number(cancelledResult[0]?.count) || 0,
-            revenue: Number(revenueResult[0]?.revenue) || 0,
+            total: Number(statsRow?.total) || 0,
+            today: Number(statsRow?.today) || 0,
+            pending: Number(statsRow?.pending) || 0,
+            confirmed: Number(statsRow?.confirmed) || 0,
+            completed: Number(statsRow?.completed) || 0,
+            cancelled: Number(statsRow?.cancelled) || 0,
+            revenue: Number(statsRow?.revenue) || 0,
           }
         },
         300, // Cache for 5 minutes
