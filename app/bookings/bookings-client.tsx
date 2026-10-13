@@ -1,7 +1,6 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect, useTransition } from "react"
+import React, { Fragment, useState, useEffect, useTransition } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -964,7 +963,7 @@ export default function BookingsClient({
                                 Math.abs(p - currentPage) <= 1
                             )
                             .map((p, i, arr) => (
-                              <React.Fragment key={p}>
+                              <Fragment key={p}>
                                 {i > 0 && arr[i - 1] !== p - 1 && <span className="px-2">...</span>}
                                 <Button
                                   variant={p === currentPage ? "default" : "outline"}
@@ -974,7 +973,7 @@ export default function BookingsClient({
                                 >
                                   {p}
                                 </Button>
-                              </React.Fragment>
+                              </Fragment>
                             ))}
                         </div>
                         <Button
