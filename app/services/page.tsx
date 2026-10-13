@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -53,30 +53,46 @@ import {
 import { BulkUploadModal } from "@/components/bulk-upload-modal"
 import { serviceTemplate } from "@/lib/csv-templates"
 
-const serviceCategories = [
-  { id: "Hair Services", name: "Hair Services", icon: Scissors, color: "bg-blue-500" },
-  { id: "Facial & Skincare", name: "Facial & Skincare", icon: Sparkles, color: "bg-pink-500" },
-  { id: "Nail Care", name: "Nail Care", icon: Palette, color: "bg-purple-500" },
-  { id: "Body Treatments", name: "Body Treatments", icon: Heart, color: "bg-green-500" },
-  { id: "Massage Therapy", name: "Massage Therapy", icon: Heart, color: "bg-orange-500" },
-  { id: "Makeup Services", name: "Makeup Services", icon: Sparkles, color: "bg-red-500" },
-]
-
-
 function getSmartIcon(name: string) {
-  const n = name.toLowerCase();
-  if (n.includes("massage") || n.includes("spa") || n.includes("therapy")) return { icon: Activity, color: "bg-orange-500" };
-  if (n.includes("facial") || n.includes("face") || n.includes("cleanse") || n.includes("scrub") || n.includes("glow")) return { icon: Smile, color: "bg-pink-500" };
-  if (n.includes("bleach") || n.includes("dtan") || n.includes("whitening")) return { icon: Sparkles, color: "bg-yellow-500" };
-  if (n.includes("hair") || n.includes("shave") || n.includes("cut") || n.includes("trim")) return { icon: Scissors, color: "bg-blue-500" };
-  if (n.includes("color") || n.includes("dye") || n.includes("highlight")) return { icon: Palette, color: "bg-purple-500" };
-  if (n.includes("wax") || n.includes("thread") || n.includes("remove")) return { icon: Flame, color: "bg-red-500" };
-  if (n.includes("nail") || n.includes("pedicure") || n.includes("manicure")) return { icon: Flower2, color: "bg-green-500" };
-  if (n.includes("wash") || n.includes("shampoo")) return { icon: Droplets, color: "bg-cyan-500" };
-  if (n.includes("oil") || n.includes("head") || n.includes("cooling")) return { icon: Wind, color: "bg-teal-500" };
-  if (n.includes("herbal") || n.includes("natural")) return { icon: Leaf, color: "bg-emerald-500" };
-  
-  return { icon: Wand2, color: "bg-indigo-500" };
+  const n = (name || "").toLowerCase()
+  if (n.includes("massage") || n.includes("spa") || n.includes("therapy") || n.includes("body") || n.includes("reflexology")) {
+    return { icon: Activity, color: "bg-amber-600 dark:bg-amber-700" }
+  }
+  if (n.includes("facial") || n.includes("face") || n.includes("cleanse") || n.includes("scrub") || n.includes("glow") || n.includes("cleanup")) {
+    return { icon: Smile, color: "bg-pink-600 dark:bg-pink-700" }
+  }
+  if (n.includes("bleach") || n.includes("dtan") || n.includes("d-tan") || n.includes("whitening") || n.includes("bright")) {
+    return { icon: Sparkles, color: "bg-yellow-600 dark:bg-yellow-700" }
+  }
+  if (n.includes("hair") || n.includes("shave") || n.includes("cut") || n.includes("trim") || n.includes("beard") || n.includes("styling") || n.includes("barber")) {
+    return { icon: Scissors, color: "bg-blue-600 dark:bg-blue-700" }
+  }
+  if (n.includes("color") || n.includes("colour") || n.includes("dye") || n.includes("highlight") || n.includes("balayage") || n.includes("streaks")) {
+    return { icon: Palette, color: "bg-purple-600 dark:bg-purple-700" }
+  }
+  if (n.includes("wax") || n.includes("thread") || n.includes("threading") || n.includes("remove") || n.includes("laser") || n.includes("epil")) {
+    return { icon: Flame, color: "bg-rose-600 dark:bg-rose-700" }
+  }
+  if (n.includes("nail") || n.includes("pedicure") || n.includes("manicure") || n.includes("gel") || n.includes("polish") || n.includes("hand") || n.includes("feet")) {
+    return { icon: Flower2, color: "bg-emerald-600 dark:bg-emerald-700" }
+  }
+  if (n.includes("wash") || n.includes("shampoo") || n.includes("rinse") || n.includes("hydrate")) {
+    return { icon: Droplets, color: "bg-cyan-600 dark:bg-cyan-700" }
+  }
+  if (n.includes("oil") || n.includes("head") || n.includes("cooling") || n.includes("scalp") || n.includes("ayurved")) {
+    return { icon: Wind, color: "bg-teal-600 dark:bg-teal-700" }
+  }
+  if (n.includes("herbal") || n.includes("natural") || n.includes("organic") || n.includes("detox") || n.includes("ayur")) {
+    return { icon: Leaf, color: "bg-green-600 dark:bg-green-700" }
+  }
+  if (n.includes("makeup") || n.includes("bridal") || n.includes("groom") || n.includes("party") || n.includes("cosmetic")) {
+    return { icon: Sparkles, color: "bg-fuchsia-600 dark:bg-fuchsia-700" }
+  }
+  if (n.includes("package") || n.includes("combo") || n.includes("bundle")) {
+    return { icon: Heart, color: "bg-indigo-600 dark:bg-indigo-700" }
+  }
+
+  return { icon: Wand2, color: "bg-slate-700 dark:bg-slate-600" }
 }
 
 export default function ServicesPage() {
@@ -291,9 +307,64 @@ export default function ServicesPage() {
     }
   }
 
+  // Dynamically auto-fetch, compute metrics, and auto-arrange categories from real services
+  const dynamicCategories = useMemo(() => {
+    const map = new Map<
+      string,
+      { total: number; active: number; totalRevenue: number; prices: number[] }
+    >()
+
+    // 1. Initialize from categories list
+    categories.forEach((cat) => {
+      const clean = cat?.trim()
+      if (clean && !map.has(clean)) {
+        map.set(clean, { total: 0, active: 0, totalRevenue: 0, prices: [] })
+      }
+    })
+
+    // 2. Aggregate services into categories
+    services.forEach((s) => {
+      const cat = s.category?.trim() || "Uncategorized"
+      const entry = map.get(cat) || { total: 0, active: 0, totalRevenue: 0, prices: [] }
+      const price = Number(s.price) || 0
+      entry.total += 1
+      if (s.is_active) {
+        entry.active += 1
+      }
+      entry.totalRevenue += price
+      entry.prices.push(price)
+      map.set(cat, entry)
+    })
+
+    // 3. Format and auto-arrange: most services first, then alphabetically
+    return Array.from(map.entries())
+      .filter(([_, data]) => data.total > 0 || categories.length <= 8)
+      .map(([name, data]) => {
+        const avgPrice = data.total > 0 ? data.totalRevenue / data.total : 0
+        const minPrice = data.prices.length > 0 ? Math.min(...data.prices) : 0
+        const maxPrice = data.prices.length > 0 ? Math.max(...data.prices) : 0
+        const { icon, color } = getSmartIcon(name)
+
+        return {
+          id: name,
+          name,
+          totalServices: data.total,
+          activeServices: data.active,
+          avgPrice,
+          minPrice,
+          maxPrice,
+          icon,
+          color,
+        }
+      })
+      .sort((a, b) => b.totalServices - a.totalServices || a.name.localeCompare(b.name))
+  }, [services, categories])
+
   const filteredServices = services.filter((service) => {
     const matchesSearch = service.name.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = selectedCategory === "all" || service.category === selectedCategory
+    const matchesCategory =
+      selectedCategory === "all" ||
+      (service.category || "").trim().toLowerCase() === selectedCategory.trim().toLowerCase()
     return matchesSearch && matchesCategory
   })
 
@@ -388,9 +459,9 @@ export default function ServicesPage() {
                           <SelectValue placeholder="Select category" />
                         </SelectTrigger>
                         <SelectContent>
-                          {serviceCategories.map((cat) => (
+                          {dynamicCategories.map((cat) => (
                             <SelectItem key={cat.id} value={cat.id}>
-                              {cat.name}
+                              {cat.name} ({cat.totalServices})
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -521,78 +592,124 @@ export default function ServicesPage() {
           </div>
         </section>
 
-        {/* Categories */}
+        {/* Service Categories */}
         <section id="categories" className="space-y-6">
-          <div className="flex items-center space-x-2">
-            <Scissors className="h-6 w-6 text-purple-600" />
-            <h2 className="text-xl font-semibold text-gray-900">Service Categories</h2>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center space-x-2">
+              <Scissors className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              <h2 className="text-xl font-semibold text-foreground">Service Categories</h2>
+              <Badge variant="secondary" className="text-xs font-medium">
+                {dynamicCategories.length} Categories
+              </Badge>
+            </div>
+            {selectedCategory !== "all" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedCategory("all")}
+                className="text-xs h-8 gap-1.5"
+              >
+                Filtered by: <span className="font-semibold">{selectedCategory}</span>
+                <span className="text-muted-foreground ml-1">✕ Clear</span>
+              </Button>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            {serviceCategories.map((category) => {
-              const categoryServices = services.filter((s) => s.category === category.id)
+          {dynamicCategories.length === 0 ? (
+            <Card className="p-8 text-center text-muted-foreground">
+              <p>No service categories found. Add your first service or upload a CSV to get started.</p>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+              {dynamicCategories.map((category) => {
+                const isSelected = selectedCategory.trim().toLowerCase() === category.id.trim().toLowerCase()
+                const IconComponent = category.icon
 
-              return (
-                <Card key={category.id} className="hover:shadow-lg transition-all duration-200 hover:scale-105">
-                  <CardContent className="p-6">
-                    <div className="flex items-center space-x-3 mb-4">
-                      <div className={`p-3 rounded-full ${category.color}`}>
-                        <category.icon className="h-6 w-6 text-white" />
+                return (
+                  <Card
+                    key={category.id}
+                    onClick={() => setSelectedCategory(isSelected ? "all" : category.id)}
+                    className={`cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 border ${
+                      isSelected
+                        ? "ring-2 ring-primary border-primary shadow-sm bg-primary/5"
+                        : "hover:border-slate-300 dark:hover:border-slate-700"
+                    }`}
+                  >
+                    <CardContent className="p-5">
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex items-center space-x-3 min-w-0">
+                          <div className={`p-2.5 rounded-xl ${category.color} text-white shadow-sm shrink-0`}>
+                            <IconComponent className="h-5 w-5" />
+                          </div>
+                          <div className="min-w-0">
+                            <h3 className="font-semibold text-sm sm:text-base text-foreground truncate" title={category.name}>
+                              {category.name}
+                            </h3>
+                            <p className="text-xs text-muted-foreground">
+                              {category.totalServices} {category.totalServices === 1 ? "service" : "services"}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge
+                          variant={category.activeServices > 0 ? "outline" : "secondary"}
+                          className="text-xs shrink-0 font-normal"
+                        >
+                          {category.activeServices} active
+                        </Badge>
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{category.name}</h3>
-                        <p className="text-sm text-gray-600">{categoryServices.length} services</p>
+
+                      <div className="pt-3 border-t space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Avg Price</span>
+                          <span className="font-bold text-foreground text-sm">
+                            {formatCurrency(category.avgPrice)}
+                          </span>
+                        </div>
+                        {category.minPrice !== category.maxPrice && (
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                            <span>Price Range</span>
+                            <span>
+                              {formatCurrency(category.minPrice)} - {formatCurrency(category.maxPrice)}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Active</span>
-                        <span className="font-medium">{categoryServices.filter((s) => s.is_active).length}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Avg Price</span>
-                        <span className="font-medium">
-                          {formatCurrency(
-                            categoryServices.length > 0
-                              ? categoryServices.reduce((sum, s) => sum + s.price, 0) / categoryServices.length
-                              : 0,
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
+                    </CardContent>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
         </section>
 
         {/* Services List */}
         <section id="services-list" className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center space-x-2">
-              <Users className="h-6 w-6 text-green-600" />
-              <h2 className="text-xl font-semibold text-gray-900">All Services</h2>
+              <Users className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              <h2 className="text-xl font-semibold text-foreground">
+                All Services {selectedCategory !== "all" && <span className="text-muted-foreground text-sm font-normal">({selectedCategory})</span>}
+              </h2>
             </div>
-            <div className="flex items-center space-x-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-64">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                 <Input
                   placeholder="Search services..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 w-64"
+                  className="pl-10"
                 />
               </div>
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                <SelectTrigger className="w-48">
+                <SelectTrigger className="w-full sm:w-52">
                   <SelectValue placeholder="Filter by category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {cat}
+                  <SelectItem value="all">All Categories ({services.length})</SelectItem>
+                  {dynamicCategories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name} ({cat.totalServices})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -602,8 +719,6 @@ export default function ServicesPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredServices.map((service) => {
-              const category = serviceCategories.find((c) => c.id === service.category)
-
               return (
                 <Card key={service.id} className="hover:shadow-lg transition-all duration-200 hover:scale-105">
                   <CardHeader className="pb-3">
