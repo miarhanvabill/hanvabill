@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Bell, Search, Menu } from "lucide-react"
+import { playNotificationSound } from "@/lib/notification-sound"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -36,6 +37,8 @@ export function Header({ onMenuToggle }: HeaderProps) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const prevNotificationIds = useRef<Set<string>>(new Set())
+  const isInitialLoad = useRef(true)
   
   const { isLoaded, isSignedIn } = useAuth();
 
@@ -46,7 +49,21 @@ export function Header({ onMenuToggle }: HeaderProps) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
       const data = await response.json()
-      setNotifications(data.notifications || [])
+      const newItems: Notification[] = data.notifications || []
+
+      // If new unread notifications arrived after initial load, play the notification sound
+      if (!isInitialLoad.current && newItems.length > 0) {
+        const hasFreshUnread = newItems.some(
+          (n) => !n.is_read && !prevNotificationIds.current.has(n.id)
+        )
+        if (hasFreshUnread) {
+          playNotificationSound()
+        }
+      }
+
+      isInitialLoad.current = false
+      prevNotificationIds.current = new Set(newItems.map((n) => n.id))
+      setNotifications(newItems)
       setError(null)
     } catch (error) {
       console.error("[v0] Error fetching notifications:", error)

@@ -6,6 +6,7 @@ import { ServiceWorkerProvider } from "@/components/service-worker-provider";
 import { ConsentBanner } from "@/components/compliance/ConsentBanner";
 import { OfflineBanner } from "@/components/offline-banner";
 import { Toaster } from "@/components/toaster";
+import { NotificationSoundProvider } from "@/components/notification-sound-provider";
 import { ThemeProvider } from "@/contexts/theme-context";
 import { PermissionsProvider } from "@/hooks/use-permissions";
 
@@ -26,6 +27,7 @@ export default function ClientLayoutWrapper({ children }: { children: React.Reac
         </PermissionsProvider>
       </ThemeProvider>
       <Toaster />
+      <NotificationSoundProvider />
       <ConsentBanner />
       <OfflineBanner />
     </ErrorBoundary>

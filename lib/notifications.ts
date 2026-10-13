@@ -1,5 +1,7 @@
 "use client"
 
+import { playNotificationSound } from "@/lib/notification-sound"
+
 interface NotificationSettings {
   emailNotifications: boolean
   smsNotifications: boolean
@@ -73,6 +75,7 @@ export async function sendWhatsAppNotification(to: string, message: string, prof
 }
 
 export async function sendPushNotification(title: string, message: string, options?: NotificationOptions) {
+  playNotificationSound()
   if (!("Notification" in window)) {
     console.warn("This browser does not support notifications")
     return

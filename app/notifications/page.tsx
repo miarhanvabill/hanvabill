@@ -35,10 +35,11 @@ import {
   Tag,
   Star,
   RefreshCw,
-  Search,
   Filter,
+  Volume2,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { playNotificationSound } from "@/lib/notification-sound"
 import {
   getNotificationLogs,
   getNotificationPreferences,
@@ -258,7 +259,18 @@ export default function NotificationsPage() {
               Configure automated WhatsApp, SMS, and Email messaging across all customer lifecycle events.
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                playNotificationSound()
+                toast({ title: "Playing Notification Sound", description: "Audio chime triggered successfully." })
+              }}
+              className="gap-2"
+            >
+              <Volume2 className="w-4 h-4 text-primary" />
+              Test Sound
+            </Button>
             <Button variant="outline" onClick={() => setIsTestModalOpen(true)} className="gap-2">
               <Send className="w-4 h-4 text-primary" />
               Send Test Message
