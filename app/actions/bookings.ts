@@ -1061,3 +1061,35 @@ export async function updateBookingTime(
     }
   })
 }
+
+export async function getBookedSlotsForDate(date: string, staffId?: number): Promise<string[]> {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const records = staffId
+        ? await sql`
+            SELECT booking_time 
+            FROM bookings 
+            WHERE booking_date = ${date} 
+              AND staff_id = ${staffId}
+              AND tenant_id = ${tenantId}
+              AND status != 'cancelled'
+          `
+        : await sql`
+            SELECT booking_time 
+            FROM bookings 
+            WHERE booking_date = ${date} 
+              AND tenant_id = ${tenantId}
+              AND status != 'cancelled'
+          `
+
+      return records.map((r: any) => {
+        const timeStr = String(r.booking_time || "")
+        return timeStr.length >= 5 ? timeStr.slice(0, 5) : timeStr
+      })
+    } catch (err) {
+      console.error("Error fetching booked slots:", err)
+      return []
+    }
+  })
+}
+
