@@ -285,6 +285,30 @@ export async function createBooking(formData: FormData) {
         }
       }
 
+      // Validate that booking is not in the past
+      const dateStr = bookingDate.toString()
+      const timeStr = bookingTime.toString()
+      const todayStr = new Date().toISOString().split("T")[0]
+      if (dateStr < todayStr) {
+        return {
+          success: false,
+          message: "Cannot book appointments in the past. Please select a current or future date.",
+        }
+      }
+      if (dateStr === todayStr) {
+        const now = new Date()
+        const currentMins = now.getHours() * 60 + now.getMinutes()
+        const [bHours, bMins] = timeStr.split(":").map(Number)
+        const bookingMins = (bHours || 0) * 60 + (bMins || 0)
+        // Allow a 10-minute grace window for form submission
+        if (bookingMins < currentMins - 10) {
+          return {
+            success: false,
+            message: "Cannot book appointments in the past. Please select a current or future time slot.",
+          }
+        }
+      }
+
       let finalCustomerId: number
       let finalServiceIds: number[]
       let finalStaffId: number | null = null
@@ -995,6 +1019,21 @@ export async function updateBookingTime(
       
       if (existing.length === 0) {
         return { success: false, message: "Booking not found" }
+      }
+
+      // Validate that rescheduled date/time is not in the past
+      const todayStr = new Date().toISOString().split("T")[0]
+      if (newDate < todayStr) {
+        return { success: false, message: "Cannot reschedule appointments to a past date." }
+      }
+      if (newDate === todayStr) {
+        const now = new Date()
+        const currentMins = now.getHours() * 60 + now.getMinutes()
+        const [bHours, bMins] = newTime.split(":").map(Number)
+        const bookingMins = (bHours || 0) * 60 + (bMins || 0)
+        if (bookingMins < currentMins - 10) {
+          return { success: false, message: "Cannot reschedule appointments to a past time slot." }
+        }
       }
 
       const currentBooking = existing[0]

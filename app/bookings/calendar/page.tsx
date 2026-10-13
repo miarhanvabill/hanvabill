@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { format, addDays, subDays, isToday, parseISO, isSameDay } from "date-fns"
 import {
   ChevronLeft,
@@ -20,6 +20,7 @@ import {
   Sparkles,
   Phone,
   ArrowRight,
+  Compass,
 } from "lucide-react"
 import {
   getCalendarBookings,
@@ -77,6 +78,8 @@ const TIME_SLOTS = Array.from({ length: (END_HOUR - START_HOUR) * 2 }).map((_, i
 })
 
 export default function BookingCalendarPage() {
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+
   const [currentDate, setCurrentDate] = useState<Date>(new Date())
   const [bookings, setBookings] = useState<CalendarBooking[]>([])
   const [staffList, setStaffList] = useState<Staff[]>([])
@@ -176,9 +179,73 @@ export default function BookingCalendarPage() {
     return () => clearInterval(interval)
   }, [currentDate])
 
+  // AUTO-SCROLL TO CURRENT TIME ON INITIAL LOAD AND ON SWITCHING TO TODAY
+  useEffect(() => {
+    if (isLoading) return
+
+    const scrollToCurrentTime = () => {
+      if (!scrollContainerRef.current) return
+
+      const now = new Date()
+      if (isSameDay(now, currentDate)) {
+        const hours = now.getHours()
+        const minutes = now.getMinutes()
+        if (hours >= START_HOUR && hours <= END_HOUR) {
+          const totalMinutes = (hours - START_HOUR) * 60 + minutes
+          const targetY = totalMinutes * PIXELS_PER_MINUTE
+          // Scroll smoothly so the current time is placed ~120px below the sticky header
+          scrollContainerRef.current.scrollTo({
+            top: Math.max(0, targetY - 120),
+            behavior: "smooth",
+          })
+        } else if (hours > END_HOUR) {
+          scrollContainerRef.current.scrollTo({
+            top: scrollContainerRef.current.scrollHeight,
+            behavior: "smooth",
+          })
+        }
+      } else {
+        // If viewing future days, scroll to 9:00 AM (typical salon opening)
+        const defaultMinutes = (9 - START_HOUR) * 60
+        const targetY = defaultMinutes * PIXELS_PER_MINUTE
+        scrollContainerRef.current.scrollTo({
+          top: Math.max(0, targetY - 40),
+          behavior: "smooth",
+        })
+      }
+    }
+
+    const timer = setTimeout(scrollToCurrentTime, 150)
+    return () => clearTimeout(timer)
+  }, [isLoading, currentDate])
+
   const handlePrevDay = () => setCurrentDate((prev) => subDays(prev, 1))
   const handleNextDay = () => setCurrentDate((prev) => addDays(prev, 1))
-  const handleToday = () => setCurrentDate(new Date())
+  const handleToday = () => {
+    const today = new Date()
+    setCurrentDate(today)
+    if (scrollContainerRef.current && currentTimePos >= 0) {
+      scrollContainerRef.current.scrollTo({
+        top: Math.max(0, currentTimePos - 120),
+        behavior: "smooth",
+      })
+    }
+  }
+
+  // CHECK IF A TIME SLOT ON A GIVEN DATE IS IN THE PAST
+  const isSlotInPast = (hour: number, minute: number, targetDate = currentDate) => {
+    const today = new Date()
+    const todayStr = format(today, "yyyy-MM-dd")
+    const targetDateStr = format(targetDate, "yyyy-MM-dd")
+
+    if (targetDateStr < todayStr) return true
+    if (targetDateStr > todayStr) return false
+
+    // Same day: check minute difference
+    const currentMinutes = today.getHours() * 60 + today.getMinutes()
+    const slotMinutes = hour * 60 + minute
+    return slotMinutes < currentMinutes
+  }
 
   // Check if a booking is happening right now
   const isBookingLive = (booking: CalendarBooking) => {
@@ -198,6 +265,12 @@ export default function BookingCalendarPage() {
 
   // Handle opening quick booking modal from empty slot click
   const handleSlotClick = (entity: any, hour: number, minute: number) => {
+    // PREVENT BACK DATE / PAST TIME BOOKINGS
+    if (isSlotInPast(hour, minute, currentDate)) {
+      toast.error("Cannot book appointments in the past. Please select a current or future time slot.")
+      return
+    }
+
     const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
     const isResource = groupBy === "resource"
 
@@ -228,12 +301,41 @@ export default function BookingCalendarPage() {
     }))
   }
 
+  // Handle date change in quick book modal
+  const handleDateChange = (newDateStr: string) => {
+    const targetDate = parseISO(newDateStr)
+    let newTime = quickBookForm.bookingTime
+    const [h, m] = newTime.split(":").map(Number)
+
+    // If current selected time is in the past for this date, auto-select first future time
+    if (isSlotInPast(h, m, targetDate)) {
+      const firstFuture = TIME_SLOTS.find((s) => !isSlotInPast(s.hour, s.minute, targetDate))
+      if (firstFuture) {
+        newTime = firstFuture.timeStr
+      }
+    }
+
+    setQuickBookForm((prev) => ({
+      ...prev,
+      date: newDateStr,
+      bookingTime: newTime,
+    }))
+  }
+
   // Submit quick booking
   const handleQuickBookSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!quickBookForm.customerName.trim() || !quickBookForm.customerPhone.trim() || !quickBookForm.serviceId) {
       toast.error("Please fill in Customer Name, Phone Number, and select a Service.")
+      return
+    }
+
+    // VALIDATE PAST DATE AND TIME
+    const targetDate = parseISO(quickBookForm.date)
+    const [h, m] = quickBookForm.bookingTime.split(":").map(Number)
+    if (isSlotInPast(h, m, targetDate)) {
+      toast.error("Cannot book appointments in the past. Please select a current or future time slot.")
       return
     }
 
@@ -308,6 +410,13 @@ export default function BookingCalendarPage() {
 
   const handleDrop = async (e: React.DragEvent, id: number | string, hour: number, minute: number) => {
     e.preventDefault()
+
+    // PREVENT DROPPING ONTO PAST SLOTS
+    if (isSlotInPast(hour, minute, currentDate)) {
+      toast.error("Cannot reschedule appointments to a past date or time.")
+      return
+    }
+
     const bookingIdStr = e.dataTransfer.getData("bookingId")
     if (!bookingIdStr) return
     const bookingId = parseInt(bookingIdStr, 10)
@@ -414,7 +523,7 @@ export default function BookingCalendarPage() {
             </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
-            Staff columns on top • Time scale on left • Click any slot to book
+            Staff on top • Times on left • Auto-aligned to current time • Past booking blocked
           </p>
         </div>
 
@@ -483,13 +592,15 @@ export default function BookingCalendarPage() {
           </div>
 
           <Button
-            variant="outline"
+            variant={isToday(currentDate) ? "default" : "outline"}
             size="sm"
-            className="h-9 text-xs font-medium bg-white dark:bg-slate-900"
+            className={`h-9 text-xs font-medium gap-1.5 ${
+              isToday(currentDate) ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-white dark:bg-slate-900"
+            }`}
             onClick={handleToday}
-            disabled={isToday(currentDate)}
           >
-            Today
+            <Compass className="w-3.5 h-3.5" />
+            {isToday(currentDate) ? "Now" : "Today"}
           </Button>
 
           <Button
@@ -558,7 +669,7 @@ export default function BookingCalendarPage() {
         </Card>
       </div>
 
-      {/* Main Calendar Viewport */}
+      {/* Main Calendar Viewport (Auto-scrolls to current time) */}
       <Card className="flex-1 flex flex-col min-h-0 overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
         {isLoading ? (
           <div className="flex-1 flex flex-col items-center justify-center p-12">
@@ -574,7 +685,7 @@ export default function BookingCalendarPage() {
             </p>
           </div>
         ) : (
-          <div className="flex-1 overflow-auto relative">
+          <div ref={scrollContainerRef} className="flex-1 overflow-auto relative">
             <div className="min-w-max flex flex-col">
               {/* STICKY TOP ROW: Staff / Resource Columns */}
               <div className="sticky top-0 z-30 flex border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 shadow-sm">
@@ -676,24 +787,38 @@ export default function BookingCalendarPage() {
                         className="w-[230px] min-w-[230px] border-r border-slate-200 dark:border-slate-800 relative bg-white dark:bg-slate-900"
                       >
                         {/* Background 30-Min Clickable Slot Rows */}
-                        {TIME_SLOTS.map((slot, idx) => (
-                          <div
-                            key={idx}
-                            className={`h-[56px] border-b hover:bg-blue-50/70 dark:hover:bg-blue-950/30 cursor-pointer transition-colors group flex items-center justify-center relative ${
-                              slot.minute === 0
-                                ? "border-slate-200 dark:border-slate-800"
-                                : "border-slate-100 dark:border-slate-900 border-dashed"
-                            }`}
-                            onClick={() => handleSlotClick(entity, slot.hour, slot.minute)}
-                            onDragOver={handleDragOver}
-                            onDrop={(e) => handleDrop(e, entity.id, slot.hour, slot.minute)}
-                          >
-                            <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-white/95 dark:bg-slate-900/95 py-0.5 px-2 rounded-md shadow-sm border border-blue-200 dark:border-blue-800 pointer-events-none transition-opacity">
-                              <Plus className="w-3 h-3" />
-                              <span>Book {slot.label}</span>
+                        {TIME_SLOTS.map((slot, idx) => {
+                          const isPast = isSlotInPast(slot.hour, slot.minute, currentDate)
+
+                          return (
+                            <div
+                              key={idx}
+                              className={`h-[56px] border-b transition-colors group flex items-center justify-center relative ${
+                                slot.minute === 0
+                                  ? "border-slate-200 dark:border-slate-800"
+                                  : "border-slate-100 dark:border-slate-900 border-dashed"
+                              } ${
+                                isPast
+                                  ? "bg-slate-50/70 dark:bg-slate-900/60 cursor-not-allowed opacity-60"
+                                  : "hover:bg-blue-50/70 dark:hover:bg-blue-950/30 cursor-pointer"
+                              }`}
+                              onClick={() => handleSlotClick(entity, slot.hour, slot.minute)}
+                              onDragOver={handleDragOver}
+                              onDrop={(e) => handleDrop(e, entity.id, slot.hour, slot.minute)}
+                            >
+                              {!isPast ? (
+                                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-white/95 dark:bg-slate-900/95 py-0.5 px-2 rounded-md shadow-sm border border-blue-200 dark:border-blue-800 pointer-events-none transition-opacity">
+                                  <Plus className="w-3 h-3" />
+                                  <span>Book {slot.label}</span>
+                                </div>
+                              ) : (
+                                <div className="opacity-0 group-hover:opacity-60 text-[10px] text-gray-400 dark:text-gray-500 font-medium pointer-events-none transition-opacity">
+                                  Past slot
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        ))}
+                          )
+                        })}
 
                         {/* Booking Appointment Cards in this Column */}
                         {columnBookings.map((booking) => {
@@ -820,7 +945,7 @@ export default function BookingCalendarPage() {
               <strong className="text-gray-900 dark:text-gray-100">
                 {format(parseISO(`2000-01-01T${quickBookForm.bookingTime}:00`), "h:mm a")}
               </strong>{" "}
-              • Date <strong className="text-gray-900 dark:text-gray-100">{format(currentDate, "EEE, MMM d, yyyy")}</strong>
+              • Date <strong className="text-gray-900 dark:text-gray-100">{format(parseISO(quickBookForm.date), "EEE, MMM d, yyyy")}</strong>
             </DialogDescription>
           </DialogHeader>
 
@@ -886,6 +1011,48 @@ export default function BookingCalendarPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
+                <Label htmlFor="qb-date" className="text-xs">Date *</Label>
+                <Input
+                  id="qb-date"
+                  type="date"
+                  min={format(new Date(), "yyyy-MM-dd")}
+                  value={quickBookForm.date}
+                  onChange={(e) => handleDateChange(e.target.value)}
+                  className="h-9 text-sm"
+                  required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="qb-time" className="text-xs">Time Slot *</Label>
+                <Select
+                  value={quickBookForm.bookingTime}
+                  onValueChange={(val) => setQuickBookForm({ ...quickBookForm, bookingTime: val })}
+                >
+                  <SelectTrigger id="qb-time" className="h-9 text-sm">
+                    <SelectValue placeholder="Select time" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    {TIME_SLOTS.map((slot) => {
+                      const isPast = isSlotInPast(slot.hour, slot.minute, parseISO(quickBookForm.date))
+                      return (
+                        <SelectItem
+                          key={slot.timeStr}
+                          value={slot.timeStr}
+                          disabled={isPast}
+                          className={isPast ? "opacity-35 text-muted-foreground line-through" : ""}
+                        >
+                          {slot.label} {isPast ? "(Past)" : ""}
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
                 <Label htmlFor="qb-staff" className="text-xs">Assigned Specialist</Label>
                 <Select
                   value={quickBookForm.staffId || "unassigned"}
@@ -913,27 +1080,6 @@ export default function BookingCalendarPage() {
               </div>
 
               <div>
-                <Label htmlFor="qb-time" className="text-xs">Time Slot *</Label>
-                <Select
-                  value={quickBookForm.bookingTime}
-                  onValueChange={(val) => setQuickBookForm({ ...quickBookForm, bookingTime: val })}
-                >
-                  <SelectTrigger id="qb-time" className="h-9 text-sm">
-                    <SelectValue placeholder="Select time" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-56">
-                    {TIME_SLOTS.map((slot) => (
-                      <SelectItem key={slot.timeStr} value={slot.timeStr}>
-                        {slot.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
                 <Label htmlFor="qb-amount" className="text-xs">Total Amount (₹) *</Label>
                 <Input
                   id="qb-amount"
@@ -946,22 +1092,22 @@ export default function BookingCalendarPage() {
                   required
                 />
               </div>
+            </div>
 
-              <div>
-                <Label htmlFor="qb-status" className="text-xs">Initial Status</Label>
-                <Select
-                  value={quickBookForm.status}
-                  onValueChange={(val) => setQuickBookForm({ ...quickBookForm, status: val })}
-                >
-                  <SelectTrigger id="qb-status" className="h-9 text-sm">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="confirmed">Confirmed</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <Label htmlFor="qb-status" className="text-xs">Initial Status</Label>
+              <Select
+                value={quickBookForm.status}
+                onValueChange={(val) => setQuickBookForm({ ...quickBookForm, status: val })}
+              >
+                <SelectTrigger id="qb-status" className="h-9 text-sm">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="confirmed">Confirmed</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
