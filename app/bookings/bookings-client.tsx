@@ -10,7 +10,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Calendar, Clock, Phone, IndianRupee, Filter, Plus, Search, CheckCircle, XCircle, Upload, Sparkles, Loader2 } from "lucide-react"
+import { Calendar, Clock, Phone, IndianRupee, Filter, Plus, Search, CheckCircle, XCircle, Upload, Sparkles, Loader2, Activity } from "lucide-react"
 import Link from "next/link"
 import { createBooking, bulkUploadBookings, updateBookingStatus } from "@/app/actions/bookings"
 import { getBookingsPageData, type BookingsPageData } from "@/app/actions/bookings-paginated"
@@ -687,6 +687,12 @@ export default function BookingsClient({
             <Upload className="w-4 h-4 mr-2" />
             Bulk Upload
           </Button>
+          <Link href="/bookings/calendar">
+            <Button variant="outline" className="gap-2">
+              <Activity className="w-4 h-4 text-emerald-500 animate-pulse" />
+              LivePulse
+            </Button>
+          </Link>
           <Link href="/bookings/waitlist">
             <Button variant="outline" className="gap-2 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-400 dark:border-yellow-900/40">
               <Clock className="w-4 h-4" />
@@ -766,14 +772,15 @@ export default function BookingsClient({
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="appointments">Appointments</TabsTrigger>
+            <Link href="/bookings/calendar" className="flex-1">
+              <div className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-all hover:bg-muted w-full h-full gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
+                LivePulse
+              </div>
+            </Link>
             <Link href="/bookings/waitlist" className="flex-1">
               <div className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-all hover:bg-muted w-full h-full">
                 Waitlist
-              </div>
-            </Link>
-            <Link href="/bookings/calendar" className="flex-1">
-              <div className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-all hover:bg-muted w-full h-full">
-                Calendar
               </div>
             </Link>
           </TabsList>

@@ -511,7 +511,7 @@ export default function BookingCalendarPage() {
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100">Booking Calendar</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">LivePulse</h1>
             <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 gap-1.5 py-0.5 px-2">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
               Live Grid
