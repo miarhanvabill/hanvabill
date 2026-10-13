@@ -932,6 +932,7 @@ export async function getBookingsByStaffId(staffId: string): Promise<Booking[]> 
 export interface CalendarBooking extends Omit<Booking, 'rating'> {
   duration_minutes: number
   resource_id?: number | null
+  customer_phone?: string | null
 }
 
 export async function getCalendarBookings(date: string): Promise<CalendarBooking[]> {
@@ -941,30 +942,30 @@ export async function getCalendarBookings(date: string): Promise<CalendarBooking
         SELECT 
           b.id, b.booking_number, b.customer_id, b.staff_id, b.resource_id, b.booking_date, b.booking_time,
           b.total_amount, b.status, b.notes, b.created_at,
-          c.full_name as customer_name,
+          COALESCE(c.full_name, 'Guest Customer') as customer_name,
+          c.phone_number as customer_phone,
           st.name as staff_name,
-          STRING_AGG(s.name, ', ') AS service_name,
-          COALESCE(SUM(sv.duration_minutes), 60) AS duration_minutes
+          COALESCE(NULLIF(STRING_AGG(s.name, ', '), ''), 'Appointment') AS service_name,
+          COALESCE(NULLIF(SUM(sv.duration_minutes), 0), 30) AS duration_minutes
         FROM bookings b
         LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
         LEFT JOIN staff st ON b.staff_id = st.id AND st.tenant_id = ${tenantId}
-        JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
+        LEFT JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
         LEFT JOIN services sv ON bs.service_id = sv.id AND sv.tenant_id = ${tenantId}
-        LEFT JOIN (SELECT * FROM services WHERE tenant_id = ${tenantId}) s ON bs.service_id = s.id
+        LEFT JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
         WHERE b.booking_date = ${date} AND b.tenant_id = ${tenantId}
-        GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, b.resource_id, b.booking_date, b.booking_time, b.total_amount, b.status, b.notes, b.created_at, c.full_name, st.name
+        GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, b.resource_id, b.booking_date, b.booking_time, b.total_amount, b.status, b.notes, b.created_at, c.full_name, c.phone_number, st.name
         ORDER BY b.booking_time ASC
       `
       
-      // Need to cast the results correctly to match types
       return JSON.parse(JSON.stringify(bookings.map((booking: any) => ({
         ...booking,
         id: Number(booking.id),
         customer_id: Number(booking.customer_id),
-        staff_id: Number(booking.staff_id),
+        staff_id: booking.staff_id ? Number(booking.staff_id) : null,
         resource_id: booking.resource_id ? Number(booking.resource_id) : null,
         total_amount: Number(booking.total_amount),
-        duration_minutes: Number(booking.duration_minutes)
+        duration_minutes: Number(booking.duration_minutes) || 30
       }))))
     } catch (error) {
       console.error("Error fetching calendar bookings:", error)
