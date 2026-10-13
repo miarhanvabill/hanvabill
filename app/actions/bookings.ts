@@ -528,7 +528,7 @@ export async function createBooking(formData: FormData) {
 
 export async function bulkUploadBookings(
   file: File,
-): Promise<{ success: boolean; message: string; recordsProcessed?: number }> {
+): Promise<{ success: boolean; message: string; recordsProcessed?: number; errors?: string[] }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       // Read file content
@@ -561,7 +561,9 @@ export async function bulkUploadBookings(
       if (!parseResult.success) {
         return {
           success: false,
-          message: `Validation failed: ${parseResult.errors.slice(0, 3).join("; ")}${parseResult.errors.length > 3 ? "..." : ""}`,
+          message: `Validation failed: ${parseResult.errors.length} error(s) occurred. Download the error log for details.`,
+          recordsProcessed: 0,
+          errors: parseResult.errors,
         }
       }
 
@@ -643,9 +645,10 @@ export async function bulkUploadBookings(
           `
 
           insertedCount++
-        } catch (error) {
-          console.error(`Error inserting booking ${bookingData.booking_number}:`, error)
-          errors.push(`Failed to insert ${bookingData.booking_number}: ${error}`)
+        } catch (error: any) {
+          const errMsg = error?.message || String(error)
+          console.error(`Error inserting booking ${bookingData.booking_number}:`, errMsg)
+          errors.push(`Booking "${bookingData.booking_number || "Unknown"}": ${errMsg}`)
         }
       }
 
@@ -654,24 +657,29 @@ export async function bulkUploadBookings(
       revalidatePath("/bookings")
       revalidatePath("/appointments")
 
-      let message = `Successfully imported ${insertedCount} bookings`
+      const allErrors = [...parseResult.errors, ...errors]
+
+      let message = `Successfully imported ${insertedCount} booking(s)`
       if (skippedCount > 0) {
-        message += `, skipped ${skippedCount} duplicates`
+        message += `, skipped ${skippedCount} duplicate(s)`
       }
-      if (errors.length > 0) {
-        message += `, ${errors.length} errors occurred`
+      if (allErrors.length > 0) {
+        message += `, ${allErrors.length} error(s) occurred`
       }
 
       return {
         success: insertedCount > 0,
         message,
         recordsProcessed: insertedCount,
+        errors: allErrors.length > 0 ? allErrors : undefined,
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error in bulk upload:", error)
+      const errorMsg = error instanceof Error ? error.message : "Unknown error occurred"
       return {
         success: false,
-        message: `Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+        message: `Upload failed: ${errorMsg}`,
+        errors: [`Fatal error during upload: ${errorMsg}`],
       }
     }
   })

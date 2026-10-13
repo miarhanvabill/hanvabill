@@ -290,7 +290,7 @@ export async function getServiceCategories(): Promise<string[]> {
 
 export async function bulkUploadServices(
   file: File,
-): Promise<{ success: boolean; message: string; recordsProcessed?: number }> {
+): Promise<{ success: boolean; message: string; recordsProcessed?: number; errors?: string[] }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       // Read file content
@@ -299,27 +299,37 @@ export async function bulkUploadServices(
       // Parse CSV data
       const csvData = CSVParser.parseCSV(fileContent)
 
+      const parseCleanNumber = (val: any, fallback = 0): number => {
+        if (typeof val === "number" && !isNaN(val)) return val
+        if (!val) return fallback
+        const cleaned = String(val).replace(/[^0-9.-]/g, "").trim()
+        const num = Number.parseFloat(cleaned)
+        return isNaN(num) ? fallback : num
+      }
+
       // Validate and transform data
       const parseResult: CSVParseResult<{
         name: string
         price: number
-        description?: string
-        duration_minutes?: number
-        category?: string
-        code?: string
+        description?: string | null
+        duration_minutes?: number | null
+        category?: string | null
+        code?: string | null
       }> = CSVParser.validateAndTransform(csvData, serviceValidationRules, (row) => ({
         name: row.name?.trim() || "",
-        price: Number.parseFloat(row.price?.trim() || "0"),
+        price: parseCleanNumber(row.price, 0),
         description: row.description?.trim() || null,
-        duration_minutes: row.duration_minutes ? Number.parseInt(row.duration_minutes.trim()) : null,
-        category: row.category?.trim() || null,
+        duration_minutes: row.duration_minutes ? Math.round(parseCleanNumber(row.duration_minutes, 30)) : 30,
+        category: row.category?.trim() || "General",
         code: row.code?.trim() || null,
       }))
 
       if (!parseResult.success) {
         return {
           success: false,
-          message: `Validation failed: ${parseResult.errors.slice(0, 3).join("; ")}${parseResult.errors.length > 3 ? "..." : ""}`,
+          message: `Validation failed: ${parseResult.errors.length} error(s) occurred. Download the error log for details.`,
+          recordsProcessed: 0,
+          errors: parseResult.errors,
         }
       }
 
@@ -327,19 +337,30 @@ export async function bulkUploadServices(
         return {
           success: false,
           message: "No valid service records found in the CSV file",
+          recordsProcessed: 0,
+          errors: ["No valid service records found in the CSV file."],
         }
       }
 
       // Check for existing services and insert new ones
       let insertedCount = 0
       let skippedCount = 0
-      const errors: string[] = []
+      const insertErrors: string[] = []
 
-      for (const serviceData of parseResult.data) {
+      for (let i = 0; i < parseResult.data.length; i++) {
+        const serviceData = parseResult.data[i]
+        const rowNumber = i + 2
         try {
+          if (!serviceData.name) {
+            insertErrors.push(`Row ${rowNumber}: Service name is empty or missing.`)
+            continue
+          }
+
+          const serviceName = serviceData.name.trim()
+
           // Check if service already exists by name within the same tenant
           const existingServices = await sql`
-            SELECT id FROM services WHERE name = ${serviceData.name} AND tenant_id = ${tenantId}
+            SELECT id FROM services WHERE LOWER(name) = LOWER(${serviceName}) AND tenant_id = ${tenantId} LIMIT 1
           `
 
           if (existingServices.length > 0) {
@@ -348,7 +369,9 @@ export async function bulkUploadServices(
           }
 
           // Generate code if not provided
-          const serviceCode = serviceData.code || `SRV${Date.now()}-${insertedCount}`
+          const serviceCode = (serviceData.code?.trim() || `SRV${Date.now()}-${insertedCount}`).slice(0, 50)
+          const cleanPrice = parseCleanNumber(serviceData.price, 0)
+          const cleanDuration = parseCleanNumber(serviceData.duration_minutes, 30)
 
           // Insert new service with tenant_id
           await sql`
@@ -365,11 +388,11 @@ export async function bulkUploadServices(
             )
             VALUES (
               ${tenantId},
-              ${serviceData.name},
-              ${serviceData.price},
-              ${serviceData.description},
-              ${serviceData.duration_minutes || 60},
-              ${serviceData.category || "General"},
+              ${serviceName.slice(0, 255)},
+              ${cleanPrice},
+              ${serviceData.description?.trim() || null},
+              ${cleanDuration},
+              ${(serviceData.category?.trim() || "General").slice(0, 100)},
               ${serviceCode},
               true,
               NOW()
@@ -377,35 +400,41 @@ export async function bulkUploadServices(
           `
 
           insertedCount++
-        } catch (error) {
-          console.error(`Error inserting service ${serviceData.name}:`, error)
-          errors.push(`Failed to insert ${serviceData.name}: ${error}`)
+        } catch (error: any) {
+          const errMsg = error?.message || String(error)
+          console.error(`Error inserting service "${serviceData.name}" (Row ${rowNumber}):`, errMsg)
+          insertErrors.push(`Row ${rowNumber} ("${serviceData.name || "Unknown"}"): ${errMsg}`)
         }
       }
 
       // Revalidate paths to refresh the UI
       revalidatePath("/services")
       revalidatePath("/manage/services")
-      await cacheDel(`services:${tenantId}`);
+      await cacheDel(`services:${tenantId}`)
 
-      let message = `Successfully imported ${insertedCount} services`
+      const allErrors = [...parseResult.errors, ...insertErrors]
+
+      let message = `Successfully imported ${insertedCount} service(s)`
       if (skippedCount > 0) {
-        message += `, skipped ${skippedCount} duplicates`
+        message += `, skipped ${skippedCount} duplicate(s)`
       }
-      if (errors.length > 0) {
-        message += `, ${errors.length} errors occurred`
+      if (allErrors.length > 0) {
+        message += `, ${allErrors.length} error(s) occurred`
       }
 
       return {
         success: insertedCount > 0,
         message,
         recordsProcessed: insertedCount,
+        errors: allErrors.length > 0 ? allErrors : undefined,
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error in bulk upload:", error)
+      const errorMsg = error instanceof Error ? error.message : "Unknown error occurred"
       return {
         success: false,
-        message: `Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+        message: `Upload failed: ${errorMsg}`,
+        errors: [`Fatal error during upload: ${errorMsg}`],
       }
     }
   })

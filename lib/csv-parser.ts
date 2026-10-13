@@ -17,9 +17,75 @@ export interface CSVValidationRule {
   customValidator?: (value: string) => boolean
 }
 
+// Common aliases for CSV headers to maximize compatibility with client spreadsheets
+const HEADER_ALIASES: Record<string, string> = {
+  // Service headers
+  service_name: "name",
+  service: "name",
+  title: "name",
+  item_name: "name",
+  rate: "price",
+  cost: "price",
+  amount: "price",
+  mrp: "price",
+  fee: "price",
+  "price_(inr)": "price",
+  "price_inr": "price",
+  "price(inr)": "price",
+  duration: "duration_minutes",
+  duration_min: "duration_minutes",
+  duration_mins: "duration_minutes",
+  "duration_(min)": "duration_minutes",
+  "duration_(mins)": "duration_minutes",
+  "duration_(minutes)": "duration_minutes",
+  "duration(min)": "duration_minutes",
+  "duration(mins)": "duration_minutes",
+  time_minutes: "duration_minutes",
+  time_taken: "duration_minutes",
+  category_name: "category",
+  service_category: "category",
+  department: "category",
+  service_code: "code",
+  item_code: "code",
+  sku: "code",
+
+  // Customer headers
+  phone: "phone_number",
+  mobile: "phone_number",
+  mobile_number: "phone_number",
+  contact: "phone_number",
+  contact_number: "phone_number",
+  cell: "phone_number",
+  customer_name: "full_name",
+  client_name: "full_name",
+  email_address: "email",
+  mail: "email",
+  dob: "date_of_birth",
+  birth_date: "date_of_birth",
+  birthday: "date_of_birth",
+  anniversary: "date_of_anniversary",
+  anniversary_date: "date_of_anniversary",
+
+  // Booking headers
+  booking_id: "booking_number",
+  appointment_id: "booking_number",
+  appointment_number: "booking_number",
+  date: "booking_date",
+  time: "booking_time",
+  staff: "staff_name",
+  stylist: "staff_name",
+  employee: "staff_name",
+}
+
 export class CSVParser {
   static parseCSV(csvText: string): string[][] {
-    const lines = csvText.split("\n").filter((line) => line.trim() !== "")
+    // Strip UTF-8 BOM if present and normalize line breaks
+    const cleanText = csvText
+      .replace(/^\uFEFF/, "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+
+    const lines = cleanText.split("\n").filter((line) => line.trim() !== "")
     const result: string[][] = []
 
     for (const line of lines) {
@@ -31,7 +97,13 @@ export class CSVParser {
         const char = line[i]
 
         if (char === '"') {
-          inQuotes = !inQuotes
+          // Handle escaped double quotes ("")
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"'
+            i++
+          } else {
+            inQuotes = !inQuotes
+          }
         } else if (char === "," && !inQuotes) {
           row.push(current.trim())
           current = ""
@@ -56,23 +128,31 @@ export class CSVParser {
       return {
         success: false,
         data: [],
-        errors: ["CSV file is empty"],
+        errors: ["CSV file is empty or contains no readable lines."],
         totalRows: 0,
         validRows: 0,
       }
     }
 
-    const headers = csvData[0].map((h) => h.toLowerCase().trim())
+    // Clean and normalize headers (lowercase, trimmed, space -> underscore, BOM stripped)
+    const rawHeaders = csvData[0].map((h) =>
+      h.toLowerCase().trim().replace(/^\uFEFF/, "").replace(/[\s-]+/g, "_")
+    )
+
+    // Map each raw header to its canonical field name if alias exists
+    const headers = rawHeaders.map((h) => HEADER_ALIASES[h] || h)
     const dataRows = csvData.slice(1)
     const errors: string[] = []
     const validData: T[] = []
 
-    // Validate headers
-    const requiredFields = validationRules.filter((rule) => rule.required).map((rule) => rule.field.toLowerCase())
+    // Validate required headers
+    const requiredFields = validationRules
+      .filter((rule) => rule.required)
+      .map((rule) => rule.field.toLowerCase())
     const missingHeaders = requiredFields.filter((field) => !headers.includes(field))
 
     if (missingHeaders.length > 0) {
-      errors.push(`Missing required headers: ${missingHeaders.join(", ")}`)
+      errors.push(`Missing required headers: ${missingHeaders.join(", ")}. Found headers: ${rawHeaders.join(", ")}`)
       return {
         success: false,
         data: [],
@@ -84,13 +164,17 @@ export class CSVParser {
 
     // Process each row
     dataRows.forEach((row, index) => {
-      const rowNumber = index + 2 // +2 because we start from row 2 (after header)
+      const rowNumber = index + 2 // Row 1 is header
       const rowData: Record<string, string> = {}
       const rowErrors: string[] = []
 
-      // Map row data to headers
+      // Map row data to canonical headers (and keep raw headers accessible too)
       headers.forEach((header, colIndex) => {
-        rowData[header] = row[colIndex] || ""
+        const val = row[colIndex] || ""
+        rowData[header] = val
+        if (rawHeaders[colIndex]) {
+          rowData[rawHeaders[colIndex]] = val
+        }
       })
 
       // Validate each field
@@ -100,7 +184,7 @@ export class CSVParser {
 
         // Required field validation
         if (rule.required && !value.trim()) {
-          rowErrors.push(`Row ${rowNumber}: ${rule.field} is required`)
+          rowErrors.push(`Row ${rowNumber}: Required field '${rule.field}' is missing or empty.`)
           return
         }
 
@@ -113,23 +197,26 @@ export class CSVParser {
         if (rule.type) {
           switch (rule.type) {
             case "email":
-              if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-                rowErrors.push(`Row ${rowNumber}: ${rule.field} must be a valid email`)
+              if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())) {
+                rowErrors.push(`Row ${rowNumber}: '${rule.field}' must be a valid email address (got "${value}").`)
               }
               break
             case "phone":
-              if (value && !/^\+?[\d\s\-$$$$]{10,}$/.test(value)) {
-                rowErrors.push(`Row ${rowNumber}: ${rule.field} must be a valid phone number`)
+              if (value && !/^\+?[\d\s\-()]{7,}$/.test(value.trim())) {
+                rowErrors.push(`Row ${rowNumber}: '${rule.field}' must be a valid phone number (got "${value}").`)
               }
               break
-            case "number":
-              if (value && isNaN(Number(value))) {
-                rowErrors.push(`Row ${rowNumber}: ${rule.field} must be a number`)
+            case "number": {
+              // Strip currency symbols (₹, $, Rs), commas, and whitespace before evaluating
+              const cleanedNumber = value.replace(/[^0-9.-]/g, "").trim()
+              if (value && (cleanedNumber === "" || isNaN(Number(cleanedNumber)))) {
+                rowErrors.push(`Row ${rowNumber}: '${rule.field}' must be a valid number (got "${value}").`)
               }
               break
+            }
             case "date":
-              if (value && isNaN(Date.parse(value))) {
-                rowErrors.push(`Row ${rowNumber}: ${rule.field} must be a valid date`)
+              if (value && isNaN(Date.parse(value.trim()))) {
+                rowErrors.push(`Row ${rowNumber}: '${rule.field}' must be a valid date (got "${value}").`)
               }
               break
           }
@@ -137,17 +224,17 @@ export class CSVParser {
 
         // Length validation
         if (rule.maxLength && value.length > rule.maxLength) {
-          rowErrors.push(`Row ${rowNumber}: ${rule.field} must be less than ${rule.maxLength} characters`)
+          rowErrors.push(`Row ${rowNumber}: '${rule.field}' exceeds maximum length of ${rule.maxLength} characters.`)
         }
 
         // Pattern validation
         if (rule.pattern && value && !rule.pattern.test(value)) {
-          rowErrors.push(`Row ${rowNumber}: ${rule.field} format is invalid`)
+          rowErrors.push(`Row ${rowNumber}: '${rule.field}' format is invalid (got "${value}").`)
         }
 
         // Custom validation
         if (rule.customValidator && value && !rule.customValidator(value)) {
-          rowErrors.push(`Row ${rowNumber}: ${rule.field} failed custom validation`)
+          rowErrors.push(`Row ${rowNumber}: '${rule.field}' failed validation criteria (got "${value}").`)
         }
       })
 
@@ -158,7 +245,7 @@ export class CSVParser {
           const transformedData = transformer(rowData)
           validData.push(transformedData)
         } catch (error) {
-          errors.push(`Row ${rowNumber}: Failed to transform data - ${error}`)
+          errors.push(`Row ${rowNumber}: Failed to transform data - ${error instanceof Error ? error.message : String(error)}`)
         }
       }
     })

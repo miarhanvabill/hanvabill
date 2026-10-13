@@ -608,7 +608,7 @@ export async function getOrCreateWalkInCustomer(): Promise<Customer> {
 
 export async function bulkUploadCustomers(
   file: File,
-): Promise<{ success: boolean; message: string; recordsProcessed?: number }> {
+): Promise<{ success: boolean; message: string; recordsProcessed?: number; errors?: string[] }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const fileContent = await file.text()
@@ -617,15 +617,15 @@ export async function bulkUploadCustomers(
       const parseResult: CSVParseResult<{
         phone_number: string
         full_name: string
-        email?: string
-        gender?: string
-        sms_number?: string
-        code?: string
-        instagram_handle?: string
-        lead_source?: string
-        date_of_birth?: string
-        date_of_anniversary?: string
-        notes?: string
+        email?: string | null
+        gender?: string | null
+        sms_number?: string | null
+        code?: string | null
+        instagram_handle?: string | null
+        lead_source?: string | null
+        date_of_birth?: string | null
+        date_of_anniversary?: string | null
+        notes?: string | null
       }> = CSVParser.validateAndTransform(csvData, customerValidationRules, (row) => ({
         phone_number: row.phone_number?.trim() || "",
         full_name: row.full_name?.trim() || "",
@@ -643,7 +643,9 @@ export async function bulkUploadCustomers(
       if (!parseResult.success) {
         return {
           success: false,
-          message: `Validation failed: ${parseResult.errors.slice(0, 3).join("; ")}${parseResult.errors.length > 3 ? "..." : ""}`,
+          message: `Validation failed: ${parseResult.errors.length} error(s) occurred. Download the error log for details.`,
+          recordsProcessed: 0,
+          errors: parseResult.errors,
         }
       }
 
@@ -705,9 +707,10 @@ export async function bulkUploadCustomers(
           `
 
           insertedCount++
-        } catch (error) {
-          console.error(`Error inserting customer ${customerData.full_name}:`, error)
-          errors.push(`Failed to insert ${customerData.full_name}: ${error}`)
+        } catch (error: any) {
+          const errMsg = error?.message || String(error)
+          console.error(`Error inserting customer ${customerData.full_name}:`, errMsg)
+          errors.push(`Customer "${customerData.full_name || "Unknown"}": ${errMsg}`)
         }
       }
 
@@ -719,24 +722,29 @@ export async function bulkUploadCustomers(
       revalidatePath("/customers")
       revalidatePath("/new-sale")
 
-      let message = `Successfully imported ${insertedCount} customers`
+      const allErrors = [...parseResult.errors, ...errors]
+
+      let message = `Successfully imported ${insertedCount} customer(s)`
       if (skippedCount > 0) {
-        message += `, skipped ${skippedCount} duplicates`
+        message += `, skipped ${skippedCount} duplicate(s)`
       }
-      if (errors.length > 0) {
-        message += `, ${errors.length} errors occurred`
+      if (allErrors.length > 0) {
+        message += `, ${allErrors.length} error(s) occurred`
       }
 
       return {
         success: insertedCount > 0,
         message,
         recordsProcessed: insertedCount,
+        errors: allErrors.length > 0 ? allErrors : undefined,
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error in bulk upload:", error)
+      const errorMsg = error instanceof Error ? error.message : "Unknown error occurred"
       return {
         success: false,
-        message: `Upload failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+        message: `Upload failed: ${errorMsg}`,
+        errors: [`Fatal error during upload: ${errorMsg}`],
       }
     }
   })
