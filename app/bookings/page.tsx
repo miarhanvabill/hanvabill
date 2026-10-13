@@ -34,11 +34,12 @@ interface BookingsPageProps {
 function QuickBookModal() {
   const [open, setOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [dbServices, setDbServices] = useState<{ id: number; name: string; price: number; duration_minutes: number }[]>([])
   const [formData, setFormData] = useState({
     customerName: "",
     customerPhone: "",
     customerEmail: "",
-    serviceNames: "",
+    selectedServiceId: "",
     bookingDate: new Date().toISOString().split("T")[0],
     bookingTime: "",
     totalAmount: "",
@@ -46,53 +47,38 @@ function QuickBookModal() {
     notes: "",
   })
 
-  const services = [
-    { name: "Hair Cut & Style", price: 170, duration: 45 },
-    { name: "Anti Dandruff Hair SPA", price: 899, duration: 60 },
-    { name: "Almond Oil Head Massage", price: 250, duration: 30 },
-    { name: "Face & Neck D-tan/Bleach", price: 299, duration: 40 },
-    { name: "Cooling Effect Coconut Oil Massage", price: 199, duration: 35 },
-  ]
+  // Fetch real services from DB when modal opens
+  useEffect(() => {
+    if (!open) return
+    fetch("/api/services")
+      .then((r) => r.json())
+      .then((data) => {
+        const list = Array.isArray(data) ? data : data?.services || []
+        setDbServices(list)
+      })
+      .catch(() => {})
+  }, [open])
+
 
   const timeSlots = [
-    "09:00",
-    "09:30",
-    "10:00",
-    "10:30",
-    "11:00",
-    "11:30",
-    "12:00",
-    "12:30",
-    "13:00",
-    "13:30",
-    "14:00",
-    "14:30",
-    "15:00",
-    "15:30",
-    "16:00",
-    "16:30",
-    "17:00",
-    "17:30",
-    "18:00",
-    "18:30",
-    "19:00",
-    "19:30",
-    "20:00",
+    "09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30",
+    "13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30",
+    "17:00","17:30","18:00","18:30","19:00","19:30","20:00",
   ]
 
-  const handleServiceChange = (serviceName: string) => {
-    const service = services.find((s) => s.name === serviceName)
+  const handleServiceChange = (serviceId: string) => {
+    const service = dbServices.find((s) => s.id.toString() === serviceId)
     setFormData({
       ...formData,
-      serviceNames: serviceName,
-      totalAmount: service ? service.price.toString() : "",
+      selectedServiceId: serviceId,
+      totalAmount: service ? service.price.toString() : formData.totalAmount,
     })
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!formData.customerName || !formData.customerPhone || !formData.serviceNames || !formData.bookingTime) {
+    if (!formData.customerName || !formData.customerPhone || !formData.selectedServiceId || !formData.bookingTime) {
       toast({
         title: "Missing Information",
         description: "Please fill in all required fields",
@@ -104,45 +90,56 @@ function QuickBookModal() {
     setIsSubmitting(true)
     try {
       const submitFormData = new FormData()
-      Object.entries(formData).forEach(([key, value]) => {
-        submitFormData.append(key, value)
-      })
+      submitFormData.append("customerName", formData.customerName)
+      submitFormData.append("customerPhone", formData.customerPhone)
+      submitFormData.append("customerEmail", formData.customerEmail)
+      // Use serviceIds (numeric ID) so the action doesn't try to resolve by name
+      submitFormData.append("serviceIds", formData.selectedServiceId)
+      const selectedService = dbServices.find((s) => s.id.toString() === formData.selectedServiceId)
+      if (selectedService) {
+        submitFormData.append("serviceNames", selectedService.name)
+      }
+      submitFormData.append("bookingDate", formData.bookingDate)
+      submitFormData.append("bookingTime", formData.bookingTime)
+      submitFormData.append("totalAmount", formData.totalAmount)
+      submitFormData.append("status", formData.status)
+      submitFormData.append("notes", formData.notes)
 
       const result = await createBooking(submitFormData)
 
       if (result.success) {
         toast({
-          title: "Success",
-          description: "Appointment booked successfully!",
+          title: "✅ Appointment Booked!",
+          description: "The appointment has been created successfully.",
         })
         setOpen(false)
         setFormData({
           customerName: "",
           customerPhone: "",
           customerEmail: "",
-          serviceNames: "",
+          selectedServiceId: "",
           bookingDate: new Date().toISOString().split("T")[0],
           bookingTime: "",
           totalAmount: "",
           status: "pending",
           notes: "",
         })
-        // Refresh the page to show new booking
         window.location.reload()
       } else {
-        throw new Error(result.error || "Failed to create booking")
+        throw new Error((result as any).message || (result as any).error || "Failed to create booking")
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Booking error:", error)
       toast({
         title: "Error",
-        description: "Failed to create booking. Please try again.",
+        description: error?.message || "Failed to create booking. Please try again.",
         variant: "destructive",
       })
     } finally {
       setIsSubmitting(false)
     }
   }
+
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -193,16 +190,22 @@ function QuickBookModal() {
 
           <div>
             <Label htmlFor="serviceNames">Service *</Label>
-            <Select value={formData.serviceNames} onValueChange={handleServiceChange}>
+            <Select value={formData.selectedServiceId} onValueChange={handleServiceChange}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a service" />
               </SelectTrigger>
               <SelectContent>
-                {services.map((service) => (
-                  <SelectItem key={service.name} value={service.name}>
-                    {service.name} - ₹{service.price} ({service.duration}min)
+                {dbServices.length === 0 ? (
+                  <SelectItem value="none" disabled>
+                    Loading services...
                   </SelectItem>
-                ))}
+                ) : (
+                  dbServices.map((service) => (
+                    <SelectItem key={service.id} value={service.id.toString()}>
+                      {service.name} - ₹{service.price} ({service.duration_minutes || (service as any).duration || 30}min)
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
           </div>

@@ -313,7 +313,19 @@ export async function createBooking(formData: FormData) {
           finalCustomerId = Number(newCustomer.id)
         }
 
-        if (serviceNames) {
+        if (serviceIds) {
+          finalServiceIds = serviceIds
+            .toString()
+            .split(",")
+            .map((id) => Number(id.trim()))
+            .filter((id) => !isNaN(id))
+          if (finalServiceIds.length === 0) {
+            return {
+              success: false,
+              message: "Invalid service IDs provided.",
+            }
+          }
+        } else if (serviceNames) {
 
           // First try exact match (case-insensitive)
           let serviceResult = await sql`
