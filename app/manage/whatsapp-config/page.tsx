@@ -60,6 +60,11 @@ import {
   ShieldCheck,
   ChevronRight,
   TrendingUp,
+  Plus,
+  Play,
+  Trash2,
+  Users,
+  Bot,
 } from "lucide-react"
 import { getBusinessSettings, updateBusinessSettings } from "@/app/actions/settings"
 import {
@@ -73,9 +78,25 @@ import {
   type OutboundLog,
 } from "@/app/actions/whatsapp-automations"
 import { testWhatsAppConnection } from "@/app/actions/whatsapp"
+import {
+  getSmartCampaignRules,
+  parseCampaignPromptWithAi,
+  previewCampaignAudience,
+  createSmartCampaignRule,
+  toggleSmartCampaignRule,
+  deleteSmartCampaignRule,
+  runSmartCampaignRuleNow,
+  type SmartCampaignRule,
+  type AudiencePreviewResult,
+} from "@/app/actions/smart-campaigns"
+import {
+  PRESET_SALON_RECIPES,
+  type SmartCampaignRuleDraft,
+  type CampaignTriggerType,
+} from "@/lib/ai-campaign-parser"
 
 export default function WhatsAppConfigPage() {
-  const [activeTab, setActiveTab] = useState("gateway")
+  const [activeTab, setActiveTab] = useState("smart-campaigns")
   const [loading, setLoading] = useState(true)
   const [savingGateway, setSavingGateway] = useState(false)
   const [testingConnection, setTestingConnection] = useState(false)
@@ -117,22 +138,58 @@ export default function WhatsAppConfigPage() {
   const [logFilter, setLogFilter] = useState<string>("all")
   const [logSearch, setLogSearch] = useState("")
 
+  // Smart AI Campaign States
+  const [smartRules, setSmartRules] = useState<SmartCampaignRule[]>([])
+  const [promptInput, setPromptInput] = useState("")
+  const [isAiParsing, setIsAiParsing] = useState(false)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [currentDraft, setCurrentDraft] = useState<SmartCampaignRuleDraft>({
+    name: "30-Day Hair Color Touchup",
+    prompt_input: "",
+    trigger_type: "days_after_service",
+    trigger_days: 30,
+    service_names: ["Hair Color"],
+    message_template:
+      "Hi {{customer_name}}! 🌸 It's been 30 days since your {{service_name}} at {{business_name}}. Time for your regular root touch-up? Book your slot: {{booking_link}}",
+    coupon_code: "TOUCHUP10",
+    send_time: "10:00",
+    cooldown_days: 14,
+    exclude_active_bookings: true,
+    is_enabled: true,
+  })
+  const [isSavingRule, setIsSavingRule] = useState(false)
+  const [audiencePreview, setAudiencePreview] = useState<AudiencePreviewResult | null>(null)
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
+  const [runningRuleId, setRunningRuleId] = useState<string | null>(null)
+
   const webhookUrl = typeof window !== "undefined" 
     ? `${window.location.origin}/api/webhooks/whatsapp?type=mo` 
     : "https://biz.hanva.in/api/webhooks/whatsapp?type=mo"
 
   useEffect(() => {
     loadAllData()
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      const tab = params.get("tab")
+      if (tab && ["smart-campaigns", "automations", "gateway", "analytics"].includes(tab)) {
+        setActiveTab(tab)
+      }
+    }
   }, [])
 
   const loadAllData = async () => {
     setLoading(true)
     try {
-      const [settings, fetchedRules, fetchedAnalytics] = await Promise.all([
+      const [settings, fetchedRules, fetchedAnalytics, smartRulesRes] = await Promise.all([
         getBusinessSettings(),
         getAutomationRules(),
         getWhatsAppAnalytics(),
+        getSmartCampaignRules(),
       ])
+
+      if (smartRulesRes?.success && smartRulesRes?.data) {
+        setSmartRules(smartRulesRes.data)
+      }
 
       if (settings) {
         setGatewayData({
@@ -159,6 +216,135 @@ export default function WhatsAppConfigPage() {
       toast.error("Failed to load some settings")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleParsePrompt = async (textToParse?: string) => {
+    const text = textToParse || promptInput
+    if (!text.trim()) {
+      toast.error("Please enter what you want to automate")
+      return
+    }
+
+    setIsAiParsing(true)
+    try {
+      const res = await parseCampaignPromptWithAi(text)
+      if (res.success && res.draft) {
+        setCurrentDraft(res.draft)
+        setIsCreateModalOpen(true)
+        fetchAudiencePreview(res.draft)
+      } else {
+        toast.error("Could not parse prompt. Please try again.")
+      }
+    } catch {
+      toast.error("AI parser error")
+    } finally {
+      setIsAiParsing(false)
+    }
+  }
+
+  const handleSelectRecipe = (draft: SmartCampaignRuleDraft) => {
+    setCurrentDraft(draft)
+    setIsCreateModalOpen(true)
+    fetchAudiencePreview(draft)
+  }
+
+  const fetchAudiencePreview = async (draft: SmartCampaignRuleDraft) => {
+    setIsPreviewLoading(true)
+    try {
+      const res = await previewCampaignAudience(draft)
+      if (res.success && res.preview) {
+        setAudiencePreview(res.preview)
+      } else {
+        setAudiencePreview(null)
+      }
+    } catch {
+      setAudiencePreview(null)
+    } finally {
+      setIsPreviewLoading(false)
+    }
+  }
+
+  const handleSaveRule = async () => {
+    if (!currentDraft.name.trim()) {
+      toast.error("Please enter a campaign name")
+      return
+    }
+    if (!currentDraft.message_template.trim()) {
+      toast.error("Please enter a WhatsApp message template")
+      return
+    }
+
+    setIsSavingRule(true)
+    try {
+      const res = await createSmartCampaignRule(currentDraft)
+      if (res.success) {
+        toast.success("Automated campaign created & activated!")
+        setIsCreateModalOpen(false)
+        setPromptInput("")
+        const refreshed = await getSmartCampaignRules()
+        if (refreshed.success && refreshed.data) setSmartRules(refreshed.data)
+      } else {
+        toast.error(res.error || "Failed to save rule")
+      }
+    } catch {
+      toast.error("Error saving campaign rule")
+    } finally {
+      setIsSavingRule(false)
+    }
+  }
+
+  const handleToggleSmartRule = async (rule: SmartCampaignRule) => {
+    const nextStatus = !rule.is_enabled
+    setSmartRules((prev) =>
+      prev.map((r) => (r.id === rule.id ? { ...r, is_enabled: nextStatus } : r))
+    )
+
+    try {
+      const res = await toggleSmartCampaignRule(rule.id, nextStatus)
+      if (res.success) {
+        toast.success(nextStatus ? "Automation enabled" : "Automation paused")
+      } else {
+        toast.error("Failed to update status")
+        const refreshed = await getSmartCampaignRules()
+        if (refreshed.success && refreshed.data) setSmartRules(refreshed.data)
+      }
+    } catch {
+      toast.error("Error toggling status")
+    }
+  }
+
+  const handleDeleteSmartRule = async (ruleId: string) => {
+    if (!confirm("Are you sure you want to delete this automated campaign?")) return
+
+    try {
+      const res = await deleteSmartCampaignRule(ruleId)
+      if (res.success) {
+        toast.success("Campaign deleted")
+        setSmartRules((prev) => prev.filter((r) => r.id !== ruleId))
+      } else {
+        toast.error("Failed to delete campaign")
+      }
+    } catch {
+      toast.error("Error deleting campaign")
+    }
+  }
+
+  const handleRunSmartRuleNow = async (ruleId: string) => {
+    setRunningRuleId(ruleId)
+    try {
+      const res = await runSmartCampaignRuleNow(ruleId)
+      if (res.success) {
+        toast.success(`Automation completed! Sent to ${res.sentCount || 0} matching customer(s).`)
+        const refreshed = await getSmartCampaignRules()
+        if (refreshed.success && refreshed.data) setSmartRules(refreshed.data)
+      } else {
+        toast.error(res.error || "Failed to trigger campaign")
+      }
+    } catch {
+      toast.error("Error running campaign")
+    } finally {
+      setRunningRuleId(null)
     }
   }
 
@@ -523,26 +709,33 @@ export default function WhatsAppConfigPage() {
         {/* 3 Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-3">
-            <TabsList className="bg-slate-200/80 p-1 rounded-xl w-full sm:w-auto grid grid-cols-3 h-11">
+            <TabsList className="bg-slate-200/80 p-1 rounded-xl w-full sm:w-auto grid grid-cols-2 lg:grid-cols-4 h-auto lg:h-11 gap-1">
               <TabsTrigger
-                value="gateway"
-                className="data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm rounded-lg font-semibold text-xs sm:text-sm gap-2"
+                value="smart-campaigns"
+                className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm rounded-lg font-semibold text-xs sm:text-sm gap-2 py-2 sm:py-1.5"
               >
-                <ShieldCheck className="w-4 h-4" />
-                Gateway & Credentials
+                <Sparkles className="w-4 h-4 text-emerald-600" />
+                AI Smart Campaigns ({smartRules.length})
               </TabsTrigger>
               <TabsTrigger
                 value="automations"
-                className="data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm rounded-lg font-semibold text-xs sm:text-sm gap-2"
+                className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm rounded-lg font-semibold text-xs sm:text-sm gap-2 py-2 sm:py-1.5"
               >
-                <Sparkles className="w-4 h-4 text-emerald-600" />
-                Automation Rules (9)
+                <Clock className="w-4 h-4 text-slate-600" />
+                Lifecycle Triggers (9)
+              </TabsTrigger>
+              <TabsTrigger
+                value="gateway"
+                className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm rounded-lg font-semibold text-xs sm:text-sm gap-2 py-2 sm:py-1.5"
+              >
+                <ShieldCheck className="w-4 h-4 text-slate-600" />
+                Gateway & Credentials
               </TabsTrigger>
               <TabsTrigger
                 value="analytics"
-                className="data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-sm rounded-lg font-semibold text-xs sm:text-sm gap-2"
+                className="data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm rounded-lg font-semibold text-xs sm:text-sm gap-2 py-2 sm:py-1.5"
               >
-                <Activity className="w-4 h-4" />
+                <Activity className="w-4 h-4 text-slate-600" />
                 Delivery Logs & Analytics
               </TabsTrigger>
             </TabsList>
@@ -808,6 +1001,270 @@ export default function WhatsAppConfigPage() {
                   </CardContent>
                 </Card>
               </div>
+            </div>
+          </TabsContent>
+
+          {/* ============================================================ */}
+          {/* TAB 0: AI SMART CAMPAIGNS (CUSTOM LIFECYCLE FLOWS) */}
+          {/* ============================================================ */}
+          <TabsContent value="smart-campaigns" className="space-y-6 m-0">
+            {/* Dark Slate / Charcoal AI Command Center Hero */}
+            <div className="bg-slate-900 rounded-2xl p-6 text-white border border-slate-800 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-emerald-500/10 text-emerald-400 text-xs px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1.5 border border-emerald-500/20">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      Natural Language Compiler
+                    </span>
+                    <span className="text-xs text-slate-400">Recurring Multi-Tenant Cron</span>
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                    AI Automated WhatsApp Campaigns
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-300 max-w-2xl">
+                    Describe any salon retention flow in plain words (e.g. <em>&quot;Send root touch-up reminder to clients 30 days after Hair Color with 10% coupon&quot;</em>). Hanva Billing scans and dispatches it automatically every morning.
+                  </p>
+                </div>
+
+                <Button
+                  onClick={() => {
+                    setCurrentDraft({
+                      name: "Custom Salon Automation",
+                      prompt_input: "",
+                      trigger_type: "days_after_service",
+                      trigger_days: 30,
+                      service_names: [],
+                      message_template:
+                        "Hi {{customer_name}}! ✨ It has been 30 days since your visit to {{business_name}}. Time for your regular refresh? Book your slot: {{booking_link}}",
+                      coupon_code: "REFRESH",
+                      send_time: "10:00",
+                      cooldown_days: 14,
+                      exclude_active_bookings: true,
+                      is_enabled: true,
+                    })
+                    setIsCreateModalOpen(true)
+                    fetchAudiencePreview({
+                      name: "Custom Salon Automation",
+                      prompt_input: "",
+                      trigger_type: "days_after_service",
+                      trigger_days: 30,
+                      service_names: [],
+                      message_template: "",
+                      send_time: "10:00",
+                      cooldown_days: 14,
+                      exclude_active_bookings: true,
+                      is_enabled: true,
+                    })
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs sm:text-sm gap-2 shrink-0 h-10 px-4 rounded-xl shadow-xs"
+                >
+                  <Plus className="w-4 h-4" />
+                  New Automation
+                </Button>
+              </div>
+
+              {/* Prompt Input Box */}
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <div className="relative flex-1">
+                  <Input
+                    placeholder="e.g. Send root touch-up template to customers who took Hair Color 30 days ago with 10% coupon..."
+                    value={promptInput}
+                    onChange={(e) => setPromptInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleParsePrompt()
+                    }}
+                    className="bg-slate-800/90 border-slate-700 text-white placeholder:text-slate-400 focus-visible:ring-emerald-500 text-xs sm:text-sm h-11 rounded-xl"
+                  />
+                  <Sparkles className="w-4 h-4 absolute right-3 top-3.5 text-slate-400 pointer-events-none" />
+                </div>
+                <Button
+                  onClick={() => handleParsePrompt()}
+                  disabled={isAiParsing}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white gap-2 h-11 px-5 rounded-xl font-medium shadow-xs shrink-0"
+                >
+                  {isAiParsing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
+                  Ask AI
+                </Button>
+              </div>
+
+              {/* One-Tap Salon Inspiration Recipes */}
+              <div className="space-y-1.5 pt-2 border-t border-slate-800">
+                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                  ✨ Instant One-Tap Salon Recipes:
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {PRESET_SALON_RECIPES.map((recipe) => (
+                    <button
+                      key={recipe.id}
+                      onClick={() => handleSelectRecipe(recipe.draft)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-slate-200 transition-all shadow-2xs"
+                    >
+                      <span>{recipe.icon}</span>
+                      <span>{recipe.title}</span>
+                      <span className="bg-slate-700 text-slate-300 text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+                        {recipe.draft.trigger_days}d
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Campaign Rules Grid */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-base">Active Custom Automations</h4>
+                  <p className="text-xs text-slate-500">
+                    Each automation checks your salon appointments daily and sends personalized messages.
+                  </p>
+                </div>
+                <Badge variant="outline" className="border-slate-300 text-slate-700 bg-white">
+                  {smartRules.length} Configured
+                </Badge>
+              </div>
+
+              {smartRules.length === 0 ? (
+                <Card className="border-dashed border-2 p-10 text-center bg-white">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center mx-auto mb-3">
+                    <Sparkles className="w-6 h-6 text-emerald-600" />
+                  </div>
+                  <h4 className="font-semibold text-base text-slate-900 mb-1">No AI Campaign Rules Created Yet</h4>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto mb-4">
+                    Type a prompt above or tap one of the instant recipes (like 30-Day Hair Color Touchup) to activate your first flow.
+                  </p>
+                  <Button
+                    onClick={() => handleSelectRecipe(PRESET_SALON_RECIPES[0].draft)}
+                    className="bg-slate-900 hover:bg-slate-800 text-white text-xs gap-2"
+                  >
+                    Try 30-Day Hair Color Followup
+                  </Button>
+                </Card>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {smartRules.map((rule) => {
+                    const isRunning = runningRuleId === rule.id
+
+                    return (
+                      <Card
+                        key={rule.id}
+                        className={`transition-all duration-200 bg-white border flex flex-col justify-between ${
+                          rule.is_enabled ? "border-slate-200 shadow-xs hover:border-slate-300" : "border-slate-200/70 bg-slate-50/70 opacity-75"
+                        }`}
+                      >
+                        <CardHeader className="pb-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <CardTitle className="text-base font-bold text-slate-900">
+                                  {rule.name}
+                                </CardTitle>
+                              </div>
+                              <CardDescription className="text-xs text-slate-500 line-clamp-1">
+                                {rule.prompt_input || "Recurring automated trigger"}
+                              </CardDescription>
+                            </div>
+                            <Switch
+                              checked={rule.is_enabled}
+                              onCheckedChange={() => handleToggleSmartRule(rule)}
+                            />
+                          </div>
+                        </CardHeader>
+
+                        <CardContent className="space-y-3 pb-3">
+                          {/* Parameter Badges */}
+                          <div className="flex flex-wrap gap-1.5 text-xs">
+                            <Badge variant="outline" className="bg-slate-100 text-slate-700 border-slate-200 text-[11px]">
+                              ⏰ {rule.trigger_days} Days{" "}
+                              {rule.trigger_type === "days_after_service"
+                                ? "After Service"
+                                : rule.trigger_type === "days_since_last_visit"
+                                ? "Inactive"
+                                : rule.trigger_type === "days_before_birthday"
+                                ? "Before Birthday"
+                                : "After Visit"}
+                            </Badge>
+
+                            {rule.service_names && rule.service_names.length > 0 && (
+                              <Badge variant="outline" className="bg-slate-50 text-slate-800 border-slate-200 text-[11px]">
+                                ✂️ {rule.service_names.join(", ")}
+                              </Badge>
+                            )}
+
+                            {rule.coupon_code && (
+                              <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200 font-mono text-[11px]">
+                                🏷️ {rule.coupon_code}
+                              </Badge>
+                            )}
+
+                            <Badge variant="outline" className="bg-slate-50 text-slate-600 text-[11px]">
+                              🕒 {rule.send_time}
+                            </Badge>
+                          </div>
+
+                          {/* Message Preview Box */}
+                          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-xs text-slate-700 font-sans whitespace-pre-wrap line-clamp-3">
+                            {rule.message_template}
+                          </div>
+
+                          {/* Stats / Audit Bar */}
+                          <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100">
+                            <span className="flex items-center gap-1 font-medium text-slate-700">
+                              <Send className="w-3.5 h-3.5 text-emerald-600" />
+                              Total Sent: <strong>{rule.total_sent}</strong>
+                            </span>
+                            <span className="flex items-center gap-1 text-slate-500">
+                              <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
+                              {rule.cooldown_days}d Anti-Spam
+                            </span>
+                          </div>
+                        </CardContent>
+
+                        <CardFooter className="pt-2 pb-3 bg-slate-50/60 border-t border-slate-100 flex items-center justify-between gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              fetchAudiencePreview(rule)
+                              toast.info("Calculating today's matching clients...")
+                            }}
+                            className="text-xs h-8 text-slate-700 gap-1.5"
+                          >
+                            <Users className="w-3.5 h-3.5" />
+                            Audience
+                          </Button>
+
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleRunSmartRuleNow(rule.id)}
+                              disabled={isRunning}
+                              className="text-xs h-8 text-emerald-700 border-emerald-200 hover:bg-emerald-50 gap-1.5 font-medium"
+                            >
+                              {isRunning ? (
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Play className="w-3.5 h-3.5 fill-emerald-700" />
+                              )}
+                              Run Now
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteSmartRule(rule.id)}
+                              className="text-xs h-8 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </CardFooter>
+                      </Card>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </TabsContent>
 
@@ -1415,6 +1872,243 @@ export default function WhatsAppConfigPage() {
                 <Send className="w-3.5 h-3.5" />
               )}
               Send WhatsApp Now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================================ */}
+      {/* DIALOG 3: AI SMART CAMPAIGN BUILDER & AUDIENCE PREVIEW */}
+      {/* ============================================================ */}
+      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-slate-900 text-lg font-bold">
+              <Sparkles className="w-5 h-5 text-emerald-600" />
+              Configure Automated WhatsApp Campaign
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Review the schedule, target criteria, and message template. Hanva Billing will automatically scan and send this every day.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid md:grid-cols-2 gap-5 py-3">
+            {/* Left Column: Rule Parameters */}
+            <div className="space-y-3.5">
+              <div className="space-y-1">
+                <Label htmlFor="camp-name" className="text-xs font-semibold text-slate-700">Campaign Name</Label>
+                <Input
+                  id="camp-name"
+                  value={currentDraft.name}
+                  onChange={(e) => setCurrentDraft((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g. 30-Day Hair Color Touchup"
+                  className="h-9 text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Trigger Event</Label>
+                  <Select
+                    value={currentDraft.trigger_type}
+                    onValueChange={(val: CampaignTriggerType) => {
+                      const updated = { ...currentDraft, trigger_type: val }
+                      setCurrentDraft(updated)
+                      fetchAudiencePreview(updated)
+                    }}
+                  >
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="days_after_service">Days After Service</SelectItem>
+                      <SelectItem value="days_since_last_visit">Days Inactive (Winback)</SelectItem>
+                      <SelectItem value="days_before_birthday">Before Birthday</SelectItem>
+                      <SelectItem value="high_spender_followup">VIP High Spender</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Days Count</Label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={currentDraft.trigger_days}
+                    onChange={(e) => {
+                      const updated = { ...currentDraft, trigger_days: parseInt(e.target.value) || 30 }
+                      setCurrentDraft(updated)
+                      fetchAudiencePreview(updated)
+                    }}
+                    className="h-9 text-xs"
+                  />
+                </div>
+              </div>
+
+              {currentDraft.trigger_type === "days_after_service" && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Service Filter Keywords</Label>
+                  <Input
+                    placeholder="e.g. Hair Color, Highlights, Balayage"
+                    value={currentDraft.service_names.join(", ")}
+                    onChange={(e) => {
+                      const names = e.target.value
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean)
+                      const updated = { ...currentDraft, service_names: names }
+                      setCurrentDraft(updated)
+                      fetchAudiencePreview(updated)
+                    }}
+                    className="h-9 text-xs"
+                  />
+                  <p className="text-[10px] text-slate-500">Comma-separated. Leave empty to target all services.</p>
+                </div>
+              )}
+
+              {currentDraft.trigger_type === "high_spender_followup" && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Minimum Bill Amount (₹)</Label>
+                  <Input
+                    type="number"
+                    value={currentDraft.min_spend || 2000}
+                    onChange={(e) => {
+                      const updated = { ...currentDraft, min_spend: parseInt(e.target.value) || 0 }
+                      setCurrentDraft(updated)
+                      fetchAudiencePreview(updated)
+                    }}
+                    className="h-9 text-xs"
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Promo / Coupon Code</Label>
+                  <Input
+                    placeholder="e.g. TOUCHUP10"
+                    value={currentDraft.coupon_code || ""}
+                    onChange={(e) => setCurrentDraft((prev) => ({ ...prev, coupon_code: e.target.value }))}
+                    className="h-9 text-xs uppercase"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Send Time (IST)</Label>
+                  <Input
+                    type="time"
+                    value={currentDraft.send_time}
+                    onChange={(e) => setCurrentDraft((prev) => ({ ...prev, send_time: e.target.value }))}
+                    className="h-9 text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Anti-Spam Protections */}
+              <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-700 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    Anti-Spam Frequency Cap
+                  </span>
+                  <span className="text-[11px] text-slate-500">{currentDraft.cooldown_days} Days Cooldown</span>
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t border-slate-200">
+                  <span className="text-slate-600 text-[11px]">Exclude clients with active bookings</span>
+                  <Switch
+                    checked={currentDraft.exclude_active_bookings}
+                    onCheckedChange={(val) => setCurrentDraft((prev) => ({ ...prev, exclude_active_bookings: val }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: WhatsApp Live Message Preview & Audience Match */}
+            <div className="space-y-3.5">
+              <div className="space-y-1">
+                <Label htmlFor="smart-msg-tmpl" className="text-xs font-semibold text-slate-700 flex items-center justify-between">
+                  <span>WhatsApp Message Template</span>
+                  <span className="text-[10px] text-emerald-700 font-normal">Use &#123;&#123;customer_name&#125;&#125;, &#123;&#123;service_name&#125;&#125;</span>
+                </Label>
+                <Textarea
+                  id="smart-msg-tmpl"
+                  rows={4}
+                  value={currentDraft.message_template}
+                  onChange={(e) => setCurrentDraft((prev) => ({ ...prev, message_template: e.target.value }))}
+                  className="text-xs"
+                />
+              </div>
+
+              {/* Simulated WhatsApp Phone Bubble */}
+              <div className="bg-slate-100 rounded-xl p-3 border border-slate-200 space-y-2">
+                <span className="text-[10px] uppercase font-bold text-slate-700 tracking-wider flex items-center gap-1">
+                  <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
+                  Live WhatsApp Chat Bubble Preview
+                </span>
+                <div className="bg-white rounded-lg p-3 text-xs text-slate-800 shadow-xs border border-slate-200 relative">
+                  <p className="whitespace-pre-wrap">
+                    {currentDraft.message_template
+                      .replace(/\{\{\s*customer_name\s*\}\}/gi, "Priya Sharma")
+                      .replace(/\{\{\s*business_name\s*\}\}/gi, gatewayData.salonName || "Hanva Salon")
+                      .replace(/\{\{\s*service_name\s*\}\}/gi, currentDraft.service_names[0] || "Hair Color")
+                      .replace(/\{\{\s*booking_link\s*\}\}/gi, "https://biz.hanva.in/book/salon")
+                      .replace(/\{\{\s*coupon_code\s*\}\}/gi, currentDraft.coupon_code || "SPECIAL")}
+                  </p>
+                  <div className="text-[9px] text-slate-400 text-right mt-1.5 flex items-center justify-end gap-1">
+                    <span>10:02 AM</span>
+                    <span className="text-emerald-600 font-bold">✓✓</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Matching Audience Box in Slate Grey & Emerald */}
+              <div className="bg-slate-900 rounded-xl p-3.5 border border-slate-800 text-white space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                    <Users className="w-4 h-4 text-emerald-400" />
+                    Today&apos;s Matching Audience
+                  </span>
+                  {isPreviewLoading ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />
+                  ) : (
+                    <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs">
+                      {audiencePreview?.matchingCount || 0} Clients Match Today
+                    </Badge>
+                  )}
+                </div>
+
+                {audiencePreview && audiencePreview.matchingCount > 0 ? (
+                  <div className="text-[11px] text-slate-300 space-y-1">
+                    <p className="font-medium text-white">Sample clients who will receive this message:</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-slate-300">
+                      {audiencePreview.sampleCustomers.map((c) => (
+                        <li key={c.id}>
+                          <strong>{c.name}</strong> ({c.phone}) - {c.service_name} on {c.booking_date}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400">
+                    No clients match today&apos;s date window. As clients reach the {currentDraft.trigger_days}-day mark, they will automatically be messaged every morning!
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-slate-200">
+            <Button variant="outline" size="sm" onClick={() => setIsCreateModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveRule}
+              disabled={isSavingRule}
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-medium"
+            >
+              {isSavingRule && <RefreshCw className="w-4 h-4 animate-spin" />}
+              Save & Activate Automation
             </Button>
           </DialogFooter>
         </DialogContent>

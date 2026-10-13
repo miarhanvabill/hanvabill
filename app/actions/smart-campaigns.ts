@@ -368,6 +368,7 @@ export async function createSmartCampaignRule(draft: SmartCampaignRuleDraft) {
       `;
 
       revalidatePath("/marketing/automations");
+      revalidatePath("/manage/whatsapp-config");
       return { success: true, id: result[0]?.id };
     } catch (error: any) {
       console.error("[Smart Campaigns] Error creating rule:", error);
@@ -389,6 +390,7 @@ export async function toggleSmartCampaignRule(id: string, isEnabled: boolean) {
       `;
 
       revalidatePath("/marketing/automations");
+      revalidatePath("/manage/whatsapp-config");
       return { success: true };
     } catch (error: any) {
       console.error("[Smart Campaigns] Error toggling rule:", error);
@@ -409,6 +411,7 @@ export async function deleteSmartCampaignRule(id: string) {
       `;
 
       revalidatePath("/marketing/automations");
+      revalidatePath("/manage/whatsapp-config");
       return { success: true };
     } catch (error: any) {
       console.error("[Smart Campaigns] Error deleting rule:", error);
@@ -509,6 +512,7 @@ export async function runSmartCampaignRuleNow(ruleId: string) {
       `;
 
       revalidatePath("/marketing/automations");
+      revalidatePath("/manage/whatsapp-config");
       return { success: true, sentCount };
     } catch (error: any) {
       console.error("[Smart Campaigns] Error running rule now:", error);
