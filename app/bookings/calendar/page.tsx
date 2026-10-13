@@ -20,7 +20,6 @@ import {
   Sparkles,
   Phone,
   ArrowRight,
-  Compass,
 } from "lucide-react"
 import {
   getCalendarBookings,
@@ -193,7 +192,6 @@ export default function BookingCalendarPage() {
         if (hours >= START_HOUR && hours <= END_HOUR) {
           const totalMinutes = (hours - START_HOUR) * 60 + minutes
           const targetY = totalMinutes * PIXELS_PER_MINUTE
-          // Scroll smoothly so the current time is placed ~120px below the sticky header
           scrollContainerRef.current.scrollTo({
             top: Math.max(0, targetY - 120),
             behavior: "smooth",
@@ -205,7 +203,6 @@ export default function BookingCalendarPage() {
           })
         }
       } else {
-        // If viewing future days, scroll to 9:00 AM (typical salon opening)
         const defaultMinutes = (9 - START_HOUR) * 60
         const targetY = defaultMinutes * PIXELS_PER_MINUTE
         scrollContainerRef.current.scrollTo({
@@ -307,7 +304,6 @@ export default function BookingCalendarPage() {
     let newTime = quickBookForm.bookingTime
     const [h, m] = newTime.split(":").map(Number)
 
-    // If current selected time is in the past for this date, auto-select first future time
     if (isSlotInPast(h, m, targetDate)) {
       const firstFuture = TIME_SLOTS.find((s) => !isSlotInPast(s.hour, s.minute, targetDate))
       if (firstFuture) {
@@ -464,7 +460,7 @@ export default function BookingCalendarPage() {
       case "confirmed":
         return "bg-emerald-50/90 text-emerald-950 border-emerald-300 hover:border-emerald-400 dark:bg-emerald-950/30 dark:text-emerald-200 dark:border-emerald-700"
       case "completed":
-        return "bg-blue-50/90 text-blue-950 border-blue-300 hover:border-blue-400 dark:bg-blue-950/30 dark:text-blue-200 dark:border-blue-700"
+        return "bg-slate-100 text-slate-800 border-slate-300 hover:border-slate-400 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700"
       case "cancelled":
         return "bg-rose-50/70 text-rose-800 border-rose-300 opacity-60 line-through dark:bg-rose-950/30 dark:text-rose-300 dark:border-rose-800"
       case "pending":
@@ -482,7 +478,6 @@ export default function BookingCalendarPage() {
           ? staffList
           : staffList.filter((s) => s.id.toString() === selectedStaffId)
 
-      // Always include Unassigned column if viewing all, or if any booking is unassigned
       const hasUnassigned = bookings.some((b) => !b.staff_id)
       if (selectedStaffId === "all" || hasUnassigned) {
         list = [...list, { id: -1, name: "Unassigned", role: "General Queue" } as any]
@@ -532,19 +527,19 @@ export default function BookingCalendarPage() {
             type="single"
             value={groupBy}
             onValueChange={(v) => v && setGroupBy(v as any)}
-            className="bg-muted/50 p-1 rounded-lg border bg-white dark:bg-slate-900"
+            className="bg-muted/50 p-1 rounded-lg border"
           >
             <ToggleGroupItem
               value="staff"
               aria-label="Group by Staff"
-              className="rounded-md data-[state=on]:bg-blue-600 data-[state=on]:text-white px-3 py-1.5 h-auto text-xs font-medium"
+              className="rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm px-3 py-1.5 h-auto text-xs font-medium"
             >
               Staff
             </ToggleGroupItem>
             <ToggleGroupItem
               value="resource"
               aria-label="Group by Resources"
-              className="rounded-md data-[state=on]:bg-blue-600 data-[state=on]:text-white px-3 py-1.5 h-auto text-xs font-medium"
+              className="rounded-md data-[state=on]:bg-background data-[state=on]:text-foreground data-[state=on]:shadow-sm px-3 py-1.5 h-auto text-xs font-medium"
             >
               Rooms/Chairs
             </ToggleGroupItem>
@@ -552,7 +547,7 @@ export default function BookingCalendarPage() {
 
           {groupBy === "staff" && (
             <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
-              <SelectTrigger className="w-[170px] h-9 text-xs bg-white dark:bg-slate-900">
+              <SelectTrigger className="w-[170px] h-9 text-xs bg-background">
                 <SelectValue placeholder="All Staff" />
               </SelectTrigger>
               <SelectContent>
@@ -566,14 +561,14 @@ export default function BookingCalendarPage() {
             </Select>
           )}
 
-          <div className="flex items-center rounded-lg border bg-white dark:bg-slate-900 p-0.5 shadow-sm">
+          <div className="flex items-center rounded-lg border bg-background p-0.5 shadow-sm">
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handlePrevDay} title="Previous Day">
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="ghost" className="h-8 px-2.5 font-semibold text-xs flex items-center gap-1.5">
-                  <CalendarIcon className="h-3.5 w-3.5 text-blue-600" />
+                <Button variant="ghost" className="h-8 px-2.5 font-semibold text-xs flex items-center gap-1.5 text-foreground">
+                  <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
                   {format(currentDate, "EEE, MMM d, yyyy")}
                 </Button>
               </PopoverTrigger>
@@ -592,45 +587,43 @@ export default function BookingCalendarPage() {
           </div>
 
           <Button
-            variant={isToday(currentDate) ? "default" : "outline"}
+            variant="outline"
             size="sm"
-            className={`h-9 text-xs font-medium gap-1.5 ${
-              isToday(currentDate) ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-white dark:bg-slate-900"
-            }`}
+            className="h-9 text-xs font-medium"
             onClick={handleToday}
+            disabled={isToday(currentDate)}
           >
-            <Compass className="w-3.5 h-3.5" />
-            {isToday(currentDate) ? "Now" : "Today"}
+            Today
           </Button>
 
           <Button
             variant="outline"
             size="icon"
-            className="h-9 w-9 bg-white dark:bg-slate-900"
+            className="h-9 w-9"
             onClick={() => fetchCalendarData(currentDate, true)}
             disabled={isLoading || isRefreshing}
             title="Refresh Calendar"
           >
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin text-blue-600" : ""}`} />
+            <RefreshCw className={`h-4 w-4 text-muted-foreground ${isRefreshing ? "animate-spin text-foreground" : ""}`} />
           </Button>
         </div>
       </div>
 
-      {/* KPI Stats Row */}
+      {/* KPI Stats Row (Slate / Neutral Theme) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
+        <Card className="border shadow-sm">
           <CardContent className="p-3.5 flex items-center gap-3">
-            <div className="p-2.5 bg-blue-100 dark:bg-blue-950/60 rounded-xl text-blue-600">
+            <div className="p-2.5 bg-muted rounded-xl text-muted-foreground">
               <CalendarIcon className="h-4 w-4" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground font-medium">Total Bookings</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{stats.todayBookings}</p>
+              <p className="text-xl font-bold text-foreground">{stats.todayBookings}</p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
+        <Card className="border shadow-sm">
           <CardContent className="p-3.5 flex items-center gap-3">
             <div className="p-2.5 bg-emerald-100 dark:bg-emerald-950/60 rounded-xl text-emerald-600">
               <CheckCircle className="h-4 w-4" />
@@ -644,7 +637,7 @@ export default function BookingCalendarPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
+        <Card className="border shadow-sm">
           <CardContent className="p-3.5 flex items-center gap-3">
             <div className="p-2.5 bg-amber-100 dark:bg-amber-950/60 rounded-xl text-amber-600">
               <Clock className="h-4 w-4" />
@@ -656,31 +649,31 @@ export default function BookingCalendarPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200 dark:border-slate-800 shadow-sm">
+        <Card className="border shadow-sm">
           <CardContent className="p-3.5 flex items-center gap-3">
-            <div className="p-2.5 bg-purple-100 dark:bg-purple-950/60 rounded-xl text-purple-600">
+            <div className="p-2.5 bg-muted rounded-xl text-muted-foreground">
               <IndianRupee className="h-4 w-4" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground font-medium">Expected Revenue</p>
-              <p className="text-xl font-bold text-purple-600">{formatCurrency(stats.revenue)}</p>
+              <p className="text-xl font-bold text-foreground">{formatCurrency(stats.revenue)}</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Main Calendar Viewport (Auto-scrolls to current time) */}
-      <Card className="flex-1 flex flex-col min-h-0 overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+      <Card className="flex-1 flex flex-col min-h-0 overflow-hidden border bg-background shadow-sm">
         {isLoading ? (
           <div className="flex-1 flex flex-col items-center justify-center p-12">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-600 mb-2" />
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-2" />
             <p className="text-sm text-muted-foreground">Loading calendar schedule...</p>
           </div>
         ) : displayedColumns.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
-            <Users className="h-12 w-12 text-slate-300 mb-3" />
-            <h3 className="font-semibold text-gray-800 dark:text-gray-200">No Specialists Available</h3>
-            <p className="text-sm text-gray-500 mt-1 max-w-sm">
+            <Users className="h-12 w-12 text-muted-foreground/30 mb-3" />
+            <h3 className="font-semibold text-foreground">No Specialists Available</h3>
+            <p className="text-sm text-muted-foreground mt-1 max-w-sm">
               Please add staff members in Staff Management to view their schedules.
             </p>
           </div>
@@ -688,11 +681,11 @@ export default function BookingCalendarPage() {
           <div ref={scrollContainerRef} className="flex-1 overflow-auto relative">
             <div className="min-w-max flex flex-col">
               {/* STICKY TOP ROW: Staff / Resource Columns */}
-              <div className="sticky top-0 z-30 flex border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 shadow-sm">
+              <div className="sticky top-0 z-30 flex border-b bg-muted/40 shadow-sm backdrop-blur">
                 {/* Top-Left Corner: Time Label (Sticky in both directions) */}
-                <div className="sticky left-0 z-40 w-[90px] min-w-[90px] h-[72px] border-r border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-900 flex flex-col items-center justify-center p-2 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]">
-                  <Clock className="w-4 h-4 text-blue-600 mb-1" />
-                  <span className="text-[10px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                <div className="sticky left-0 z-40 w-[90px] min-w-[90px] h-[72px] border-r bg-muted/70 flex flex-col items-center justify-center p-2 shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]">
+                  <Clock className="w-4 h-4 text-muted-foreground mb-1" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                     Time
                   </span>
                 </div>
@@ -701,17 +694,17 @@ export default function BookingCalendarPage() {
                 {displayedColumns.map((entity) => (
                   <div
                     key={entity.id}
-                    className="w-[230px] min-w-[230px] h-[72px] border-r border-slate-200 dark:border-slate-800 px-3.5 flex items-center gap-3 bg-slate-50 dark:bg-slate-900"
+                    className="w-[230px] min-w-[230px] h-[72px] border-r px-3.5 flex items-center gap-3 bg-muted/30"
                   >
-                    <Avatar className="h-9 w-9 border border-slate-200 dark:border-slate-700 shrink-0">
+                    <Avatar className="h-9 w-9 border shrink-0">
                       {entity.avatar_url && <AvatarImage src={entity.avatar_url} alt={entity.name} />}
-                      <AvatarFallback className="bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-bold text-xs">
+                      <AvatarFallback className="bg-muted text-muted-foreground font-bold text-xs">
                         {entity.name.substring(0, 2).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <p className="font-semibold text-sm text-gray-900 dark:text-gray-100 truncate">
+                        <p className="font-semibold text-sm text-foreground truncate">
                           {entity.name}
                         </p>
                         {entity.id === -1 && (
@@ -733,21 +726,21 @@ export default function BookingCalendarPage() {
               {/* CALENDAR BODY: Left Time Scale & Staff Grid */}
               <div className="relative flex">
                 {/* STICKY LEFT COLUMN: Time Labels */}
-                <div className="sticky left-0 z-20 w-[90px] min-w-[90px] bg-slate-50 dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]">
+                <div className="sticky left-0 z-20 w-[90px] min-w-[90px] bg-muted/30 border-r flex flex-col shadow-[2px_0_4px_-1px_rgba(0,0,0,0.06)]">
                   {TIME_SLOTS.map((slot, idx) => (
                     <div
                       key={idx}
                       className={`h-[56px] border-b px-2 flex items-center justify-end text-right select-none ${
                         slot.minute === 0
-                          ? "border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-800/40"
-                          : "border-slate-100 dark:border-slate-900 border-dashed"
+                          ? "border-border bg-muted/50 font-semibold"
+                          : "border-border/60 border-dashed"
                       }`}
                     >
                       <span
                         className={`text-xs ${
                           slot.minute === 0
-                            ? "font-bold text-gray-800 dark:text-gray-200"
-                            : "text-gray-400 dark:text-gray-500 text-[11px]"
+                            ? "font-bold text-foreground"
+                            : "text-muted-foreground/80 text-[11px]"
                         }`}
                       >
                         {slot.label}
@@ -784,7 +777,7 @@ export default function BookingCalendarPage() {
                     return (
                       <div
                         key={entity.id}
-                        className="w-[230px] min-w-[230px] border-r border-slate-200 dark:border-slate-800 relative bg-white dark:bg-slate-900"
+                        className="w-[230px] min-w-[230px] border-r relative bg-background"
                       >
                         {/* Background 30-Min Clickable Slot Rows */}
                         {TIME_SLOTS.map((slot, idx) => {
@@ -795,24 +788,24 @@ export default function BookingCalendarPage() {
                               key={idx}
                               className={`h-[56px] border-b transition-colors group flex items-center justify-center relative ${
                                 slot.minute === 0
-                                  ? "border-slate-200 dark:border-slate-800"
-                                  : "border-slate-100 dark:border-slate-900 border-dashed"
+                                  ? "border-border"
+                                  : "border-border/60 border-dashed"
                               } ${
                                 isPast
-                                  ? "bg-slate-50/70 dark:bg-slate-900/60 cursor-not-allowed opacity-60"
-                                  : "hover:bg-blue-50/70 dark:hover:bg-blue-950/30 cursor-pointer"
+                                  ? "bg-muted/40 cursor-not-allowed opacity-60"
+                                  : "hover:bg-muted/60 cursor-pointer"
                               }`}
                               onClick={() => handleSlotClick(entity, slot.hour, slot.minute)}
                               onDragOver={handleDragOver}
                               onDrop={(e) => handleDrop(e, entity.id, slot.hour, slot.minute)}
                             >
                               {!isPast ? (
-                                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 bg-white/95 dark:bg-slate-900/95 py-0.5 px-2 rounded-md shadow-sm border border-blue-200 dark:border-blue-800 pointer-events-none transition-opacity">
-                                  <Plus className="w-3 h-3" />
+                                <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[11px] font-semibold text-foreground bg-background py-0.5 px-2 rounded-md shadow-sm border border-border pointer-events-none transition-opacity">
+                                  <Plus className="w-3 h-3 text-muted-foreground" />
                                   <span>Book {slot.label}</span>
                                 </div>
                               ) : (
-                                <div className="opacity-0 group-hover:opacity-60 text-[10px] text-gray-400 dark:text-gray-500 font-medium pointer-events-none transition-opacity">
+                                <div className="opacity-0 group-hover:opacity-60 text-[10px] text-muted-foreground font-medium pointer-events-none transition-opacity">
                                   Past slot
                                 </div>
                               )}
@@ -855,7 +848,7 @@ export default function BookingCalendarPage() {
                                   >
                                     <div className="space-y-0.5">
                                       <div className="flex items-center justify-between gap-1">
-                                        <span className="font-bold text-xs truncate text-gray-900 dark:text-gray-100">
+                                        <span className="font-bold text-xs truncate text-foreground">
                                           {booking.customer_name}
                                         </span>
                                         {isLive ? (
@@ -879,7 +872,7 @@ export default function BookingCalendarPage() {
                                       <span>
                                         {format(parseISO(`2000-01-01T${booking.booking_time}`), "h:mm a")} ({durationMins}m)
                                       </span>
-                                      <span className="font-bold text-gray-900 dark:text-gray-100">
+                                      <span className="font-bold text-foreground">
                                         ₹{Number(booking.total_amount).toLocaleString()}
                                       </span>
                                     </div>
@@ -931,21 +924,21 @@ export default function BookingCalendarPage() {
         <DialogContent className="max-w-md max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-lg">
-              <Sparkles className="w-5 h-5 text-blue-600" />
+              <Sparkles className="w-5 h-5 text-muted-foreground" />
               Book Appointment
             </DialogTitle>
             <DialogDescription className="text-xs">
               Selected:{" "}
               {quickBookForm.staffName ? (
                 <>
-                  Specialist <strong className="text-gray-900 dark:text-gray-100">{quickBookForm.staffName}</strong> •{" "}
+                  Specialist <strong className="text-foreground">{quickBookForm.staffName}</strong> •{" "}
                 </>
               ) : null}
               Time{" "}
-              <strong className="text-gray-900 dark:text-gray-100">
+              <strong className="text-foreground">
                 {format(parseISO(`2000-01-01T${quickBookForm.bookingTime}:00`), "h:mm a")}
               </strong>{" "}
-              • Date <strong className="text-gray-900 dark:text-gray-100">{format(parseISO(quickBookForm.date), "EEE, MMM d, yyyy")}</strong>
+              • Date <strong className="text-foreground">{format(parseISO(quickBookForm.date), "EEE, MMM d, yyyy")}</strong>
             </DialogDescription>
           </DialogHeader>
 
@@ -1135,7 +1128,6 @@ export default function BookingCalendarPage() {
               <Button
                 type="submit"
                 size="sm"
-                className="bg-blue-600 hover:bg-blue-700"
                 disabled={isSubmittingQuickBook}
               >
                 {isSubmittingQuickBook ? "Booking..." : "Book Appointment"}
@@ -1170,8 +1162,8 @@ export default function BookingCalendarPage() {
 
               <div className="space-y-5">
                 {/* Customer Info */}
-                <div className="flex items-center gap-3.5 bg-muted/30 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800">
-                  <div className="bg-primary/10 p-2.5 rounded-full text-primary">
+                <div className="flex items-center gap-3.5 bg-muted/30 p-3.5 rounded-xl border">
+                  <div className="bg-muted p-2.5 rounded-full text-muted-foreground">
                     <User className="h-5 w-5" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -1182,7 +1174,7 @@ export default function BookingCalendarPage() {
                       </p>
                     )}
                     <Link href={`/customers/${selectedBooking.customer_id}`}>
-                      <Button variant="link" className="p-0 h-auto text-xs text-blue-600 hover:underline mt-1">
+                      <Button variant="link" className="p-0 h-auto text-xs text-primary hover:underline mt-1">
                         View Customer Profile
                       </Button>
                     </Link>
@@ -1190,13 +1182,13 @@ export default function BookingCalendarPage() {
                 </div>
 
                 {/* Service & Time Info */}
-                <Card className="border-slate-200 dark:border-slate-800">
+                <Card className="border">
                   <CardContent className="p-4 space-y-3.5">
                     <div className="flex items-start gap-3">
                       <Package className="h-4 w-4 text-muted-foreground mt-0.5" />
                       <div>
                         <p className="font-medium text-xs text-muted-foreground">Service</p>
-                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        <p className="text-sm font-semibold text-foreground">
                           {selectedBooking.service_name}
                         </p>
                       </div>
@@ -1206,7 +1198,7 @@ export default function BookingCalendarPage() {
                       <Users className="h-4 w-4 text-muted-foreground mt-0.5" />
                       <div>
                         <p className="font-medium text-xs text-muted-foreground">Assigned Specialist</p>
-                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        <p className="text-sm font-semibold text-foreground">
                           {selectedBooking.staff_name || "Unassigned"}
                         </p>
                       </div>
@@ -1216,7 +1208,7 @@ export default function BookingCalendarPage() {
                       <Clock className="h-4 w-4 text-muted-foreground mt-0.5" />
                       <div>
                         <p className="font-medium text-xs text-muted-foreground">Date & Time</p>
-                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                        <p className="text-sm font-semibold text-foreground">
                           {format(parseISO(selectedBooking.booking_date), "EEEE, MMMM d, yyyy")}
                           <br />
                           {format(parseISO(`2000-01-01T${selectedBooking.booking_time}`), "h:mm a")} (
@@ -1233,7 +1225,7 @@ export default function BookingCalendarPage() {
                     <IndianRupee className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium text-sm">Total Amount</span>
                   </div>
-                  <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
+                  <span className="text-lg font-bold text-foreground">
                     ₹{Number(selectedBooking.total_amount).toLocaleString()}
                   </span>
                 </div>
@@ -1242,7 +1234,7 @@ export default function BookingCalendarPage() {
                 {selectedBooking.notes && (
                   <div>
                     <h4 className="font-medium mb-1.5 text-xs text-muted-foreground">Notes</h4>
-                    <p className="text-xs bg-muted/30 p-2.5 rounded-md border text-gray-700 dark:text-gray-300 italic">
+                    <p className="text-xs bg-muted/30 p-2.5 rounded-md border text-muted-foreground italic">
                       {selectedBooking.notes}
                     </p>
                   </div>
@@ -1261,7 +1253,7 @@ export default function BookingCalendarPage() {
 
                 {(selectedBooking.status === "confirmed" || selectedBooking.status === "pending") && (
                   <Button
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                    className="w-full"
                     onClick={() => handleStatusUpdate(selectedBooking.id, "completed")}
                   >
                     Mark as Completed
