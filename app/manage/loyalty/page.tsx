@@ -1,16 +1,19 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import Link from "next/link"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "@/hooks/use-toast"
-import { Star, Gift, Settings, Users, TrendingUp, Crown, Trash2, Plus } from "lucide-react"
+import { Star, Gift, Settings, Users, TrendingUp, Crown, Trash2, Plus, ArrowRight, ExternalLink } from "lucide-react"
 import { getLoyaltySettings, updateLoyaltySettings, getLoyaltyStats, getLoyaltyTiers, createLoyaltyTier, updateLoyaltyTier, deleteLoyaltyTier, LoyaltyTier } from "@/app/actions/loyalty"
+import { getCustomerWallets } from "@/app/actions/wallet"
 
 interface LoyaltySettings {
   id?: number
@@ -58,6 +61,7 @@ export default function LoyaltyPage() {
   })
   
   const [tiers, setTiers] = useState<LoyaltyTier[]>([])
+  const [members, setMembers] = useState<any[]>([])
   const [isTiersLoading, setIsTiersLoading] = useState(false)
 
   const [isLoading, setIsLoading] = useState(true)
@@ -69,10 +73,16 @@ export default function LoyaltyPage() {
 
   const loadData = async () => {
     try {
-      const [settingsData, statsData, tiersData] = await Promise.all([getLoyaltySettings(), getLoyaltyStats(), getLoyaltyTiers()])
+      const [settingsData, statsData, tiersData, membersData] = await Promise.all([
+        getLoyaltySettings(),
+        getLoyaltyStats(),
+        getLoyaltyTiers(),
+        getCustomerWallets(),
+      ])
       if (settingsData) setSettings((prev) => ({ ...prev, ...settingsData }))
       setStats(statsData)
       if (tiersData) setTiers(tiersData)
+      if (membersData) setMembers(membersData)
     } catch (error) {
       console.error("Failed to load loyalty data:", error)
       toast({
@@ -488,29 +498,116 @@ export default function LoyaltyPage() {
 
             <TabsContent value="members">
               <Card>
-                <CardHeader>
-                  <CardTitle>Loyalty Members</CardTitle>
-                  <CardDescription>Manage your loyalty program members</CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Loyalty Program Members ({members.length})</CardTitle>
+                    <CardDescription>All enrolled salon customers and their current reward points</CardDescription>
+                  </div>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/manage/wallet" className="flex items-center gap-2">
+                      Manage Wallets & Balances
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  </Button>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-8">
-                    <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">Member management coming soon</p>
-                  </div>
+                  {members.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600">No loyalty members found. Customers are enrolled automatically on first visit.</p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="text-left p-3 font-medium">Customer</th>
+                            <th className="text-left p-3 font-medium">Phone</th>
+                            <th className="text-left p-3 font-medium">Tier</th>
+                            <th className="text-left p-3 font-medium">Available Points</th>
+                            <th className="text-left p-3 font-medium">Lifetime Earned</th>
+                            <th className="text-right p-3 font-medium">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {members.map((member) => (
+                            <tr key={member.id} className="hover:bg-gray-50">
+                              <td className="p-3 font-medium text-gray-900">{member.customerName}</td>
+                              <td className="p-3 text-gray-600">{member.customerPhone}</td>
+                              <td className="p-3">
+                                <Badge variant="secondary" className="capitalize">
+                                  {member.tier || "Bronze"}
+                                </Badge>
+                              </td>
+                              <td className="p-3 font-semibold text-purple-700">{member.totalPoints} pts</td>
+                              <td className="p-3 text-gray-600">{member.lifetimeEarned} pts</td>
+                              <td className="p-3 text-right">
+                                <Button asChild variant="ghost" size="sm">
+                                  <Link href={`/customers/${member.customerId}`} className="flex items-center gap-1">
+                                    Profile
+                                    <ExternalLink className="w-3 h-3" />
+                                  </Link>
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
 
             <TabsContent value="transactions">
               <Card>
-                <CardHeader>
-                  <CardTitle>Loyalty Transactions</CardTitle>
-                  <CardDescription>View all loyalty points and cashback transactions</CardDescription>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle>Loyalty Transactions Ledger</CardTitle>
+                    <CardDescription>Comprehensive audit trail of points earned, redeemed, expired, and bonus awards</CardDescription>
+                  </div>
+                  <Button asChild size="sm">
+                    <Link href="/manage/loyalty-transactions" className="flex items-center gap-2">
+                      Open Full Transactions Ledger
+                      <ArrowRight className="w-4 h-4" />
+                    </Link>
+                  </Button>
                 </CardHeader>
-                <CardContent>
-                  <div className="text-center py-8">
-                    <TrendingUp className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">Transaction history coming soon</p>
+                <CardContent className="space-y-6">
+                  <div className="p-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border border-purple-100 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="space-y-1 text-center md:text-left">
+                      <h4 className="font-semibold text-purple-950 text-lg">Live Points & Adjustment System</h4>
+                      <p className="text-sm text-purple-700">
+                        Search transactions by customer, filter by earning type (Earned, Redeemed, Bonus, Refund), and make manual adjustments.
+                      </p>
+                    </div>
+                    <Button asChild className="bg-purple-600 hover:bg-purple-700 text-white shrink-0">
+                      <Link href="/manage/loyalty-transactions" className="flex items-center gap-2">
+                        View & Adjust Transactions
+                        <ArrowRight className="w-4 h-4" />
+                      </Link>
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <Card className="border shadow-none">
+                      <CardContent className="p-4">
+                        <p className="text-xs text-muted-foreground font-medium">Total Points Issued</p>
+                        <p className="text-xl font-bold text-green-700 mt-1">{stats.total_points_issued.toLocaleString()} pts</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border shadow-none">
+                      <CardContent className="p-4">
+                        <p className="text-xs text-muted-foreground font-medium">Active Enrolled Members</p>
+                        <p className="text-xl font-bold text-blue-700 mt-1">{stats.active_members}</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border shadow-none">
+                      <CardContent className="p-4">
+                        <p className="text-xs text-muted-foreground font-medium">Total Cashback Credited</p>
+                        <p className="text-xl font-bold text-purple-700 mt-1">₹{stats.total_cashback_given.toLocaleString()}</p>
+                      </CardContent>
+                    </Card>
                   </div>
                 </CardContent>
               </Card>

@@ -10,18 +10,18 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { getBookingById, updateBookingStatus } from "@/app/actions/bookings"
+import { getBookingById, getBookingServices, updateBooking } from "@/app/actions/bookings"
 import { getCustomers } from "@/app/actions/customers"
 import { getStaff } from "@/app/actions/staff"
 import { getServices } from "@/app/actions/services"
-import { ArrowLeft, Save, Calendar, User, IndianRupee } from "lucide-react"
+import { ArrowLeft, Save, Calendar, User, IndianRupee, Scissors } from "lucide-react"
 import { toast } from "sonner"
 
 interface BookingDetails {
   id: number
   booking_number: string
   customer_id: number
-  staff_id: number
+  staff_id: number | null
   service_name: string
   staff_name: string
   booking_date: string
@@ -45,7 +45,7 @@ export default function EditBookingPage() {
   const [formData, setFormData] = useState({
     customer_id: "",
     staff_id: "",
-    service_ids: "",
+    service_id: "",
     booking_date: "",
     booking_time: "",
     total_amount: "",
@@ -56,11 +56,12 @@ export default function EditBookingPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [bookingData, customersData, staffData, servicesData] = await Promise.all([
+        const [bookingData, customersData, staffData, servicesData, bookingServicesData] = await Promise.all([
           getBookingById(params.id as string),
           getCustomers(),
           getStaff(),
           getServices(),
+          getBookingServices(params.id as string),
         ])
 
         if (!bookingData) {
@@ -74,11 +75,13 @@ export default function EditBookingPage() {
         setStaff(staffData)
         setServices(servicesData)
 
+        const initialServiceId = bookingServicesData.length > 0 ? bookingServicesData[0].service_id.toString() : ""
+
         // Set form data
         setFormData({
           customer_id: bookingData.customer_id.toString(),
-          staff_id: bookingData.staff_id.toString(),
-          service_ids: "", // This would need to be fetched from booking_services table
+          staff_id: bookingData.staff_id ? bookingData.staff_id.toString() : "",
+          service_id: initialServiceId,
           booking_date: bookingData.booking_date,
           booking_time: bookingData.booking_time,
           total_amount: bookingData.total_amount.toString(),
@@ -114,12 +117,20 @@ export default function EditBookingPage() {
         return
       }
 
-      // For now, we'll just update the status as the full update functionality
-      // would require additional backend endpoints
-      const result = await updateBookingStatus(booking.id, formData.status)
+      const result = await updateBooking({
+        bookingId: booking.id,
+        customerId: Number(formData.customer_id),
+        staffId: formData.staff_id ? Number(formData.staff_id) : null,
+        bookingDate: formData.booking_date,
+        bookingTime: formData.booking_time,
+        totalAmount: parseFloat(formData.total_amount) || 0,
+        status: formData.status as any,
+        notes: formData.notes,
+        serviceIds: formData.service_id ? [Number(formData.service_id)] : undefined,
+      })
 
       if (result.success) {
-        toast.success("Booking updated successfully!")
+        toast.success(result.message || "Booking updated successfully!")
         router.push(`/bookings/details/${booking.id}`)
       } else {
         toast.error(result.message)
@@ -208,11 +219,15 @@ export default function EditBookingPage() {
 
                   <div>
                     <Label htmlFor="staff">Assigned Staff</Label>
-                    <Select value={formData.staff_id} onValueChange={(value) => handleInputChange("staff_id", value)}>
+                    <Select 
+                      value={formData.staff_id || "unassigned"} 
+                      onValueChange={(value) => handleInputChange("staff_id", value === "unassigned" ? "" : value)}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select staff member" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="unassigned">Unassigned (Any Staff)</SelectItem>
                         {staff.map((member) => (
                           <SelectItem key={member.id} value={member.id.toString()}>
                             {member.name}
@@ -276,14 +291,41 @@ export default function EditBookingPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <IndianRupee className="h-5 w-5 mr-2" />
+                  <Scissors className="h-5 w-5 mr-2" />
                   Service & Payment Details
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="total_amount">Total Amount</Label>
+                    <Label htmlFor="service">Service</Label>
+                    <Select
+                      value={formData.service_id || "none"}
+                      onValueChange={(value) => {
+                        const sId = value === "none" ? "" : value
+                        handleInputChange("service_id", sId)
+                        const s = services.find((srv) => srv.id.toString() === sId)
+                        if (s) {
+                          handleInputChange("total_amount", s.price?.toString() || "0")
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select service" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No specific service</SelectItem>
+                        {services.map((service) => (
+                          <SelectItem key={service.id} value={service.id.toString()}>
+                            {service.name} (₹{service.price})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="total_amount">Total Amount (₹)</Label>
                     <Input
                       id="total_amount"
                       type="number"

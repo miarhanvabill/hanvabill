@@ -17,12 +17,21 @@ export async function GET(request: Request) {
       else if (dateRange === "Last 90 Days" || dateRange === "Last 3 Months") days = 90;
       else if (dateRange === "Last 6 Months") days = 180;
       else if (dateRange === "Last 12 Months" || dateRange === "This Year") days = 365;
-      const startDate = new Date()
-      startDate.setDate(startDate.getDate() - days)
-      const startIso = startDate.toISOString().split("T")[0]
+      let startIso: string
+      let endIso: string | null = null
 
-      // Build status filter
-      const statusFilter = status === "All" ? "" : `AND b.status = '${status}'`
+      if (dateRange === "Today") {
+        startIso = new Date().toISOString().split("T")[0]
+      } else if (dateRange === "Yesterday") {
+        const y = new Date()
+        y.setDate(y.getDate() - 1)
+        startIso = y.toISOString().split("T")[0]
+        endIso = new Date().toISOString().split("T")[0]
+      } else {
+        const startDate = new Date()
+        startDate.setDate(startDate.getDate() - days)
+        startIso = startDate.toISOString().split("T")[0]
+      }
 
       const bookings = await sql`
         SELECT 
@@ -46,12 +55,13 @@ export async function GET(request: Request) {
         LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
         LEFT JOIN staff s ON b.staff_id = s.id AND s.tenant_id = ${tenantId}
         WHERE b.booking_date >= ${startIso}
+        ${endIso ? sql`AND b.booking_date < ${endIso}` : sql``}
         AND b.tenant_id = ${tenantId}
-        ${statusFilter ? sql.unsafe(statusFilter) : sql``}
+        ${status !== "All" ? sql`AND b.status = ${status}` : sql``}
         ORDER BY b.booking_date DESC, b.booking_time DESC
       `
 
-      const formattedBookings = bookings.map((booking) => ({
+      const formattedBookings = bookings.map((booking: any) => ({
         ...booking,
         service_names: Array.isArray(booking.rel_service_names) && booking.rel_service_names.length > 0 
           ? booking.rel_service_names 

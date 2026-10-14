@@ -6,6 +6,8 @@ import { getBookingsByCustomerId, getInvoicesByCustomerId } from "@/app/actions/
 import { getActiveCustomerMembership } from "@/app/actions/memberships"
 import { getStaff } from "@/app/actions/staff"
 import { getCustomerPackages } from "@/app/actions/customer-packages"
+import { getCustomerLoyalty } from "@/app/actions/loyalty"
+import { getCustomerWalletDetails } from "@/app/actions/wallet"
 import { CustomerProfileDisplay } from "@/components/customer-profile-display"
 
 async function CustomerDetailsContent({ id }: { id: string }) {
@@ -16,13 +18,15 @@ async function CustomerDetailsContent({ id }: { id: string }) {
       notFound()
     }
 
-    // Fetch bookings, invoices, staff, and active membership in parallel for better performance
-    const [bookings, invoices, activeMembership, staffList, packages] = await Promise.all([
+    // Fetch bookings, invoices, staff, membership, packages, loyalty, and wallet in parallel
+    const [bookings, invoices, activeMembership, staffList, packages, loyaltyData, walletData] = await Promise.all([
       getBookingsByCustomerId(id),
       getInvoicesByCustomerId(id),
       getActiveCustomerMembership(Number(id)),
       getStaff(),
-      getCustomerPackages(Number(id))
+      getCustomerPackages(Number(id)),
+      getCustomerLoyalty(id).catch(() => null),
+      getCustomerWalletDetails(id).catch(() => null),
     ])
 
     // Serialize all data passing to the Client Component to avoid Date serialization errors
@@ -32,6 +36,8 @@ async function CustomerDetailsContent({ id }: { id: string }) {
     const serializedMembership = activeMembership ? JSON.parse(JSON.stringify(activeMembership)) : null
     const serializedStaffList = JSON.parse(JSON.stringify(staffList))
     const serializedPackages = JSON.parse(JSON.stringify(packages))
+    const serializedLoyalty = loyaltyData ? JSON.parse(JSON.stringify(loyaltyData)) : null
+    const serializedWallet = walletData ? JSON.parse(JSON.stringify(walletData)) : null
 
     return <CustomerProfileDisplay 
       customer={serializedCustomer} 
@@ -40,6 +46,8 @@ async function CustomerDetailsContent({ id }: { id: string }) {
       activeMembership={serializedMembership} 
       staffList={serializedStaffList}
       packages={serializedPackages}
+      loyaltyData={serializedLoyalty}
+      walletData={serializedWallet}
     />
   } catch (error) {
     console.error("Error loading customer details:", error)

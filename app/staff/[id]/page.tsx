@@ -133,7 +133,10 @@ async function StaffDetailsContent({ staffId }: { staffId: string }) {
                       <p className="text-sm text-gray-500">Position</p>
                       <p className="font-medium">{displayPosition}</p>
                     </div>
-                    {/* Department is not in DB schema, so removed */}
+                    <div>
+                      <p className="text-sm text-gray-500">Department</p>
+                      <p className="font-medium">{staff.department || "General"}</p>
+                    </div>
                     <div>
                       <p className="text-sm text-gray-500">Hire Date</p>
                       <p className="font-medium">
@@ -235,7 +238,7 @@ async function StaffDetailsContent({ staffId }: { staffId: string }) {
               </CardHeader>
               <CardContent className="space-y-3">
                 {schedule.length > 0 ? (
-                  schedule.map((booking) => {
+                  schedule.map((booking: any) => {
                     // Extract time portion if it's a full ISO string, or use as-is if it's already a time string
                     const displayTime = booking.start_time 
                       ? (booking.start_time.includes('T') 

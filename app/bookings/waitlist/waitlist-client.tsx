@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { WaitlistEntry, addWaitlistEntry, updateWaitlistStatus, deleteWaitlistEntry } from "@/app/actions/waitlist"
+import { useRouter } from "next/navigation"
+import { WaitlistEntry, addWaitlistEntry, updateWaitlistStatus, deleteWaitlistEntry, convertWaitlistToBooking } from "@/app/actions/waitlist"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import { Check, ChevronsUpDown, Clock, MoreHorizontal, Plus, Search, Trash } from "lucide-react"
+import { Check, ChevronsUpDown, Clock, MoreHorizontal, Plus, Search, Trash, CalendarCheck, CheckCircle } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -21,21 +22,33 @@ interface WaitlistClientProps {
   initialWaitlist: WaitlistEntry[]
   customers: any[]
   staff: any[]
+  services?: any[]
 }
 
-export function WaitlistClient({ initialWaitlist, customers, staff }: WaitlistClientProps) {
+export function WaitlistClient({ initialWaitlist, customers, staff, services = [] }: WaitlistClientProps) {
+  const router = useRouter()
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>(initialWaitlist)
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
 
-  // Form state
+  // Form state for adding
   const [customerId, setCustomerId] = useState<string>("")
   const [preferredStaffId, setPreferredStaffId] = useState<string>("any")
-  const [preferredDate, setPreferredDate] = useState<string>(new Date().toISOString().split('T')[0])
+  const [preferredDate, setPreferredDate] = useState<string>(new Date().toLocaleDateString("en-CA"))
   const [timePreference, setTimePreference] = useState<string>("any")
   const [notes, setNotes] = useState<string>("")
   const [customerOpen, setCustomerOpen] = useState(false)
+
+  // Convert to Booking Modal state
+  const [isConvertOpen, setIsConvertOpen] = useState(false)
+  const [convertingEntry, setConvertingEntry] = useState<WaitlistEntry | null>(null)
+  const [convertDate, setConvertDate] = useState<string>("")
+  const [convertTime, setConvertTime] = useState<string>("10:00")
+  const [convertServiceId, setConvertServiceId] = useState<string>("")
+  const [convertStaffId, setConvertStaffId] = useState<string>("any")
+  const [convertNotes, setConvertNotes] = useState<string>("")
+  const [isConverting, setIsConverting] = useState(false)
 
   const filteredWaitlist = waitlist.filter(entry => 
     entry.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -62,10 +75,7 @@ export function WaitlistClient({ initialWaitlist, customers, staff }: WaitlistCl
         toast.success("Added to waitlist")
         setIsAddOpen(false)
         resetForm()
-        // In a real app we might refetch waitlist here, but for now we rely on revalidatePath
-        // Actually, since revalidatePath happens on server, we should refresh the page or wait for next.js to update.
-        // We can just window.location.reload() for simplicity or use useRouter().refresh()
-        window.location.reload()
+        router.refresh()
       } else {
         toast.error(result.error || "Failed to add to waitlist")
       }
@@ -79,9 +89,58 @@ export function WaitlistClient({ initialWaitlist, customers, staff }: WaitlistCl
   const resetForm = () => {
     setCustomerId("")
     setPreferredStaffId("any")
-    setPreferredDate(new Date().toISOString().split('T')[0])
+    setPreferredDate(new Date().toLocaleDateString("en-CA"))
     setTimePreference("any")
     setNotes("")
+  }
+
+  const openConvertModal = (entry: WaitlistEntry) => {
+    setConvertingEntry(entry)
+    setConvertDate(entry.preferredDate)
+    setConvertStaffId(entry.preferredStaffId || "any")
+    setConvertServiceId(services && services.length > 0 ? services[0].id.toString() : "")
+    let defaultTime = "10:00"
+    if (entry.timePreference === "morning") defaultTime = "10:00"
+    else if (entry.timePreference === "afternoon") defaultTime = "14:00"
+    else if (entry.timePreference === "evening") defaultTime = "17:00"
+    setConvertTime(defaultTime)
+    setConvertNotes(entry.notes || "")
+    setIsConvertOpen(true)
+  }
+
+  const handleConvertSubmit = async () => {
+    if (!convertingEntry) return
+    if (!convertDate || !convertTime || !convertServiceId) {
+      toast.error("Please select a date, time, and service")
+      return
+    }
+
+    setIsConverting(true)
+    const toastId = toast.loading("Converting waitlist entry to booking...")
+    try {
+      const result = await convertWaitlistToBooking({
+        waitlistId: convertingEntry.id,
+        bookingDate: convertDate,
+        bookingTime: convertTime,
+        serviceId: Number(convertServiceId),
+        staffId: convertStaffId === "any" ? null : convertStaffId,
+        notes: convertNotes,
+      })
+
+      if (result.success) {
+        toast.success(result.message || "Appointment booked successfully!", { id: toastId })
+        setWaitlist(prev => prev.map(e => e.id === convertingEntry.id ? { ...e, status: "booked" } : e))
+        setIsConvertOpen(false)
+        setConvertingEntry(null)
+        router.refresh()
+      } else {
+        toast.error(result.message || "Failed to convert to booking", { id: toastId })
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to convert to booking", { id: toastId })
+    } finally {
+      setIsConverting(false)
+    }
   }
 
   const handleStatusChange = async (id: string, status: "waiting" | "notified" | "booked" | "cancelled") => {
@@ -333,6 +392,15 @@ export function WaitlistClient({ initialWaitlist, customers, staff }: WaitlistCl
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
                         <DropdownMenuSeparator />
+                        {entry.status !== "booked" && (
+                          <DropdownMenuItem 
+                            className="text-emerald-600 font-semibold focus:text-emerald-700 focus:bg-emerald-50 cursor-pointer"
+                            onClick={() => openConvertModal(entry)}
+                          >
+                            <CalendarCheck className="mr-2 h-4 w-4 text-emerald-600" />
+                            Convert to Booking
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem onClick={() => handleStatusChange(entry.id, "waiting")}>
                           Mark as Waiting
                         </DropdownMenuItem>
@@ -355,6 +423,117 @@ export function WaitlistClient({ initialWaitlist, customers, staff }: WaitlistCl
             </TableBody>
           </Table>
         )}
+
+        {/* Dialog for converting waitlist entry directly to an appointment */}
+        <Dialog open={isConvertOpen} onOpenChange={setIsConvertOpen}>
+          <DialogContent className="sm:max-w-[480px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CalendarCheck className="h-5 w-5 text-emerald-600" />
+                Convert Waitlist to Booking
+              </DialogTitle>
+              <DialogDescription>
+                Confirm booking time and service for <strong>{convertingEntry?.customerName}</strong>.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-4 py-3">
+              <div className="rounded-lg bg-slate-50 p-3 border text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Client:</span>
+                  <span className="font-semibold">{convertingEntry?.customerName} ({convertingEntry?.customerPhone})</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Preference:</span>
+                  <span className="font-medium capitalize">{convertingEntry?.timePreference}</span>
+                </div>
+                {convertingEntry?.notes && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Original Notes:</span>
+                    <span className="italic">{convertingEntry.notes}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="convertDate" className="text-xs font-semibold">Appointment Date</Label>
+                  <Input 
+                    id="convertDate"
+                    type="date"
+                    value={convertDate}
+                    onChange={(e) => setConvertDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="convertTime" className="text-xs font-semibold">Appointment Time</Label>
+                  <Input 
+                    id="convertTime"
+                    type="time"
+                    value={convertTime}
+                    onChange={(e) => setConvertTime(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="convertService" className="text-xs font-semibold">Select Service *</Label>
+                <Select value={convertServiceId} onValueChange={setConvertServiceId}>
+                  <SelectTrigger id="convertService">
+                    <SelectValue placeholder="Choose service..." />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    {services.map((svc: any) => (
+                      <SelectItem key={svc.id} value={svc.id.toString()}>
+                        {svc.name} - ₹{svc.price} ({svc.duration_minutes || 30} mins)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="convertStaff" className="text-xs font-semibold">Assign Staff Specialist</Label>
+                <Select value={convertStaffId} onValueChange={setConvertStaffId}>
+                  <SelectTrigger id="convertStaff">
+                    <SelectValue placeholder="Select specialist..." />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-56">
+                    <SelectItem value="any">First Available / Unassigned</SelectItem>
+                    {staff.map((st: any) => (
+                      <SelectItem key={st.id} value={st.id.toString()}>
+                        {st.name} {st.role ? `(${st.role})` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="convertNotes" className="text-xs font-semibold">Booking Notes</Label>
+                <Input 
+                  id="convertNotes"
+                  placeholder="Special instructions or requests..."
+                  value={convertNotes}
+                  onChange={(e) => setConvertNotes(e.target.value)}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsConvertOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleConvertSubmit} 
+                disabled={isConverting || !convertServiceId || !convertDate || !convertTime}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+              >
+                {isConverting ? "Creating Booking..." : "Confirm & Book Now"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   )

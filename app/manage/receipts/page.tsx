@@ -19,9 +19,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Search, Eye, FileText, TrendingUp, Package } from "lucide-react"
+import { Plus, Search, Eye, FileText, TrendingUp, Package, CheckCircle2, XCircle } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
-import { getReceipts, createReceipt, getVendors, getProducts } from "@/app/actions/receipts"
+import { getReceipts, createReceipt, getVendors, getProducts, receiveReceipt, cancelReceipt } from "@/app/actions/receipts"
 import { formatCurrency } from "@/lib/currency"
 
 interface Receipt {
@@ -116,6 +116,42 @@ export default function ReceiptsPage() {
         description: "Failed to create receipt",
         variant: "destructive",
       })
+    }
+  }
+
+  const handleReceiveReceipt = async (receiptId: number) => {
+    try {
+      const res = await receiveReceipt(receiptId)
+      toast({
+        title: "Receipt Received",
+        description: res.message || "Stock has been incremented.",
+      })
+      loadData()
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to receive receipt",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleCancelReceipt = async (receiptId: number) => {
+    if (confirm("Are you sure you want to cancel this receipt?")) {
+      try {
+        await cancelReceipt(receiptId)
+        toast({
+          title: "Receipt Cancelled",
+          description: "Receipt status updated to cancelled.",
+        })
+        loadData()
+      } catch (err: any) {
+        toast({
+          title: "Error",
+          description: err.message || "Failed to cancel receipt",
+          variant: "destructive",
+        })
+      }
     }
   }
 
@@ -369,9 +405,34 @@ export default function ReceiptsPage() {
                   </TableCell>
                   <TableCell>{new Date(receipt.created_at).toLocaleDateString()}</TableCell>
                   <TableCell>
-                    <Button variant="outline" size="sm" onClick={() => setViewingReceipt(receipt)}>
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1.5">
+                      <Button variant="outline" size="sm" onClick={() => setViewingReceipt(receipt)} title="View Details">
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      {receipt.status === "pending" && (
+                        <>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="h-8 bg-green-600 hover:bg-green-700 text-white gap-1 px-2.5 text-xs font-medium"
+                            onClick={() => handleReceiveReceipt(receipt.id)}
+                            title="Mark Received & Add Stock"
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Receive
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-red-500 hover:text-red-700 p-1"
+                            onClick={() => handleCancelReceipt(receipt.id)}
+                            title="Cancel Receipt"
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

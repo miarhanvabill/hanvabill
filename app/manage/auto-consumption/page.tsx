@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/hooks/use-toast"
 import { useRealTimeSync } from "@/lib/websocket"
+import { formatCurrency } from "@/lib/currency"
 import { Plus, Search, RefreshCw, Settings, CheckCircle, TrendingUp, Edit, Trash2, Eye, Activity } from "lucide-react"
 
 import {
@@ -130,9 +131,9 @@ export default function AutoConsumptionPage() {
   // Filter rules
   const filteredRules = rules.filter((rule) => {
     const matchesSearch =
-      rule.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rule.serviceName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rule.productName.toLowerCase().includes(searchTerm.toLowerCase())
+      (rule.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (rule.serviceName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (rule.productName || "").toLowerCase().includes(searchTerm.toLowerCase())
 
     const matchesStatus =
       filterStatus === "all" ||
@@ -358,7 +359,7 @@ export default function AutoConsumptionPage() {
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">₹{stats.totalCost.toFixed(2)}</div>
+              <div className="text-2xl font-bold">{stats ? formatCurrency(stats.totalCost) : "0"}</div>
               <p className="text-xs text-muted-foreground">Product consumption value</p>
             </CardContent>
           </Card>
@@ -478,7 +479,7 @@ export default function AutoConsumptionPage() {
 
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Est. Cost</span>
-                    <span className="font-medium">₹{rule.estimatedCost.toFixed(2)}</span>
+                    <span className="font-medium">{formatCurrency(rule.estimatedCost)}</span>
                   </div>
 
                   {rule.lastTriggered && (
@@ -561,7 +562,7 @@ export default function AutoConsumptionPage() {
                         <div className="font-medium">
                           {log.amount} {log.unit}
                         </div>
-                        <div className="text-sm text-muted-foreground">₹{log.cost.toFixed(2)}</div>
+                        <div className="text-sm text-muted-foreground">{formatCurrency(log.cost)}</div>
                       </div>
                     </div>
                   ))
@@ -586,14 +587,14 @@ export default function AutoConsumptionPage() {
               <CardContent>
                 <div className="space-y-4">
                   {stats?.topConsumedProducts && stats.topConsumedProducts.length > 0 ? (
-                    stats.topConsumedProducts.map((product, index) => (
+                    stats.topConsumedProducts.map((product: any, index: number) => (
                       <div key={index} className="flex items-center justify-between">
                         <div>
                           <div className="font-medium">{product.productName}</div>
                           <div className="text-sm text-muted-foreground">{product.totalAmount} units consumed</div>
                         </div>
                         <div className="text-right">
-                          <div className="font-medium">₹{product.totalCost.toFixed(2)}</div>
+                          <div className="font-medium">{formatCurrency(product.totalCost)}</div>
                         </div>
                       </div>
                     ))
@@ -627,7 +628,7 @@ export default function AutoConsumptionPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Total Cost</span>
-                    <span className="font-medium">₹{(stats?.totalCost || 0).toFixed(2)}</span>
+                    <span className="font-medium">{formatCurrency(stats?.totalCost || 0)}</span>
                   </div>
                 </div>
               </CardContent>
@@ -999,7 +1000,7 @@ function RuleDetailsModal({
             </div>
             <div>
               <Label>Estimated Cost</Label>
-              <p className="font-medium">₹{rule.estimatedCost.toFixed(2)}</p>
+              <p className="font-medium">{formatCurrency(rule.estimatedCost)}</p>
             </div>
           </div>
 

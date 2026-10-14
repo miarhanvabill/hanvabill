@@ -13,10 +13,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Checkbox } from "@/components/ui/checkbox"
 import { Plus, Edit, Trash2, Package, Clock, Calendar, IndianRupee, Users } from "lucide-react"
 import {
+  getAllPackages,
   getActivePackages,
   createPackage,
   updatePackage,
   deletePackage,
+  togglePackageStatus,
   type ServicePackage,
 } from "@/app/actions/packages"
 import { getServices, type Service } from "@/app/actions/services"
@@ -50,7 +52,7 @@ export default function PackagesPage() {
 
   const loadData = async () => {
     try {
-      const [packagesData, servicesData] = await Promise.all([getActivePackages(), getServices()])
+      const [packagesData, servicesData] = await Promise.all([getAllPackages(), getServices()])
       const safePackagesData = Array.isArray(packagesData) ? packagesData : []
       const safeServicesData = Array.isArray(servicesData) ? servicesData : []
 
@@ -74,6 +76,7 @@ export default function PackagesPage() {
     setFormData({
       name: "",
       description: "",
+      image_url: "",
       services: [],
       package_price: "",
       original_price: "",
@@ -175,16 +178,14 @@ export default function PackagesPage() {
     }))
   }
 
-  const getServiceNames = (serviceIds: number[]) => {
-    if (!Array.isArray(services)) {
-      console.warn("[v0] Services is not an array in getServiceNames:", services)
+  const getServiceNames = (serviceIds: number[]): string[] => {
+    if (!Array.isArray(services) || !Array.isArray(serviceIds)) {
       return []
     }
 
     return serviceIds
       .map((id) => services.find((s) => s.id === id)?.name)
-      .filter(Boolean)
-      .join(", ")
+      .filter((name): name is string => Boolean(name))
   }
 
   const formatCurrency = (amount: number) => {
@@ -513,18 +514,31 @@ export default function PackagesPage() {
                       <div className="pt-2 border-t">
                         <p className="text-xs text-gray-600 mb-2">Included Services:</p>
                         <div className="flex flex-wrap gap-1">
-                          {getServiceNames(pkg.services)
-                            .split(", ")
-                            .map((serviceName, index) => (
-                              <Badge key={index} variant="outline" className="text-xs">
-                                {serviceName}
-                              </Badge>
-                            ))}
+                          {getServiceNames(pkg.services).map((serviceName, index) => (
+                            <Badge key={index} variant="outline" className="text-xs">
+                              {serviceName}
+                            </Badge>
+                          ))}
                         </div>
                       </div>
                     </div>
 
                     <div className="flex gap-2 mt-4 pt-4 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          await togglePackageStatus(pkg.id)
+                          await loadData()
+                          toast({
+                            title: "Success",
+                            description: `Package ${pkg.is_active ? "deactivated" : "activated"} successfully`,
+                          })
+                        }}
+                        className="text-xs"
+                      >
+                        {pkg.is_active ? "Deactivate" : "Activate"}
+                      </Button>
                       <Button variant="outline" size="sm" onClick={() => handleEdit(pkg)} className="flex-1">
                         <Edit className="w-3 h-3 mr-1" />
                         Edit

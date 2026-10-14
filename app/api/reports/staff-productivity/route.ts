@@ -71,7 +71,7 @@ export async function GET(request: Request) {
 
       console.log("[v0] Found", staffProductivity.length, "staff members")
 
-      const formattedData = staffProductivity.map((staff) => ({
+      const formattedData = staffProductivity.map((staff: any) => ({
         id: Number(staff.id),
         name: staff.name,
         role: staff.role,

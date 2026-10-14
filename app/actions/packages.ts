@@ -29,7 +29,7 @@ export async function getActivePackages(): Promise<ServicePackage[]> {
         AND tenant_id = ${tenantId}
         ORDER BY created_at DESC
       `
-      return packages.map((pkg) => ({
+      return packages.map((pkg: any) => ({
         ...pkg,
         services: Array.isArray(pkg.services) ? pkg.services : JSON.parse(pkg.services || "[]"),
       }))
@@ -48,7 +48,7 @@ export async function getAllPackages(): Promise<ServicePackage[]> {
         WHERE tenant_id = ${tenantId}
         ORDER BY created_at DESC
       `
-      return packages.map((pkg) => ({
+      return packages.map((pkg: any) => ({
         ...pkg,
         services: Array.isArray(pkg.services) ? pkg.services : JSON.parse(pkg.services || "[]"),
       }))
@@ -66,7 +66,7 @@ export async function createPackage(packageData: Omit<ServicePackage, "id" | "cr
         INSERT INTO service_packages (
           tenant_id, name, description, services, package_price, original_price, 
           discount_percentage, duration_minutes, validity_days, is_active,
-          is_transferable, is_multi_branch
+          is_transferable, is_multi_branch, image_url
         ) VALUES (
           ${tenantId},
           ${packageData.name}, 
@@ -79,7 +79,8 @@ export async function createPackage(packageData: Omit<ServicePackage, "id" | "cr
           ${packageData.validity_days}, 
           ${packageData.is_active ?? true},
           ${packageData.is_transferable ?? false},
-          ${packageData.is_multi_branch ?? true}
+          ${packageData.is_multi_branch ?? true},
+          ${packageData.image_url || null}
         )
         RETURNING *
       `
@@ -108,6 +109,7 @@ export async function updatePackage(id: number, packageData: Partial<ServicePack
           is_active = COALESCE(${packageData.is_active}, is_active),
           is_transferable = COALESCE(${packageData.is_transferable}, is_transferable),
           is_multi_branch = COALESCE(${packageData.is_multi_branch}, is_multi_branch),
+          image_url = COALESCE(${packageData.image_url}, image_url),
           updated_at = NOW()
         WHERE id = ${id} AND tenant_id = ${tenantId}
         RETURNING *

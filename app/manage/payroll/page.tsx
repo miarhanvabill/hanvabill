@@ -121,40 +121,86 @@ export default function PayrollPage() {
         </div>
 
         {runDetails && (
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                Period: {new Date(runDetails.period_start).toLocaleDateString()} to {new Date(runDetails.period_end).toLocaleDateString()}
-              </CardTitle>
-              <Badge variant={runDetails.status === "completed" ? "default" : "secondary"} className="w-fit">
-                {runDetails.status.toUpperCase()}
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Staff Name</TableHead>
-                    <TableHead>Base Pay</TableHead>
-                    <TableHead>Commission</TableHead>
-                    <TableHead>Bonuses</TableHead>
-                    <TableHead>Deductions</TableHead>
-                    <TableHead>Total Pay</TableHead>
-                    {runDetails.status === "draft" && <TableHead>Actions</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {entries.length === 0 ? (
-                    <TableRow><TableCell colSpan={7} className="text-center">No entries found.</TableCell></TableRow>
-                  ) : (
-                    entries.map(entry => (
-                      <TableRow key={entry.id}>
-                        <TableCell className="font-medium">{entry.staff_name}</TableCell>
-                        <TableCell>{formatCurrency(entry.base_pay)}</TableCell>
-                        <TableCell>{formatCurrency(entry.commission_pay)}</TableCell>
-                        <TableCell className="text-green-600">{formatCurrency(entry.bonuses)}</TableCell>
-                        <TableCell className="text-red-600">{formatCurrency(entry.deductions)}</TableCell>
-                        <TableCell className="font-bold">{formatCurrency(entry.total_pay)}</TableCell>
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-xs text-muted-foreground">Total Payout</div>
+                  <div className="text-xl font-bold text-gray-900">
+                    {formatCurrency(entries.reduce((acc, e) => acc + (Number(e.total_pay) || 0), 0))}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-xs text-muted-foreground">Base Salary</div>
+                  <div className="text-xl font-semibold text-gray-700">
+                    {formatCurrency(entries.reduce((acc, e) => acc + (Number(e.base_pay) || 0), 0))}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-xs text-muted-foreground">Commissions</div>
+                  <div className="text-xl font-semibold text-blue-600">
+                    {formatCurrency(entries.reduce((acc, e) => acc + (Number(e.commission_pay) || 0), 0))}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-xs text-muted-foreground">Bonuses</div>
+                  <div className="text-xl font-semibold text-green-600">
+                    {formatCurrency(entries.reduce((acc, e) => acc + (Number(e.bonuses) || 0), 0))}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-xs text-muted-foreground">Deductions</div>
+                  <div className="text-xl font-semibold text-red-600">
+                    {formatCurrency(entries.reduce((acc, e) => acc + (Number(e.deductions) || 0), 0))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>
+                    Period: {new Date(runDetails.period_start).toLocaleDateString()} to {new Date(runDetails.period_end).toLocaleDateString()}
+                  </CardTitle>
+                  <Badge variant={runDetails.status === "completed" ? "default" : "secondary"}>
+                    {runDetails.status.toUpperCase()}
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Staff Name</TableHead>
+                      <TableHead>Base Pay</TableHead>
+                      <TableHead>Commission</TableHead>
+                      <TableHead>Bonuses</TableHead>
+                      <TableHead>Deductions</TableHead>
+                      <TableHead>Total Pay</TableHead>
+                      {runDetails.status === "draft" && <TableHead>Actions</TableHead>}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {entries.length === 0 ? (
+                      <TableRow><TableCell colSpan={7} className="text-center">No entries found.</TableCell></TableRow>
+                    ) : (
+                      entries.map(entry => (
+                        <TableRow key={entry.id}>
+                          <TableCell className="font-medium">{entry.staff_name}</TableCell>
+                          <TableCell>{formatCurrency(Number(entry.base_pay) || 0)}</TableCell>
+                          <TableCell>{formatCurrency(Number(entry.commission_pay) || 0)}</TableCell>
+                          <TableCell className="text-green-600">{formatCurrency(Number(entry.bonuses) || 0)}</TableCell>
+                          <TableCell className="text-red-600">{formatCurrency(Number(entry.deductions) || 0)}</TableCell>
+                          <TableCell className="font-bold">{formatCurrency(Number(entry.total_pay) || 0)}</TableCell>
                         {runDetails.status === "draft" && (
                           <TableCell>
                             <Dialog open={editingEntry?.id === entry.id} onOpenChange={(open) => {
@@ -195,6 +241,7 @@ export default function PayrollPage() {
               </Table>
             </CardContent>
           </Card>
+          </div>
         )}
       </div>
     )

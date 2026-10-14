@@ -130,27 +130,30 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
     try {
       // 1. Revenue totals & growth
       const currRevResult = await sql`
-        SELECT COALESCE(SUM(total_amount),0) AS total
+        SELECT COALESCE(SUM(total_amount), 0) AS total
         FROM bookings
         WHERE tenant_id = ${tenantId}
-          AND booking_date BETWEEN ${startIso} AND ${endIso}
-          AND status='completed'
+          AND booking_date >= ${startIso}
+          AND booking_date <= ${endIso}
+          AND status = 'completed'
       `
       const currRev = currRevResult[0] || { total: 0 }
 
       const prevRevResult = await sql`
-        SELECT COALESCE(SUM(total_amount),0) AS total
+        SELECT COALESCE(SUM(total_amount), 0) AS total
         FROM bookings
         WHERE tenant_id = ${tenantId}
-          AND booking_date BETWEEN ${prevIso} AND ${startIso}
-          AND status='completed'
+          AND booking_date >= ${prevIso}
+          AND booking_date < ${startIso}
+          AND status = 'completed'
       `
       const prevRev = prevRevResult[0] || { total: 0 }
 
-      const totalRevenue = Number.parseFloat(currRev.total)
+      const totalRevenue = Number.parseFloat(currRev.total) || 0
+      const prevRevenueVal = Number.parseFloat(prevRev.total) || 0
       const revenueGrowth =
-        Number.parseFloat(prevRev.total) > 0
-          ? ((totalRevenue - Number.parseFloat(prevRev.total)) / Number.parseFloat(prevRev.total)) * 100
+        prevRevenueVal > 0
+          ? ((totalRevenue - prevRevenueVal) / prevRevenueVal) * 100
           : 0
 
       // 2. Customer counts & growth
@@ -158,7 +161,8 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         SELECT COUNT(*) AS count
         FROM customers
         WHERE tenant_id = ${tenantId}
-          AND created_at >= ${startIso} AND created_at <= ${endIso}::date + interval '1 day' - interval '1 second'
+          AND created_at >= ${startIso}::date
+          AND created_at < (${endIso}::date + interval '1 day')
       `
       const currCust = currCustResult[0] || { count: 0 }
 
@@ -166,14 +170,16 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         SELECT COUNT(*) AS count
         FROM customers
         WHERE tenant_id = ${tenantId}
-          AND created_at BETWEEN ${prevIso} AND ${startIso}
+          AND created_at >= ${prevIso}::date
+          AND created_at < ${startIso}::date
       `
       const prevCust = prevCustResult[0] || { count: 0 }
 
-      const totalCustomers = Number.parseInt(currCust.count)
+      const totalCustomers = Number.parseInt(currCust.count) || 0
+      const prevCustVal = Number.parseInt(prevCust.count) || 0
       const customerGrowth =
-        Number.parseInt(prevCust.count) > 0
-          ? ((totalCustomers - Number.parseInt(prevCust.count)) / Number.parseInt(prevCust.count)) * 100
+        prevCustVal > 0
+          ? ((totalCustomers - prevCustVal) / prevCustVal) * 100
           : 0
 
       // 3. Bookings counts & growth
@@ -181,8 +187,9 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         SELECT COUNT(*) AS count
         FROM bookings
         WHERE tenant_id = ${tenantId}
-          AND booking_date BETWEEN ${startIso} AND ${endIso}
-          AND status='completed'
+          AND booking_date >= ${startIso}
+          AND booking_date <= ${endIso}
+          AND status = 'completed'
       `
       const currBook = currBookResult[0] || { count: 0 }
 
@@ -190,15 +197,17 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         SELECT COUNT(*) AS count
         FROM bookings
         WHERE tenant_id = ${tenantId}
-          AND booking_date BETWEEN ${prevIso} AND ${startIso}
-          AND status='completed'
+          AND booking_date >= ${prevIso}
+          AND booking_date < ${startIso}
+          AND status = 'completed'
       `
       const prevBook = prevBookResult[0] || { count: 0 }
 
-      const totalBookings = Number.parseInt(currBook.count)
+      const totalBookings = Number.parseInt(currBook.count) || 0
+      const prevBookVal = Number.parseInt(prevBook.count) || 0
       const bookingGrowth =
-        Number.parseInt(prevBook.count) > 0
-          ? ((totalBookings - Number.parseInt(prevBook.count)) / Number.parseInt(prevBook.count)) * 100
+        prevBookVal > 0
+          ? ((totalBookings - prevBookVal) / prevBookVal) * 100
           : 0
 
       // 4. Service time - using average service duration from services table
@@ -209,7 +218,8 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
         WHERE b.tenant_id = ${tenantId}
           AND b.booking_date >= ${startIso}
-          AND b.status='completed'
+          AND b.booking_date <= ${endIso}
+          AND b.status = 'completed'
       `
       const currTime = currTimeResult[0] || { avg_minutes: 0 }
 
@@ -219,15 +229,17 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         JOIN booking_services bs ON b.id = bs.booking_id
         JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
         WHERE b.tenant_id = ${tenantId}
-          AND b.booking_date BETWEEN ${prevIso} AND ${startIso}
-          AND b.status='completed'
+          AND b.booking_date >= ${prevIso}
+          AND b.booking_date < ${startIso}
+          AND b.status = 'completed'
       `
       const prevTime = prevTimeResult[0] || { avg_minutes: 0 }
 
       const avgServiceTime = Number.parseFloat(currTime.avg_minutes) || 0
+      const prevAvgServiceTime = Number.parseFloat(prevTime.avg_minutes) || 0
       const serviceTimeImprovement =
-        Number.parseFloat(prevTime.avg_minutes) > 0
-          ? ((Number.parseFloat(prevTime.avg_minutes) - avgServiceTime) / Number.parseFloat(prevTime.avg_minutes)) * 100
+        prevAvgServiceTime > 0
+          ? ((prevAvgServiceTime - avgServiceTime) / prevAvgServiceTime) * 100
           : 0
 
       // 5. Transaction value & repeat rate
@@ -236,85 +248,124 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         FROM bookings
         WHERE tenant_id = ${tenantId}
           AND booking_date >= ${startIso}
-          AND status='completed'
+          AND booking_date <= ${endIso}
+          AND status = 'completed'
       `
       const avgTx = avgTxResult[0] || { avg_value: 0 }
       const avgTransactionValue = Number.parseFloat(avgTx.avg_value) || 0
 
-      const repeatCustResult = await sql`
-        SELECT COUNT(DISTINCT customer_id) FILTER (
-          WHERE customer_id IN (
-            SELECT customer_id FROM bookings WHERE tenant_id = ${tenantId} AND booking_date < ${startIso}
-          )
-        ) AS repeat_count
+      // Total distinct customers who booked during current period
+      const activePeriodCustResult = await sql`
+        SELECT COUNT(DISTINCT customer_id) AS active_cust_count
         FROM bookings
         WHERE tenant_id = ${tenantId}
           AND booking_date >= ${startIso}
+          AND booking_date <= ${endIso}
+          AND customer_id IS NOT NULL
+          AND status = 'completed'
+      `
+      const activeCustCount = Number.parseInt(activePeriodCustResult[0]?.active_cust_count || 0)
+
+      // Customers who have booked at least once prior to their visit in this period
+      const repeatCustResult = await sql`
+        SELECT COUNT(DISTINCT b.customer_id) AS repeat_count
+        FROM bookings b
+        WHERE b.tenant_id = ${tenantId}
+          AND b.booking_date >= ${startIso}
+          AND b.booking_date <= ${endIso}
+          AND b.customer_id IS NOT NULL
+          AND b.status = 'completed'
+          AND EXISTS (
+            SELECT 1 FROM bookings prev
+            WHERE prev.tenant_id = ${tenantId}
+              AND prev.customer_id = b.customer_id
+              AND (
+                prev.booking_date < b.booking_date
+                OR (prev.booking_date = b.booking_date AND prev.id < b.id)
+              )
+              AND prev.status = 'completed'
+          )
       `
       const repeatCust = repeatCustResult[0] || { repeat_count: 0 }
+      const repeatCount = Number.parseInt(repeatCust.repeat_count) || 0
       const repeatCustomerRate =
-        totalCustomers > 0 ? (Number.parseInt(repeatCust.repeat_count) / totalCustomers) * 100 : 0
+        activeCustCount > 0 ? Math.min(100, (repeatCount / activeCustCount) * 100) : 0
 
-      // 6. MRR - using monthly recurring bookings as proxy
-      const mrrResult = await sql`
-        SELECT COALESCE(AVG(total_amount),0) AS mrr
-        FROM bookings
-        WHERE tenant_id = ${tenantId}
-          AND booking_date >= ${startIso}
-          AND status='completed'
-      `
-      const mrr = mrrResult[0] || { mrr: 0 }
-      const monthlyRecurringRevenue = Number.parseFloat(mrr.mrr) * 30 || 0
+      // 6. MRR - Monthly Recurring Revenue from active customer memberships + normalized run-rate
+      let monthlyRecurringRevenue = 0
+      try {
+        const membershipMrrResult = await sql`
+          SELECT COALESCE(SUM(
+            cm.amount_paid / GREATEST(COALESCE(mp.duration_months, 1), 1)
+          ), 0) AS mrr
+          FROM customer_memberships cm
+          JOIN membership_plans mp ON cm.membership_plan_id = mp.id AND mp.tenant_id = ${tenantId}
+          WHERE cm.tenant_id = ${tenantId}
+            AND cm.status = 'active'
+            AND (cm.end_date IS NULL OR cm.end_date >= CURRENT_DATE)
+        `
+        monthlyRecurringRevenue = Number.parseFloat(membershipMrrResult[0]?.mrr || 0)
+      } catch (err) {
+        console.warn("Could not query active memberships for MRR:", err)
+      }
+
+      // If salon has no membership plans, calculate normalized 30-day run rate from revenue
+      if (monthlyRecurringRevenue === 0 && days > 0 && totalRevenue > 0) {
+        monthlyRecurringRevenue = Math.round((totalRevenue / days) * 30 * 100) / 100
+      }
 
       // 7. Revenue by category - using service categories
       const revByCatResult = await sql`
         SELECT s.category AS name,
-               COALESCE(SUM(bs.price * bs.quantity),0) AS revenue
+               COALESCE(SUM(bs.price * bs.quantity), 0) AS revenue
         FROM bookings b
         JOIN booking_services bs ON b.id = bs.booking_id
         JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
         WHERE b.tenant_id = ${tenantId}
           AND b.booking_date >= ${startIso}
-          AND b.status='completed'
+          AND b.booking_date <= ${endIso}
+          AND b.status = 'completed'
         GROUP BY s.category
       `
       const revByCat = Array.isArray(revByCatResult) ? revByCatResult : []
-      const sumAll = revByCat.reduce((sum, r) => sum + Number.parseFloat(r.revenue), 0)
+      const sumAll = revByCat.reduce((sum, r) => sum + Number.parseFloat(r.revenue || 0), 0)
       const revenueByCategory = revByCat.map((r) => ({
         name: r.name || "Uncategorized",
-        revenue: Number.parseFloat(r.revenue),
-        percentage: sumAll > 0 ? (Number.parseFloat(r.revenue) / sumAll) * 100 : 0,
+        revenue: Number.parseFloat(r.revenue || 0),
+        percentage: sumAll > 0 ? (Number.parseFloat(r.revenue || 0) / sumAll) * 100 : 0,
       }))
 
       // 8. Customer acquisition & demographics
       const custBySourceResult = await sql`
-        SELECT COALESCE(c.lead_source, 'Unknown') AS source,
+        SELECT COALESCE(NULLIF(TRIM(c.lead_source), ''), 'Direct / Walk-in') AS source,
                COUNT(DISTINCT c.id) AS count
         FROM customers c
         JOIN bookings b ON c.id = b.customer_id AND b.tenant_id = ${tenantId}
         WHERE c.tenant_id = ${tenantId}
           AND b.booking_date >= ${startIso}
+          AND b.booking_date <= ${endIso}
           AND b.status = 'completed'
-        GROUP BY COALESCE(c.lead_source, 'Unknown')
+        GROUP BY COALESCE(NULLIF(TRIM(c.lead_source), ''), 'Direct / Walk-in')
       `
       const custBySource = Array.isArray(custBySourceResult) ? custBySourceResult : []
-      const totalAcquired = custBySource.reduce((acc, curr) => acc + Number.parseInt(curr.count), 0)
+      const totalAcquired = custBySource.reduce((acc, curr) => acc + Number.parseInt(curr.count || 0), 0)
       const customerAcquisition = custBySource.map((r) => ({
-        source: r.source || "Unknown",
-        customers: Number.parseInt(r.count),
-        percentage: totalAcquired > 0 ? (Number.parseInt(r.count) / totalAcquired) * 100 : 0,
+        source: r.source || "Direct / Walk-in",
+        customers: Number.parseInt(r.count || 0),
+        percentage: totalAcquired > 0 ? (Number.parseInt(r.count || 0) / totalAcquired) * 100 : 0,
       }))
 
       const demoResult = await sql`
         SELECT
-          COUNT(DISTINCT b.customer_id) FILTER (WHERE c.gender='male') AS male,
-          COUNT(DISTINCT b.customer_id) FILTER (WHERE c.gender='female') AS female,
-          COUNT(DISTINCT b.customer_id) FILTER (WHERE c.gender NOT IN ('male','female') OR c.gender IS NULL) AS others_registered,
+          COUNT(DISTINCT b.customer_id) FILTER (WHERE LOWER(c.gender) = 'male') AS male,
+          COUNT(DISTINCT b.customer_id) FILTER (WHERE LOWER(c.gender) = 'female') AS female,
+          COUNT(DISTINCT b.customer_id) FILTER (WHERE LOWER(c.gender) NOT IN ('male', 'female') OR c.gender IS NULL) AS others_registered,
           COUNT(b.id) FILTER (WHERE b.customer_id IS NULL) AS others_walkin
         FROM bookings b
         LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
         WHERE b.tenant_id = ${tenantId}
           AND b.booking_date >= ${startIso}
+          AND b.booking_date <= ${endIso}
           AND b.status = 'completed'
       `
       const demo = demoResult[0] || { male: 0, female: 0, others_registered: 0, others_walkin: 0 }
@@ -326,32 +377,35 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
 
       const spendingResult = await sql`
         SELECT
-          COALESCE(SUM(b.total_amount) FILTER (WHERE c.gender='male'), 0) AS male_spending,
-          COALESCE(SUM(b.total_amount) FILTER (WHERE c.gender='female'), 0) AS female_spending,
-          COALESCE(SUM(b.total_amount) FILTER (WHERE c.gender NOT IN ('male','female') OR c.gender IS NULL), 0) AS others_spending
+          COALESCE(SUM(b.total_amount) FILTER (WHERE LOWER(c.gender) = 'male'), 0) AS male_spending,
+          COALESCE(SUM(b.total_amount) FILTER (WHERE LOWER(c.gender) = 'female'), 0) AS female_spending,
+          COALESCE(SUM(b.total_amount) FILTER (WHERE LOWER(c.gender) NOT IN ('male', 'female') OR c.gender IS NULL), 0) AS others_spending
         FROM bookings b
         LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
         WHERE b.tenant_id = ${tenantId}
           AND b.booking_date >= ${startIso}
+          AND b.booking_date <= ${endIso}
           AND b.status = 'completed'
       `
       const spending = spendingResult[0] || { male_spending: 0, female_spending: 0, others_spending: 0 }
       const demographicSpending = {
-        male: Number.parseFloat(spending.male_spending),
-        female: Number.parseFloat(spending.female_spending),
-        others: Number.parseFloat(spending.others_spending),
+        male: Number.parseFloat(spending.male_spending || 0),
+        female: Number.parseFloat(spending.female_spending || 0),
+        others: Number.parseFloat(spending.others_spending || 0),
       }
 
       // 9. Top services & staff performance
       const srvResult = await sql`
         SELECT s.name,
                COUNT(bs.id) AS booking_count,
-               COALESCE(SUM(bs.price * bs.quantity),0) AS revenue
+               COALESCE(SUM(bs.price * bs.quantity), 0) AS revenue
         FROM services s
-        LEFT JOIN booking_services bs ON s.id = bs.service_id
-        LEFT JOIN bookings b ON bs.booking_id = b.id AND b.tenant_id = ${tenantId}
-        WHERE b.booking_date >= ${startIso}
-          AND b.status='completed'
+        JOIN booking_services bs ON s.id = bs.service_id
+        JOIN bookings b ON bs.booking_id = b.id AND b.tenant_id = ${tenantId}
+        WHERE s.tenant_id = ${tenantId}
+          AND b.booking_date >= ${startIso}
+          AND b.booking_date <= ${endIso}
+          AND b.status = 'completed'
         GROUP BY s.id, s.name
         ORDER BY revenue DESC
         LIMIT 5
@@ -359,54 +413,59 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
       
       const prevSrvResult = await sql`
         SELECT s.name,
-               COALESCE(SUM(bs.price * bs.quantity),0) AS prev_revenue
+               COALESCE(SUM(bs.price * bs.quantity), 0) AS prev_revenue
         FROM services s
-        LEFT JOIN booking_services bs ON s.id = bs.service_id
-        LEFT JOIN bookings b ON bs.booking_id = b.id AND b.tenant_id = ${tenantId}
-        WHERE b.booking_date >= ${prevIso} AND b.booking_date < ${startIso}
-          AND b.status='completed'
+        JOIN booking_services bs ON s.id = bs.service_id
+        JOIN bookings b ON bs.booking_id = b.id AND b.tenant_id = ${tenantId}
+        WHERE s.tenant_id = ${tenantId}
+          AND b.booking_date >= ${prevIso}
+          AND b.booking_date < ${startIso}
+          AND b.status = 'completed'
         GROUP BY s.id, s.name
       `
       const prevSrvRes = Array.isArray(prevSrvResult) ? prevSrvResult : []
-      const prevSrvMap = new Map(prevSrvRes.map(s => [s.name, Number.parseFloat(s.prev_revenue)]))
+      const prevSrvMap = new Map(prevSrvRes.map((s: any) => [s.name, Number.parseFloat(s.prev_revenue || 0)]))
 
       const srvRes = Array.isArray(srvResult) ? srvResult : []
-      const topServices = srvRes.map((s) => {
-        const currRev = Number.parseFloat(s.revenue)
-        const prevRev = prevSrvMap.get(s.name) || 0
-        const growth = prevRev > 0 ? ((currRev - prevRev) / prevRev) * 100 : 0
+      const topServices = srvRes.map((s: any) => {
+        const currRevVal = Number.parseFloat(s.revenue || 0)
+        const prevRevVal = prevSrvMap.get(s.name) || 0
+        const growth = prevRevVal > 0 ? ((currRevVal - prevRevVal) / prevRevVal) * 100 : 0
+        const bCount = Number.parseInt(s.booking_count || 0)
         
         return {
           name: s.name,
-          bookings: Number.parseInt(s.booking_count),
-          revenue: currRev,
-          avgPrice: Number.parseInt(s.booking_count) > 0 ? currRev / Number.parseInt(s.booking_count) : 0,
+          bookings: bCount,
+          revenue: currRevVal,
+          avgPrice: bCount > 0 ? currRevVal / bCount : 0,
           growth,
         }
       })
 
       const stfResult = await sql`
         SELECT st.name,
-               COUNT(b.id) AS booking_count,
-               COALESCE(SUM(b.total_amount),0) AS revenue,
+               COUNT(DISTINCT b.id) AS booking_count,
+               COALESCE(SUM(b.total_amount), 0) AS revenue,
                COALESCE(AVG(r.rating), 0) AS avg_rating,
-               COUNT(r.id) AS rating_count
+               COUNT(DISTINCT r.id) AS rating_count
         FROM staff st
-        LEFT JOIN bookings b ON st.id = b.staff_id AND b.tenant_id = ${tenantId}
-        LEFT JOIN reviews r ON b.id = r.booking_id
+        LEFT JOIN bookings b ON st.id = b.staff_id 
+          AND b.tenant_id = ${tenantId}
+          AND b.booking_date >= ${startIso}
+          AND b.booking_date <= ${endIso}
+          AND b.status = 'completed'
+        LEFT JOIN reviews r ON b.id = r.booking_id AND r.tenant_id = ${tenantId}
         WHERE st.tenant_id = ${tenantId}
-          AND (b.booking_date >= ${startIso} OR b.booking_date IS NULL)
-          AND (b.status='completed' OR b.status IS NULL)
         GROUP BY st.id, st.name
         ORDER BY revenue DESC
       `
       const stfRes = Array.isArray(stfResult) ? stfResult : []
-      const staffPerformance = stfRes.map((s) => ({
+      const staffPerformance = stfRes.map((s: any) => ({
         name: s.name,
-        bookings: Number.parseInt(s.booking_count),
-        revenue: Number.parseFloat(s.revenue),
-        rating: Number.parseFloat(s.avg_rating),
-        ratingCount: Number.parseInt(s.rating_count) || 0,
+        bookings: Number.parseInt(s.booking_count || 0),
+        revenue: Number.parseFloat(s.revenue || 0),
+        rating: Number.parseFloat(s.avg_rating || 0),
+        ratingCount: Number.parseInt(s.rating_count || 0),
       }))
 
       // 10. Staff utilization - using service duration as proxy for time worked
@@ -414,7 +473,7 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         SELECT st.name,
                ROUND(
                  (COALESCE(SUM(s.duration_minutes), 0)::numeric / 60.0 /
-                  (${days} * 8)) * 100,
+                  (GREATEST(${days}, 1) * 8)) * 100,
                  2
                ) AS utilization
         FROM staff st
@@ -422,13 +481,14 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         JOIN booking_services bs ON b.id = bs.booking_id
         JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
         WHERE b.booking_date >= ${startIso}
-          AND b.status='completed'
+          AND b.booking_date <= ${endIso}
+          AND b.status = 'completed'
         GROUP BY st.name
       `
       const utilRes = Array.isArray(utilResult) ? utilResult : []
-      const staffUtilization = utilRes.map((u) => ({
+      const staffUtilization = utilRes.map((u: any) => ({
         name: u.name,
-        utilization: Number.parseFloat(u.utilization) || 0,
+        utilization: Number.parseFloat(u.utilization || 0),
       }))
 
       // 12. Revenue Trend
@@ -441,14 +501,14 @@ export async function getBusinessAnalytics(dateRange: string): Promise<Analytics
         WHERE tenant_id = ${tenantId}
           AND booking_date >= ${startIso}
           AND booking_date <= ${endIso}
-          AND status='completed'
+          AND status = 'completed'
         GROUP BY booking_date::date, TO_CHAR(booking_date::date, 'DD Mon')
         ORDER BY full_date ASC
       `
       const trendRes = Array.isArray(trendResult) ? trendResult : []
-      const revenueTrend = trendRes.map((t) => ({
+      const revenueTrend = trendRes.map((t: any) => ({
         date: t.date,
-        revenue: Number.parseFloat(t.revenue) || 0,
+        revenue: Number.parseFloat(t.revenue || 0),
       }))
 
       return {

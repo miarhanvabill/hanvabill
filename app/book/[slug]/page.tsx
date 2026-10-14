@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface Service {
   id: number
@@ -200,6 +201,15 @@ const [waitlistForm, setWaitlistForm] = useState({
 const [waitlistSubmitting, setWaitlistSubmitting] = useState(false)
 const [waitlistSuccess, setWaitlistSuccess] = useState(false)
 
+// Review submission state
+const [reviewModalOpen, setReviewModalOpen] = useState(false)
+const [reviewForm, setReviewForm] = useState({ name: "", rating: 5, comment: "", phone: "" })
+const [reviewSubmitting, setReviewSubmitting] = useState(false)
+const [reviewSuccess, setReviewSuccess] = useState(false)
+
+// Mini-website customization
+const [miniWebsite, setMiniWebsite] = useState<any>(null)
+
 // Customer Portal Auth State
 const [portalCustomer, setPortalCustomer] = useState<PortalCustomer | null>(null)
 const [portalToken, setPortalToken] = useState<string | null>(null)
@@ -230,6 +240,7 @@ const [savingProfile, setSavingProfile] = useState(false)
         
         setTenantId(data.tenantId)
         setBusiness(data.business)
+        if (data.miniWebsite) setMiniWebsite(data.miniWebsite)
         setServices(data.services || [])
         setProducts(data.products || [])
         setPackages(data.packages || [])
@@ -264,22 +275,25 @@ const [savingProfile, setSavingProfile] = useState(false)
   useEffect(() => {
      if (step === 2 && selectedDate && tenantId) {
         const dateStr = format(selectedDate, "yyyy-MM-dd")
-        if (!bookedSlots[dateStr]) {
+        const staffKey = selectedStaff && selectedStaff !== 'any' ? String(selectedStaff.id) : 'any'
+        const slotKey = `${dateStr}_${staffKey}`
+        if (!bookedSlots[slotKey]) {
            setLoadingAvailability(true)
-           fetch(`/api/public/availability?tenantId=${tenantId}&date=${dateStr}`)
+           const staffParam = selectedStaff && selectedStaff !== 'any' ? `&staffId=${selectedStaff.id}` : ''
+           fetch(`/api/public/availability?tenantId=${tenantId}&date=${dateStr}${staffParam}`)
              .then(r => r.json())
              .then(d => {
                 if (d.success && d.booked_slots) {
-                   setBookedSlots(prev => ({ ...prev, [dateStr]: d.booked_slots }))
+                   setBookedSlots(prev => ({ ...prev, [slotKey]: d.booked_slots }))
                 } else {
-                   setBookedSlots(prev => ({ ...prev, [dateStr]: [] }))
+                   setBookedSlots(prev => ({ ...prev, [slotKey]: [] }))
                 }
              })
-             .catch(() => setBookedSlots(prev => ({ ...prev, [dateStr]: [] })))
+             .catch(() => setBookedSlots(prev => ({ ...prev, [slotKey]: [] })))
              .finally(() => setLoadingAvailability(false))
         }
      }
-  }, [selectedDate, tenantId, step, bookedSlots])
+  }, [selectedDate, tenantId, step, selectedStaff, bookedSlots])
 
   const workingDays = business?.workingDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
   const openTime = business?.openTime || "09:00"
@@ -701,7 +715,7 @@ const handleJoinWaitlist = async (e: React.FormEvent) => {
                 </div>
                 <div>
                   <Label className="font-semibold">Time Preference</Label>
-                  <Select value={waitlistForm.time_preference} onValueChange={(val) => setWaitlistForm({...waitlistForm, time_preference: val})}>
+                  <Select value={waitlistForm.time_preference} onValueChange={(val: string) => setWaitlistForm({...waitlistForm, time_preference: val})}>
                     <SelectTrigger className="mt-1 h-12 rounded-2xl">
                       <SelectValue placeholder="Any time" />
                     </SelectTrigger>
@@ -719,6 +733,140 @@ const handleJoinWaitlist = async (e: React.FormEvent) => {
                 </div>
                 <Button type="submit" disabled={waitlistSubmitting} className="w-full h-12 rounded-2xl bg-black hover:bg-gray-800 text-base font-bold mt-4">
                   {waitlistSubmitting ? 'Joining...' : 'Join Waitlist'}
+                </Button>
+              </form>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const handleReviewSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reviewForm.name || !reviewForm.rating) return;
+    setReviewSubmitting(true);
+    try {
+      const res = await fetch('/api/public/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantId,
+          name: reviewForm.name,
+          rating: reviewForm.rating,
+          comment: reviewForm.comment,
+          phone: reviewForm.phone
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to submit review");
+      if (data.review) {
+        setReviews(prev => [data.review, ...prev]);
+      }
+      setReviewSuccess(true);
+      setTimeout(() => {
+        setReviewModalOpen(false);
+        setReviewSuccess(false);
+        setReviewForm({ name: "", rating: 5, comment: "", phone: "" });
+      }, 2000);
+    } catch (err: any) {
+      alert(err.message || "Failed to submit review");
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
+
+  const ReviewModal = () => {
+    if (!reviewModalOpen) return null;
+    return (
+      <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setReviewModalOpen(false); setReviewSuccess(false); }} />
+        <div className="relative bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
+          <button className="absolute top-4 right-4 text-gray-400 hover:text-gray-700" onClick={() => { setReviewModalOpen(false); setReviewSuccess(false); }}>
+            <X className="w-5 h-5" />
+          </button>
+
+          {reviewSuccess ? (
+            <div className="text-center py-8">
+              <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <CheckCircle className="w-10 h-10" />
+              </div>
+              <h2 className="text-2xl font-black mb-2">Review Submitted!</h2>
+              <p className="text-gray-600">Thank you for sharing your experience with {business?.name || 'us'}.</p>
+              <Button onClick={() => { setReviewModalOpen(false); setReviewSuccess(false); }} className="w-full mt-8 bg-black hover:bg-gray-800 text-white rounded-xl h-12 font-bold">
+                Done
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-black">Write a Review</h2>
+                <p className="text-gray-500 text-sm mt-1">Rate your experience at {business?.name || 'our salon'}</p>
+              </div>
+
+              <form onSubmit={handleReviewSubmit} className="space-y-4">
+                <div>
+                  <Label className="font-semibold block mb-2 text-center">Your Rating</Label>
+                  <div className="flex items-center justify-center gap-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        type="button"
+                        key={star}
+                        onClick={() => setReviewForm({ ...reviewForm, rating: star })}
+                        className="p-1 transition-transform hover:scale-125 focus:outline-none"
+                      >
+                        <Star
+                          className={`w-8 h-8 ${
+                            star <= reviewForm.rating
+                              ? "fill-yellow-400 text-yellow-400"
+                              : "text-gray-200 hover:text-yellow-200"
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <Label className="font-semibold">Your Name *</Label>
+                  <Input
+                    required
+                    placeholder="e.g. Rahul Sharma"
+                    value={reviewForm.name}
+                    onChange={e => setReviewForm({ ...reviewForm, name: e.target.value })}
+                    className="mt-1 h-12 rounded-2xl"
+                  />
+                </div>
+
+                <div>
+                  <Label className="font-semibold">Phone Number (Optional)</Label>
+                  <Input
+                    type="tel"
+                    placeholder="Your mobile number"
+                    value={reviewForm.phone}
+                    onChange={e => setReviewForm({ ...reviewForm, phone: e.target.value })}
+                    className="mt-1 h-12 rounded-2xl"
+                  />
+                </div>
+
+                <div>
+                  <Label className="font-semibold">Your Review *</Label>
+                  <Textarea
+                    required
+                    placeholder="Tell us what you loved about the service..."
+                    value={reviewForm.comment}
+                    onChange={e => setReviewForm({ ...reviewForm, comment: e.target.value })}
+                    className="mt-1 rounded-2xl resize-none"
+                    rows={3}
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={reviewSubmitting}
+                  className="w-full h-12 rounded-2xl bg-black hover:bg-gray-800 text-base font-bold mt-4"
+                >
+                  {reviewSubmitting ? "Submitting..." : "Submit Review"}
                 </Button>
               </form>
             </>
@@ -1302,7 +1450,14 @@ const ProfileDrawer = () => (
           {/* Tabs */}
           <div className="bg-white/90 backdrop-blur-md border-b border-gray-100 sticky top-0 sm:top-16 z-40 shadow-sm transition-all">
             <div className="max-w-7xl mx-auto flex overflow-x-auto px-4 sm:px-6 no-scrollbar">
-              {['Featured', 'Gallery', 'Services', 'Products', 'Packages', 'Memberships', 'Reviews', 'Enquiry'].map(tab => (
+              {['Featured', 'Gallery', 'Services', 'Products', 'Packages', 'Memberships', 'Reviews', 'Enquiry']
+                .filter(tab => {
+                  if (tab === 'Services' && miniWebsite?.show_services === false) return false;
+                  if (tab === 'Products' && miniWebsite?.show_products === false) return false;
+                  if (tab === 'Reviews' && miniWebsite?.show_reviews === false) return false;
+                  return true;
+                })
+                .map(tab => (
                 <button 
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -1357,7 +1512,7 @@ const ProfileDrawer = () => (
             {activeTab === 'Gallery' && (
               <div className="py-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                 <div className="columns-2 md:columns-3 gap-4 space-y-4">
-                   {galleryImages.map((img, i) => (
+                   {galleryImages.map((img: string, i: number) => (
                       <div key={i} className="overflow-hidden rounded-xl cursor-pointer group" onClick={() => setGalleryLightboxImg(img)}>
                          <img src={img} alt={`Gallery ${i}`} className="w-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
                       </div>
@@ -1673,27 +1828,58 @@ const ProfileDrawer = () => (
 
             {activeTab === 'Reviews' && (
                <div className="py-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <div className="flex items-center gap-6 mb-8 bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                     <div className="text-center">
-                        <div className="text-5xl font-black text-gray-900">{avgRating}</div>
-                        <div className="flex items-center justify-center mt-2 text-yellow-400">
-                           <Star className="w-5 h-5 fill-current" />
-                           <Star className="w-5 h-5 fill-current" />
-                           <Star className="w-5 h-5 fill-current" />
-                           <Star className="w-5 h-5 fill-current" />
-                           <StarHalf className="w-5 h-5 fill-current" />
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8 bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+                     <div className="flex items-center gap-6">
+                        <div className="text-center shrink-0">
+                           <div className="text-5xl font-black text-gray-900">{avgRating}</div>
+                           <div className="flex items-center justify-center mt-2 text-yellow-400">
+                              <Star className="w-5 h-5 fill-current" />
+                              <Star className="w-5 h-5 fill-current" />
+                              <Star className="w-5 h-5 fill-current" />
+                              <Star className="w-5 h-5 fill-current" />
+                              <StarHalf className="w-5 h-5 fill-current" />
+                           </div>
+                           <div className="text-sm font-bold text-gray-500 mt-1">{reviews.length} Ratings</div>
                         </div>
-                        <div className="text-sm font-bold text-gray-500 mt-1">{reviews.length} Ratings</div>
+                        <div className="flex-1 hidden sm:block">
+                           <p className="text-gray-600 font-medium">Hear what our amazing clients have to say about our services. Your satisfaction is our priority.</p>
+                        </div>
                      </div>
-                     <div className="flex-1 hidden sm:block">
-                        <p className="text-gray-600 font-medium">Hear what our amazing clients have to say about our services. Your satisfaction is our priority.</p>
-                     </div>
+                     <Button
+                       onClick={() => {
+                         setReviewForm(prev => ({
+                           ...prev,
+                           name: portalCustomer?.name || customerForm.name || '',
+                           phone: portalCustomer?.phone || customerForm.phone || ''
+                         }));
+                         setReviewModalOpen(true);
+                       }}
+                       className="bg-black hover:bg-gray-800 text-white rounded-2xl gap-2 font-bold px-6 h-12 shadow-sm self-start sm:self-center"
+                     >
+                       <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                       Write a Review
+                     </Button>
                   </div>
                   
                   {reviews.length === 0 ? (
-                     <div className="text-center py-20 text-gray-500">
+                     <div className="text-center py-20 text-gray-500 bg-white rounded-3xl border border-gray-100 p-8">
                         <Star className="w-16 h-16 mx-auto text-gray-200 mb-4" />
-                        <p className="font-bold text-gray-400 text-xl">No reviews yet. Be the first!</p>
+                        <p className="font-bold text-gray-700 text-xl mb-1">No reviews yet</p>
+                        <p className="text-gray-400 text-sm mb-6">Be the first to share your experience!</p>
+                        <Button
+                          onClick={() => {
+                            setReviewForm(prev => ({
+                              ...prev,
+                              name: portalCustomer?.name || customerForm.name || '',
+                              phone: portalCustomer?.phone || customerForm.phone || ''
+                            }));
+                            setReviewModalOpen(true);
+                          }}
+                          className="bg-black hover:bg-gray-800 text-white rounded-2xl gap-2 font-bold px-6 h-11"
+                        >
+                          <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                          Write First Review
+                        </Button>
                      </div>
                   ) : (
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1710,7 +1896,7 @@ const ProfileDrawer = () => (
                                     <Star key={i} className={`w-4 h-4 ${i < r.rating ? 'fill-current' : 'text-gray-200'}`} />
                                  ))}
                               </div>
-                              <p className="text-gray-600 text-sm italic">"{r.comment}"</p>
+                              <p className="text-gray-600 text-sm italic">"{r.comment || (r as any).review_text}"</p>
                            </div>
                         ))}
                      </div>
@@ -1842,6 +2028,7 @@ const ProfileDrawer = () => (
           <div className="space-y-10 pb-32">
             
             {/* Staff Section */}
+            {miniWebsite?.show_staff !== false && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
               <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
                  1. Choose Professional
@@ -1886,9 +2073,10 @@ const ProfileDrawer = () => (
                ))}
               </div>
             </div>
+            )}
 
             {/* Date Section */}
-            {selectedStaff && (
+            {(selectedStaff || miniWebsite?.show_staff === false) && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">2. Choose Date</h3>
               <div className="flex overflow-x-auto pb-4 gap-3 no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -1937,10 +2125,12 @@ const ProfileDrawer = () => (
                 ) : (
                    <>
                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                     {timeSlots.map(time => {
+                      {timeSlots.map(time => {
                        const isSelected = selectedTime === time;
                        const dateStr = format(selectedDate, "yyyy-MM-dd")
-                       const isBooked = bookedSlots[dateStr]?.includes(time);
+                       const staffKey = selectedStaff && selectedStaff !== 'any' ? String(selectedStaff.id) : 'any'
+                       const slotKey = `${dateStr}_${staffKey}`
+                       const isBooked = (bookedSlots[slotKey] || bookedSlots[dateStr])?.includes(time);
                        
                        return (
                          <button
@@ -2241,6 +2431,7 @@ const ProfileDrawer = () => (
         </div>
       )}
       <WaitlistModal />
+      <ReviewModal />
     </div>
   )
 }

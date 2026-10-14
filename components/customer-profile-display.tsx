@@ -19,6 +19,8 @@ import {
   Crown,
   Award,
   Package,
+  Wallet,
+  Plus,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -31,9 +33,12 @@ import type { Booking, Invoice } from "@/app/actions/bookings"
 import type { Staff } from "@/app/actions/staff"
 import { formatCurrency } from "@/lib/currency"
 import { freezeMembership, unfreezeMembership } from "@/app/actions/memberships"
+import { topUpWallet } from "@/app/actions/wallet"
+import { toast } from "@/hooks/use-toast"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface CustomerProfileDisplayProps {
   customer: Customer
@@ -42,6 +47,33 @@ interface CustomerProfileDisplayProps {
   activeMembership?: any
   staffList?: Staff[]
   packages?: any[]
+  loyaltyData?: {
+    customer_id: number
+    current_points: number
+    total_redeemed: number
+    lifetime_spending: number
+    tier?: string
+    tier_name?: string
+    earn_multiplier?: number
+    badge_color?: string
+  } | null
+  walletData?: {
+    customerId: number
+    customerName: string
+    balance: number
+    totalCredited: number
+    totalDebited: number
+    transactionCount: number
+    recentTransactions: Array<{
+      id: string
+      transactionType: "credit" | "debit"
+      amount: number
+      balanceAfter: number
+      description: string
+      referenceType?: string
+      createdAt: string
+    }>
+  } | null
 }
 
 const getStatusColor = (status: string) => {
@@ -57,7 +89,16 @@ const getStatusColor = (status: string) => {
   }
 }
 
-export function CustomerProfileDisplay({ customer, bookings, invoices, activeMembership, staffList = [], packages = [] }: CustomerProfileDisplayProps) {
+export function CustomerProfileDisplay({
+  customer,
+  bookings,
+  invoices,
+  activeMembership,
+  staffList = [],
+  packages = [],
+  loyaltyData = null,
+  walletData = null,
+}: CustomerProfileDisplayProps) {
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString()
 
   const [isFreezeDialogOpen, setIsFreezeDialogOpen] = useState(false)
@@ -67,7 +108,53 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
   const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false)
   const [transferPackageId, setTransferPackageId] = useState<number | null>(null)
   const [transferToCustomerId, setTransferToCustomerId] = useState("")
-  
+
+  const [isTopUpDialogOpen, setIsTopUpDialogOpen] = useState(false)
+  const [topUpAmount, setTopUpAmount] = useState("")
+  const [topUpMethod, setTopUpMethod] = useState("cash")
+  const [topUpNotes, setTopUpNotes] = useState("")
+  const [isToppingUp, setIsToppingUp] = useState(false)
+
+  const handleTopUpSubmit = async () => {
+    const amt = parseFloat(topUpAmount)
+    if (isNaN(amt) || amt <= 0) {
+      toast({
+        title: "Invalid Amount",
+        description: "Please enter a valid amount greater than 0.",
+        variant: "destructive",
+      })
+      return
+    }
+    setIsToppingUp(true)
+    try {
+      const res = await topUpWallet(customer.id, amt, topUpMethod, topUpNotes || "Manual wallet credit")
+      if (res.success) {
+        toast({
+          title: "Wallet Top-up Successful",
+          description: `Credited ${formatCurrency(amt)} to ${customer.full_name}'s wallet.`,
+        })
+        setIsTopUpDialogOpen(false)
+        setTopUpAmount("")
+        setTopUpNotes("")
+        window.location.reload()
+      } else {
+        toast({
+          title: "Top-up Failed",
+          description: res.error || "Failed to top up wallet",
+          variant: "destructive",
+        })
+      }
+    } catch (err: any) {
+      toast({
+        title: "Top-up Failed",
+        description: err.message || "An error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setIsToppingUp(false)
+    }
+  }
+
   const handleTransferPackage = async () => {
     if (!transferPackageId || !transferToCustomerId) return
     setIsSubmitting(true)
@@ -129,6 +216,19 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
   const sortedServices = Object.entries(serviceCounts).sort(([, countA], [, countB]) => countB - countA)
   const preferredServices = sortedServices.slice(0, 3).map(([service]) => service)
   const preferredStaffObj = staffList.find(s => s.id === customer.preferred_staff_id)
+  let preferredStaffName = preferredStaffObj?.name
+  if (!preferredStaffName && bookings.length > 0) {
+    const staffCounts: { [key: string]: number } = {}
+    bookings.forEach((b) => {
+      if (b.staff_name && (b.status === "completed" || b.status === "confirmed")) {
+        staffCounts[b.staff_name] = (staffCounts[b.staff_name] || 0) + 1
+      }
+    })
+    const mostBookedStaff = Object.entries(staffCounts).sort((a, b) => b[1] - a[1])[0]
+    if (mostBookedStaff) {
+      preferredStaffName = `${mostBookedStaff[0]} (Most Visited)`
+    }
+  }
 
   return (
     <div className="flex-1 flex flex-col">
@@ -220,7 +320,7 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
                   </div>
                   <div className="pt-4 border-t">
                     <h4 className="font-medium mb-2">Preferred Stylist</h4>
-                    <p className="text-sm text-gray-600">{preferredStaffObj ? preferredStaffObj.name : "None"}</p>
+                    <p className="text-sm text-gray-600">{preferredStaffName || "None"}</p>
                   </div>
 
                   <div className="pt-4 border-t">
@@ -307,7 +407,7 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
               )}
             </div>
 
-            <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-4">
               <Card className="shadow-sm">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-green-700 flex items-center">
@@ -333,36 +433,49 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
                 </CardContent>
               </Card>
               <Card className="shadow-sm">
-                <CardHeader className="pb-2">
+                <CardHeader className="pb-2 flex flex-row items-center justify-between">
                   <CardTitle className="text-sm font-medium text-purple-700 flex items-center">
-                    <Star className="h-4 w-4 mr-2" />
-                    Average Rating
+                    <Wallet className="h-4 w-4 mr-2" />
+                    Digital Wallet
                   </CardTitle>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs text-purple-700 border-purple-200 hover:bg-purple-50"
+                    onClick={() => setIsTopUpDialogOpen(true)}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Top-up
+                  </Button>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{averageRating.toFixed(1)}</div>
-                  <div className="flex items-center">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`h-3 w-3 ${
-                          i < Math.floor(averageRating) ? "text-yellow-400 fill-current" : "text-gray-300"
-                        }`}
-                      />
-                    ))}
+                  <div className="text-2xl font-bold text-purple-900">
+                    {formatCurrency(walletData?.balance ?? customer.wallet_balance ?? 0)}
                   </div>
+                  <p className="text-xs text-muted-foreground">Available balance</p>
                 </CardContent>
               </Card>
               <Card className="shadow-sm">
-                <CardHeader className="pb-2">
+                <CardHeader className="pb-2 flex flex-row items-center justify-between">
                   <CardTitle className="text-sm font-medium text-orange-700 flex items-center">
                     <Gift className="h-4 w-4 mr-2" />
                     Loyalty Points
                   </CardTitle>
+                  {loyaltyData?.tier_name && (
+                    <Badge variant="secondary" className="bg-orange-100 text-orange-800 text-xs">
+                      {loyaltyData.tier_name}
+                    </Badge>
+                  )}
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{Math.floor(totalSpent / 100)}</div>
-                  <p className="text-xs text-muted-foreground">Reward points</p>
+                  <div className="text-2xl font-bold text-orange-900">
+                    {loyaltyData?.current_points !== undefined ? loyaltyData.current_points : Math.floor(totalSpent / 100)}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {loyaltyData?.earn_multiplier && loyaltyData.earn_multiplier > 1
+                      ? `${loyaltyData.earn_multiplier}x earn rate`
+                      : "Reward points"}
+                  </p>
                 </CardContent>
               </Card>
             </div>
@@ -370,7 +483,7 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
 
           <Card>
             <Tabs defaultValue="bookings" className="w-full">
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList className="grid w-full grid-cols-6">
                 <TabsTrigger value="bookings" className="flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
                   Bookings
@@ -382,6 +495,10 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
                 <TabsTrigger value="packages" className="flex items-center gap-2">
                   <Package className="h-4 w-4" />
                   Packages
+                </TabsTrigger>
+                <TabsTrigger value="wallet-loyalty" className="flex items-center gap-2">
+                  <Wallet className="h-4 w-4" />
+                  Wallet & Points
                 </TabsTrigger>
                 <TabsTrigger value="reviews" className="flex items-center gap-2">
                   <Star className="h-4 w-4" />
@@ -546,7 +663,7 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
                               <td className="p-4 font-semibold text-green-600">{formatCurrency(invoice.amount)}</td>
                               <td className="p-4">{invoice.payment_method}</td>
                               <td className="p-4">
-                                <Badge variant={invoice.status === "completed" ? "secondary" : "outline"}>
+                                <Badge variant={invoice.status === "completed" || invoice.status === "paid" ? "secondary" : "outline"}>
                                   {invoice.status}
                                 </Badge>
                               </td>
@@ -563,6 +680,126 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
                       <p className="text-center text-gray-500">No invoices found for this customer.</p>
                     )}
                   </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="wallet-loyalty" className="mt-6">
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Wallet Card */}
+                    <Card className="border-purple-100 bg-purple-50/20">
+                      <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 rounded-lg bg-purple-100 text-purple-700">
+                            <Wallet className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base text-purple-950">Prepaid Wallet</CardTitle>
+                            <p className="text-xs text-muted-foreground">Store credit for fast checkout</p>
+                          </div>
+                        </div>
+                        <Button size="sm" onClick={() => setIsTopUpDialogOpen(true)}>
+                          <Plus className="h-4 w-4 mr-1" />
+                          Top-Up Balance
+                        </Button>
+                      </CardHeader>
+                      <CardContent className="pt-2">
+                        <div className="text-3xl font-bold text-purple-900 mb-4">
+                          {formatCurrency(walletData?.balance ?? customer.wallet_balance ?? 0)}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 pt-3 border-t border-purple-100 text-sm">
+                          <div>
+                            <span className="text-xs text-gray-500">Total Credited:</span>
+                            <p className="font-semibold text-green-700">{formatCurrency(walletData?.totalCredited ?? 0)}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500">Total Spent:</span>
+                            <p className="font-semibold text-gray-800">{formatCurrency(walletData?.totalDebited ?? 0)}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Loyalty Card */}
+                    <Card className="border-orange-100 bg-orange-50/20">
+                      <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="p-2 rounded-lg bg-orange-100 text-orange-700">
+                            <Gift className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base text-orange-950">Loyalty Rewards</CardTitle>
+                            <p className="text-xs text-muted-foreground">Points accrued on completed visits</p>
+                          </div>
+                        </div>
+                        {loyaltyData?.tier_name && (
+                          <Badge variant="outline" className="border-orange-300 text-orange-800 bg-orange-50">
+                            Tier: {loyaltyData.tier_name}
+                          </Badge>
+                        )}
+                      </CardHeader>
+                      <CardContent className="pt-2">
+                        <div className="text-3xl font-bold text-orange-900 mb-4">
+                          {(loyaltyData?.current_points ?? 0).toLocaleString()} <span className="text-base font-normal text-orange-700">pts</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 pt-3 border-t border-orange-100 text-sm">
+                          <div>
+                            <span className="text-xs text-gray-500">Lifetime Redeemed:</span>
+                            <p className="font-semibold text-gray-800">{(loyaltyData?.total_redeemed ?? 0).toLocaleString()} pts</p>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500">Earn Multiplier:</span>
+                            <p className="font-semibold text-purple-700">{loyaltyData?.earn_multiplier ?? 1}x</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Wallet Ledger Table */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Wallet Ledger & Transactions</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {walletData?.recentTransactions && walletData.recentTransactions.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gray-50 border-b">
+                              <tr>
+                                <th className="text-left p-3 font-medium">Date</th>
+                                <th className="text-left p-3 font-medium">Type</th>
+                                <th className="text-left p-3 font-medium">Amount</th>
+                                <th className="text-left p-3 font-medium">Balance After</th>
+                                <th className="text-left p-3 font-medium">Description</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                              {walletData.recentTransactions.map((tx) => (
+                                <tr key={tx.id} className="hover:bg-gray-50">
+                                  <td className="p-3 text-gray-600">{formatDate(tx.createdAt)}</td>
+                                  <td className="p-3">
+                                    <Badge variant={tx.transactionType === "credit" ? "default" : "secondary"}>
+                                      {tx.transactionType === "credit" ? "+ Credit" : "- Debit"}
+                                    </Badge>
+                                  </td>
+                                  <td className={`p-3 font-semibold ${tx.transactionType === "credit" ? "text-green-600" : "text-gray-900"}`}>
+                                    {tx.transactionType === "credit" ? "+" : "-"}{formatCurrency(tx.amount)}
+                                  </td>
+                                  <td className="p-3 font-medium text-gray-700">{formatCurrency(tx.balanceAfter)}</td>
+                                  <td className="p-3 text-gray-600">{tx.description}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="text-center py-6 text-sm text-gray-500">
+                          No wallet transactions yet. Use &quot;+ Top-Up Balance&quot; above to load funds.
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
               </TabsContent>
 
@@ -728,6 +965,59 @@ export function CustomerProfileDisplay({ customer, bookings, invoices, activeMem
             <Button variant="outline" onClick={() => setIsTransferDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleTransferPackage} disabled={isSubmitting || !transferToCustomerId}>
               Transfer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isTopUpDialogOpen} onOpenChange={setIsTopUpDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Top-Up Customer Wallet</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="topUpAmount">Amount (₹) *</Label>
+              <Input
+                id="topUpAmount"
+                type="number"
+                min="1"
+                step="any"
+                placeholder="e.g. 1000"
+                value={topUpAmount}
+                onChange={(e) => setTopUpAmount(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="topUpMethod">Payment Method</Label>
+              <Select value={topUpMethod} onValueChange={setTopUpMethod}>
+                <SelectTrigger id="topUpMethod">
+                  <SelectValue placeholder="Select payment method" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="upi">UPI / QR Code</SelectItem>
+                  <SelectItem value="card">Debit / Credit Card</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="bonus">Store Promotional Credit</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="topUpNotes">Notes / Description (Optional)</Label>
+              <Input
+                id="topUpNotes"
+                type="text"
+                placeholder="e.g. In-store cash top-up or festival offer"
+                value={topUpNotes}
+                onChange={(e) => setTopUpNotes(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsTopUpDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleTopUpSubmit} disabled={isToppingUp || !topUpAmount}>
+              {isToppingUp ? "Processing..." : "Confirm Top-Up"}
             </Button>
           </DialogFooter>
         </DialogContent>

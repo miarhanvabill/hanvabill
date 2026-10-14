@@ -24,12 +24,12 @@ function getRandomReviewText(businessName: string): string {
 
 interface ReviewWidgetProps {
   tenantId: string
-  bookingId: number
+  bookingId?: number | null
   gmbUrl?: string
   businessName?: string
 }
 
-export function ReviewWidget({ tenantId, bookingId, gmbUrl, businessName = "our salon" }: ReviewWidgetProps) {
+export function ReviewWidget({ tenantId, bookingId = null, gmbUrl, businessName = "our salon" }: ReviewWidgetProps) {
   const [rating, setRating] = useState(0)
   const [hoverRating, setHoverRating] = useState(0)
   const [reviewText, setReviewText] = useState("")
@@ -37,7 +37,7 @@ export function ReviewWidget({ tenantId, bookingId, gmbUrl, businessName = "our 
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [isNegativeFlow, setIsNegativeFlow] = useState(false)
 
-  if (!tenantId || !bookingId) return null
+  if (!tenantId) return null
 
   const handleStarClick = async (star: number) => {
     if (isSubmitting || isSubmitted) return
@@ -48,7 +48,7 @@ export function ReviewWidget({ tenantId, bookingId, gmbUrl, businessName = "our 
       setIsSubmitting(true)
 
       // 1. Auto-submit internally in background
-      submitReviewPublic(tenantId, bookingId, star, getRandomReviewText(businessName))
+      submitReviewPublic(tenantId, bookingId || null, star, getRandomReviewText(businessName))
         .catch(() => {}) // silently swallow errors
 
       // 2. Auto-copy a random review text to clipboard silently
@@ -80,7 +80,7 @@ export function ReviewWidget({ tenantId, bookingId, gmbUrl, businessName = "our 
     if (!reviewText.trim()) return toast.error("Please share what went wrong so we can improve.")
     setIsSubmitting(true)
     try {
-      const result = await submitReviewPublic(tenantId, bookingId, rating, reviewText)
+      const result = await submitReviewPublic(tenantId, bookingId || null, rating, reviewText)
       if (result.success) {
         setIsSubmitted(true)
         toast.success("Thank you for your feedback. We'll work on it!")

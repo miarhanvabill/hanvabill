@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedSql } from "@/lib/db";
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   try {
     // Next.js 15: params must be awaited
     const { slug } = await params;
@@ -12,6 +12,30 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
     if (!tenantId) {
       return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
     }
+
+    // Get mini website custom settings (theme color, banner, visibility)
+    const miniWebsiteRows = await sql`
+      SELECT 
+        custom_url_slug,
+        theme_color,
+        show_services,
+        show_products,
+        show_staff,
+        show_reviews,
+        banner_image_url
+      FROM mini_website_settings
+      WHERE tenant_id = ${tenantId}
+      LIMIT 1
+    `.catch(() => []);
+
+    const miniWebsite = miniWebsiteRows[0] || {
+      theme_color: "#000000",
+      show_services: true,
+      show_products: true,
+      show_staff: true,
+      show_reviews: true,
+      banner_image_url: null,
+    };
 
     // Get tenant settings (Name, currency, timezone, etc)
     const settingsRows = await sql`
@@ -51,9 +75,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
       openTime: settings["business.openTime"] || "09:00",
       closeTime: settings["business.closeTime"] || "20:00",
       workingDays,
-      // Logo & cover image stored via profile.logo / profile.coverImage keys
+      // Logo & cover image stored via profile.logo / profile.coverImage keys or mini-website banner
       logo_url: settings["profile.logo"] || null,
-      cover_image_url: settings["profile.coverImage"] || null,
+      cover_image_url: miniWebsite.banner_image_url || settings["profile.coverImage"] || null,
+      theme_color: miniWebsite.theme_color || '#000000',
       socials: {
         facebook: settings["profile.socialMedia.facebook"] || "",
         instagram: settings["profile.socialMedia.instagram"] || "",
@@ -150,7 +175,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
       memberships,
       staff,
       rating,
-      galleryImages
+      galleryImages,
+      miniWebsite
     });
   } catch (error) {
     console.error("Error fetching public tenant info:", error);

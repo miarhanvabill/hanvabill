@@ -62,12 +62,20 @@ export async function GET(request: Request) {
           AND tenant_id = ${tenantId}
       `
 
-      // Get staff salary for expenses
+      // Get staff salary
       const staffData = await sql`
         SELECT COALESCE(SUM(salary), 0) as total_salary
         FROM staff
         WHERE tenant_id = ${tenantId}
       `.catch(() => [{ total_salary: 0 }]);
+
+      // Get recorded business expenses from expenses table
+      const expenseData = await sql`
+        SELECT COALESCE(SUM(amount), 0) as total_expenses
+        FROM expenses
+        WHERE tenant_id = ${tenantId}
+          AND date >= ${startIso}
+      `.catch(() => [{ total_expenses: 0 }]);
 
       // Calculations
       const revenue = Number(bookingData[0]?.total_revenue) || 0;
@@ -81,11 +89,11 @@ export async function GET(request: Request) {
       const returningCustomers = totalCustomers > newCustomers ? totalCustomers - newCustomers : 0;
       const retentionRate = totalCustomers > 0 ? (returningCustomers / totalCustomers) * 100 : 0;
 
-      // Expense & Profit calculation
-      // Since there is no expense module, we just use staff salaries.
+      // Expense & Profit calculation using real expenses table
       const staffSalary = Number(staffData[0]?.total_salary) || 0;
-      const expenses = staffSalary;
-      const netProfit = revenue - expenses;
+      const directExpenses = Number(expenseData[0]?.total_expenses) || 0;
+      const totalExpenses = directExpenses > 0 ? directExpenses : staffSalary;
+      const netProfit = revenue - totalExpenses;
       const profitMargin = revenue > 0 ? (netProfit / revenue) * 100 : 0;
 
       const summaryData = {

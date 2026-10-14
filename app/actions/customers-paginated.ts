@@ -37,6 +37,7 @@ export async function getCustomersPaginated(search: string = "", offset: number 
             c.tags,
             c.preferred_staff_id,
             c.referred_by_customer_id,
+            c.wallet_balance,
             c.created_at,
             c.updated_at,
             COUNT(b.id) as total_bookings,
@@ -46,7 +47,7 @@ export async function getCustomersPaginated(search: string = "", offset: number 
           WHERE c.tenant_id = ${tenantId}
           ${search ? sql`AND (c.full_name ILIKE ${'%' + search + '%'} OR c.phone_number ILIKE ${'%' + search + '%'} OR c.email ILIKE ${'%' + search + '%'})` : sql``}
           GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.tags, c.preferred_staff_id,
-            c.referred_by_customer_id, c.created_at, c.updated_at
+            c.referred_by_customer_id, c.wallet_balance, c.created_at, c.updated_at
           ORDER BY c.created_at DESC
           LIMIT ${limit} OFFSET ${offset}
         `
@@ -56,6 +57,7 @@ export async function getCustomersPaginated(search: string = "", offset: number 
           id: Number(customer.id) || 0,
           total_bookings: Number(customer.total_bookings) || 0,
           total_spent: Number(customer.total_spent) || 0,
+          wallet_balance: Number(customer.wallet_balance) || 0,
           tags: typeof customer.tags === "string" ? JSON.parse(customer.tags) : (customer.tags || []),
           preferred_staff_id: customer.preferred_staff_id ? Number(customer.preferred_staff_id) : null,
           referred_by_customer_id: customer.referred_by_customer_id ? Number(customer.referred_by_customer_id) : null,

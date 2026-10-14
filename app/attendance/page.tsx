@@ -16,6 +16,7 @@ export default function AttendancePage() {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([])
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0])
   const [searchQuery, setSearchQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -36,6 +37,31 @@ export default function AttendancePage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleExportCSV = () => {
+    const headers = ["Staff Name", "Role", "Phone", "Date", "Check In", "Check Out", "Working Hours", "Status"]
+    const rows = filteredStaff.map((member) => {
+      const record = attendance.find((a) => a.staff_id === member.id)
+      return [
+        `"${member.name || ""}"`,
+        `"${member.role || ""}"`,
+        `"${member.phone || ""}"`,
+        `"${selectedDate}"`,
+        `"${record?.check_in_time || ""}"`,
+        `"${record?.check_out_time || ""}"`,
+        `"${record?.working_hours || ""}"`,
+        `"${record?.status || "absent"}"`
+      ].join(",")
+    })
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n")
+    const encodedUri = encodeURI(csvContent)
+    const link = document.createElement("a")
+    link.setAttribute("href", encodedUri)
+    link.setAttribute("download", `attendance_${selectedDate}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   const handleMarkAttendance = async (staffId: number, status: string, checkInTime?: string, checkOutTime?: string) => {
@@ -84,12 +110,17 @@ export default function AttendancePage() {
     }
   }
 
-  // Safe filtering with proper null checks
+  // Safe filtering with proper null checks and status filter
   const filteredStaff = staff.filter((member) => {
     if (!member || !member.name) return false
     const memberName = String(member.name).toLowerCase()
     const query = String(searchQuery).toLowerCase()
-    return memberName.includes(query)
+    const matchesSearch = memberName.includes(query)
+    
+    if (statusFilter === "all") return matchesSearch
+    const record = attendance.find((a) => a.staff_id === member.id)
+    const status = record?.status || "absent"
+    return matchesSearch && status === statusFilter
   })
 
   const attendanceStats = {
@@ -189,13 +220,23 @@ export default function AttendancePage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" className="gap-2 bg-transparent">
-                    <Filter className="w-4 h-4" />
-                    Filter
-                  </Button>
-                  <Button variant="outline" className="gap-2 bg-transparent">
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-36">
+                      <Filter className="w-4 h-4 mr-2" />
+                      <SelectValue placeholder="All Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="present">Present</SelectItem>
+                      <SelectItem value="absent">Absent</SelectItem>
+                      <SelectItem value="late">Late</SelectItem>
+                      <SelectItem value="half_day">Half Day</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Button variant="outline" className="gap-2 bg-transparent" onClick={handleExportCSV}>
                     <Download className="w-4 h-4" />
-                    Export
+                    Export CSV
                   </Button>
                 </div>
               </div>

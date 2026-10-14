@@ -15,6 +15,7 @@ export interface CommissionProfile {
   staff_count: number
   is_active: boolean
   created_at: string
+  tiers?: CommissionTier[]
 }
 
 export interface CommissionTier {
@@ -28,6 +29,17 @@ export interface CommissionTier {
 export async function getCommissionProfiles(): Promise<CommissionProfile[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      // Ensure commission_tiers table exists
+      await sql`
+        CREATE TABLE IF NOT EXISTS commission_tiers (
+          id SERIAL PRIMARY KEY,
+          profile_id INTEGER REFERENCES commission_profiles(id) ON DELETE CASCADE,
+          min_amount NUMERIC(10,2) NOT NULL,
+          max_amount NUMERIC(10,2) NOT NULL,
+          rate NUMERIC(5,2) NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+      `.catch(() => {})
 
       const connectionTest = await sql`SELECT 1 as test`
       if (!connectionTest || connectionTest.length === 0) {
@@ -55,6 +67,32 @@ export async function getCommissionProfiles(): Promise<CommissionProfile[]> {
         ORDER BY cp.created_at DESC
       `
 
+      const profileIds = (profilesResult || []).map((p: any) => Number(p.id)).filter(Boolean)
+      const tiersMap = new Map<string, CommissionTier[]>()
+
+      if (profileIds.length > 0) {
+        try {
+          const tiersResult = await sql`
+            SELECT id::text, profile_id::text, min_amount::numeric, max_amount::numeric, rate::numeric
+            FROM commission_tiers
+            WHERE profile_id = ANY(${profileIds})
+            ORDER BY min_amount ASC
+          `
+          for (const t of tiersResult) {
+            const pId = String(t.profile_id)
+            if (!tiersMap.has(pId)) tiersMap.set(pId, [])
+            tiersMap.get(pId)!.push({
+              id: String(t.id),
+              profile_id: pId,
+              min_amount: Number(t.min_amount) || 0,
+              max_amount: Number(t.max_amount) || 0,
+              rate: Number(t.rate) || 0
+            })
+          }
+        } catch (tierErr) {
+          console.warn("[v0] Error fetching commission tiers:", tierErr)
+        }
+      }
 
       const profiles = profilesResult.map((row: any) => ({
         id: row.id,
@@ -68,6 +106,7 @@ export async function getCommissionProfiles(): Promise<CommissionProfile[]> {
         staff_count: Number(row.staff_count) || 0,
         is_active: Boolean(row.is_active),
         created_at: row.created_at,
+        tiers: tiersMap.get(String(row.id)) || [],
       })) as CommissionProfile[]
 
       return profiles
@@ -80,10 +119,36 @@ export async function getCommissionProfiles(): Promise<CommissionProfile[]> {
   })
 }
 
-export async function createCommissionProfile(data: Omit<CommissionProfile, "id" | "staff_count" | "created_at">) {
+export async function getCommissionTiers(profileId: string): Promise<CommissionTier[]> {
+  return await withTenantAuth(async ({ sql }) => {
+    try {
+      const tiersResult = await sql`
+        SELECT id::text, profile_id::text, min_amount::numeric, max_amount::numeric, rate::numeric
+        FROM commission_tiers
+        WHERE profile_id = ${Number(profileId)}
+        ORDER BY min_amount ASC
+      `
+      return tiersResult.map((t: any) => ({
+        id: String(t.id),
+        profile_id: String(t.profile_id),
+        min_amount: Number(t.min_amount) || 0,
+        max_amount: Number(t.max_amount) || 0,
+        rate: Number(t.rate) || 0,
+      }))
+    } catch (error) {
+      console.error("[v0] Error fetching tiers for profile:", profileId, error)
+      return []
+    }
+  })
+}
+
+export async function createCommissionProfile(
+  data: Omit<CommissionProfile, "id" | "staff_count" | "created_at" | "tiers"> & {
+    tiers?: Omit<CommissionTier, "id" | "profile_id">[]
+  }
+) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-
       const result = await sql`
         INSERT INTO commission_profiles (
           tenant_id, name, description, commission_type, base_rate, min_threshold, 
@@ -100,12 +165,35 @@ export async function createCommissionProfile(data: Omit<CommissionProfile, "id"
       `
 
       const profile = result[0]
+      const createdTiers: CommissionTier[] = []
+
+      // If tiered and tiers provided, insert tiers
+      if (data.commission_type === "tiered" && data.tiers && data.tiers.length > 0) {
+        for (const tier of data.tiers) {
+          const tierRes = await sql`
+            INSERT INTO commission_tiers (profile_id, min_amount, max_amount, rate)
+            VALUES (${Number(profile.id)}, ${tier.min_amount}, ${tier.max_amount}, ${tier.rate})
+            RETURNING id::text, profile_id::text, min_amount::numeric, max_amount::numeric, rate::numeric
+          `
+          if (tierRes && tierRes[0]) {
+            createdTiers.push({
+              id: String(tierRes[0].id),
+              profile_id: String(tierRes[0].profile_id),
+              min_amount: Number(tierRes[0].min_amount) || 0,
+              max_amount: Number(tierRes[0].max_amount) || 0,
+              rate: Number(tierRes[0].rate) || 0,
+            })
+          }
+        }
+      }
+
       const formattedProfile = {
         ...profile,
         base_rate: Number(profile.base_rate),
         min_threshold: Number(profile.min_threshold),
         max_threshold: Number(profile.max_threshold),
         staff_count: 0,
+        tiers: createdTiers,
       } as CommissionProfile
 
       revalidatePath("/manage/commissions")
@@ -120,10 +208,14 @@ export async function createCommissionProfile(data: Omit<CommissionProfile, "id"
   })
 }
 
-export async function updateCommissionProfile(id: string, data: Partial<CommissionProfile>) {
+export async function updateCommissionProfile(
+  id: string, 
+  data: Partial<Omit<CommissionProfile, "tiers">> & {
+    tiers?: Omit<CommissionTier, "id" | "profile_id">[]
+  }
+) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-
       const result = await sql`
         UPDATE commission_profiles 
         SET 
@@ -147,12 +239,55 @@ export async function updateCommissionProfile(id: string, data: Partial<Commissi
       }
 
       const profile = result[0]
+      let currentTiers: CommissionTier[] = []
+
+      // If tiers are explicitly provided
+      if (data.tiers !== undefined) {
+        // Remove existing tiers
+        await sql`DELETE FROM commission_tiers WHERE profile_id = ${Number(id)}`
+
+        if (data.commission_type === "tiered" && data.tiers.length > 0) {
+          for (const tier of data.tiers) {
+            const tierRes = await sql`
+              INSERT INTO commission_tiers (profile_id, min_amount, max_amount, rate)
+              VALUES (${Number(id)}, ${tier.min_amount}, ${tier.max_amount}, ${tier.rate})
+              RETURNING id::text, profile_id::text, min_amount::numeric, max_amount::numeric, rate::numeric
+            `
+            if (tierRes && tierRes[0]) {
+              currentTiers.push({
+                id: String(tierRes[0].id),
+                profile_id: String(tierRes[0].profile_id),
+                min_amount: Number(tierRes[0].min_amount) || 0,
+                max_amount: Number(tierRes[0].max_amount) || 0,
+                rate: Number(tierRes[0].rate) || 0,
+              })
+            }
+          }
+        }
+      } else {
+        // Fetch existing tiers
+        const tiersResult = await sql`
+          SELECT id::text, profile_id::text, min_amount::numeric, max_amount::numeric, rate::numeric
+          FROM commission_tiers
+          WHERE profile_id = ${Number(id)}
+          ORDER BY min_amount ASC
+        `
+        currentTiers = tiersResult.map((t: any) => ({
+          id: String(t.id),
+          profile_id: String(t.profile_id),
+          min_amount: Number(t.min_amount) || 0,
+          max_amount: Number(t.max_amount) || 0,
+          rate: Number(t.rate) || 0,
+        }))
+      }
+
       const formattedProfile = {
         ...profile,
         base_rate: Number(profile.base_rate),
         min_threshold: Number(profile.min_threshold),
         max_threshold: Number(profile.max_threshold),
-        staff_count: 0, // Will be calculated separately if needed
+        staff_count: 0,
+        tiers: currentTiers,
       } as CommissionProfile
 
       revalidatePath("/manage/commissions")
@@ -170,7 +305,6 @@ export async function updateCommissionProfile(id: string, data: Partial<Commissi
 export async function deleteCommissionProfile(id: string) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-
       // Check if any staff are using this profile
       const staffCheck = await sql`
         SELECT COUNT(*) as count FROM staff 
@@ -184,6 +318,9 @@ export async function deleteCommissionProfile(id: string) {
           message: `Cannot delete commission profile. ${staffCount} active staff members are using this profile.`,
         }
       }
+
+      // Delete tiers first (also handled by ON DELETE CASCADE)
+      await sql`DELETE FROM commission_tiers WHERE profile_id = ${Number(id)}`.catch(() => {})
 
       const result = await sql`
         DELETE FROM commission_profiles 

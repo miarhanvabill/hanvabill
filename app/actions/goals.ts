@@ -27,6 +27,26 @@ export interface Goal {
 export async function getGoals(): Promise<{ success: boolean; goals: Goal[]; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS staff_goals (
+          id SERIAL PRIMARY KEY,
+          tenant_id INTEGER NOT NULL,
+          staff_id INTEGER NOT NULL,
+          goal_type VARCHAR(50) NOT NULL,
+          target_value DECIMAL(10,2) NOT NULL,
+          current_value DECIMAL(10,2) DEFAULT 0,
+          period_type VARCHAR(20) NOT NULL,
+          start_date DATE NOT NULL,
+          end_date DATE NOT NULL,
+          reward_amount DECIMAL(10,2) DEFAULT 0,
+          is_active BOOLEAN DEFAULT true,
+          is_achieved BOOLEAN DEFAULT false,
+          achievement_date TIMESTAMP,
+          notes TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `.catch(() => {})
 
       const result = await sql`
         SELECT 
@@ -39,13 +59,25 @@ export async function getGoals(): Promise<{ success: boolean; goals: Goal[]; err
           COALESCE(
             CASE
               WHEN sg.goal_type = 'revenue' THEN (
-                SELECT COALESCE(SUM(i.amount), 0)
-                FROM invoices i
-                INNER JOIN bookings b ON i.booking_id = b.id
-                WHERE b.staff_id = sg.staff_id
-                  AND i.invoice_date >= sg.start_date
-                  AND i.invoice_date <= sg.end_date
-                  AND i.tenant_id = ${tenantId}
+                SELECT COALESCE(SUM(amount), 0)
+                FROM (
+                  SELECT COALESCE(SUM(i.amount), 0) as amount
+                  FROM invoices i
+                  INNER JOIN bookings b ON i.booking_id = b.id
+                  WHERE b.staff_id = sg.staff_id
+                    AND i.invoice_date >= sg.start_date
+                    AND i.invoice_date <= sg.end_date
+                    AND i.tenant_id = ${tenantId}
+                  UNION ALL
+                  SELECT COALESCE(SUM(scs.revenue_amount), 0) as amount
+                  FROM staff_commission_splits scs
+                  JOIN invoices inv ON scs.invoice_id = inv.id
+                  WHERE scs.staff_id = sg.staff_id
+                    AND inv.booking_id IS NULL
+                    AND inv.invoice_date >= sg.start_date
+                    AND inv.invoice_date <= sg.end_date
+                    AND scs.tenant_id = ${tenantId}
+                ) rev
               )
               WHEN sg.goal_type = 'services' THEN (
                 SELECT COALESCE(COUNT(bs.id), 0)
@@ -80,7 +112,7 @@ export async function getGoals(): Promise<{ success: boolean; goals: Goal[]; err
             WHEN sg.end_date < CURRENT_DATE THEN 'overdue'
             ELSE 'active'
           END as status,
-          COALESCE(sg.goal_type || ' goal for ' || s.name, 'Goal') as description,
+          COALESCE(sg.notes, sg.goal_type || ' goal for ' || s.name, 'Goal') as description,
           sg.created_at::text,
           sg.updated_at::text
         FROM staff_goals sg
@@ -90,15 +122,22 @@ export async function getGoals(): Promise<{ success: boolean; goals: Goal[]; err
         ORDER BY sg.created_at DESC
       `
 
-
       // Neon returns array directly (not result.rows)
       const rows = Array.isArray(result) ? result : []
-      const goals = rows.map((row: any) => ({
-        ...row,
-        target_value: Number.parseFloat(row.target_value) || 0,
-        current_value: Number.parseFloat(row.current_value) || 0,
-        reward_amount: Number.parseFloat(row.reward_amount) || 0,
-      }))
+      const goals = rows.map((row: any) => {
+        const target = Number.parseFloat(row.target_value) || 0
+        const current = Number.parseFloat(row.current_value) || 0
+        const reward = Number.parseFloat(row.reward_amount) || 0
+        const isAchieved = row.is_achieved || (target > 0 && current >= target)
+        return {
+          ...row,
+          target_value: target,
+          current_value: current,
+          reward_amount: reward,
+          is_achieved: isAchieved,
+          status: isAchieved ? 'completed' : row.status,
+        }
+      })
 
       return { success: true, goals }
     } catch (error) {
@@ -120,18 +159,18 @@ export async function createGoal(goalData: {
   start_date: string
   end_date: string
   reward_amount?: number
+  description?: string
 }): Promise<{ success: boolean; goal?: Goal; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-
-      // Neon returns array directly
       const result = await sql`
         INSERT INTO staff_goals (
           tenant_id, staff_id, goal_type, target_value, current_value, 
-          period_type, start_date, end_date, reward_amount
+          period_type, start_date, end_date, reward_amount, notes
         ) VALUES (
           ${tenantId}, ${goalData.staff_id}, ${goalData.goal_type}, ${goalData.target_value}, 0,
-          ${goalData.period_type}, ${goalData.start_date}, ${goalData.end_date}, ${goalData.reward_amount || 0}
+          ${goalData.period_type}, ${goalData.start_date}, ${goalData.end_date}, ${goalData.reward_amount || 0},
+          ${goalData.description || null}
         ) RETURNING id
       `
 
@@ -140,7 +179,6 @@ export async function createGoal(goalData: {
       if (newId) {
         revalidatePath("/manage/goals")
 
-        // Fetch the created goal with staff info
         const goalResult = await sql`
           SELECT 
             sg.id,
@@ -156,7 +194,7 @@ export async function createGoal(goalData: {
             sg.reward_amount,
             sg.is_achieved,
             'active' as status,
-            sg.goal_type || ' goal for ' || s.name as description,
+            COALESCE(sg.notes, sg.goal_type || ' goal for ' || s.name) as description,
             sg.created_at::text,
             sg.updated_at::text
           FROM staff_goals sg
@@ -199,11 +237,11 @@ export async function updateGoal(
     start_date: string
     end_date: string
     reward_amount?: number
+    description?: string
   },
 ): Promise<{ success: boolean; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-
       await sql`
         UPDATE staff_goals 
         SET 
@@ -214,6 +252,7 @@ export async function updateGoal(
           start_date = ${goalData.start_date},
           end_date = ${goalData.end_date},
           reward_amount = ${goalData.reward_amount || 0},
+          notes = COALESCE(${goalData.description || null}, notes),
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ${id}
         AND tenant_id = ${tenantId}

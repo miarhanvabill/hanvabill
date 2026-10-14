@@ -1,11 +1,38 @@
 "use server"
 import { unstable_noStore as noStore } from "next/cache"
 import { withTenantAuth } from '@/lib/withTenantAuth'
-import { neon } from "@neondatabase/serverless"
 
 export async function generatePayrollRun(periodStart: string, periodEnd: string) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      // Ensure payroll tables exist
+      await sql`
+        CREATE TABLE IF NOT EXISTS payroll_runs (
+          id SERIAL PRIMARY KEY,
+          tenant_id INTEGER NOT NULL,
+          period_start DATE NOT NULL,
+          period_end DATE NOT NULL,
+          status VARCHAR(50) NOT NULL DEFAULT 'draft',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+      `.catch(() => {})
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS payroll_entries (
+          id SERIAL PRIMARY KEY,
+          run_id INTEGER NOT NULL REFERENCES payroll_runs(id) ON DELETE CASCADE,
+          staff_id INTEGER NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
+          base_pay DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+          commission_pay DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+          bonuses DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+          deductions DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+          total_pay DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+      `.catch(() => {})
+
       // 1. Create payroll_run record
       const [run] = await sql`
         INSERT INTO payroll_runs (tenant_id, period_start, period_end, status)
@@ -22,9 +49,9 @@ export async function generatePayrollRun(periodStart: string, periodEnd: string)
       `;
 
       // 2.5 Pre-fetch all commission tiers for the relevant profiles
-      const profileIds = staffList
-        .filter(s => s.commission_type === 'tiered' && s.commission_profile_id)
-        .map(s => s.commission_profile_id);
+      const profileIds = (staffList as any[])
+        .filter((s: any) => s.commission_type === 'tiered' && s.commission_profile_id)
+        .map((s: any) => s.commission_profile_id);
       
       const uniqueProfileIds = [...new Set(profileIds)];
       const tiersMap = new Map();
@@ -87,6 +114,9 @@ export async function generatePayrollRun(periodStart: string, periodEnd: string)
               commission = totalRevenue * (baseRate / 100);
             }
           }
+        } else if (staff.commission_rate && parseFloat(staff.commission_rate) > 0) {
+          const staffRate = parseFloat(staff.commission_rate);
+          commission = totalRevenue * (staffRate / 100);
         }
         
         const basePay = parseFloat(staff.salary || "0");
@@ -110,6 +140,18 @@ export async function getPayrollRuns() {
   noStore();
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await sql`
+        CREATE TABLE IF NOT EXISTS payroll_runs (
+          id SERIAL PRIMARY KEY,
+          tenant_id INTEGER NOT NULL,
+          period_start DATE NOT NULL,
+          period_end DATE NOT NULL,
+          status VARCHAR(50) NOT NULL DEFAULT 'draft',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+        )
+      `.catch(() => {})
+
       const runs = await sql`
         SELECT * FROM payroll_runs 
         WHERE tenant_id = ${tenantId} 
@@ -135,7 +177,7 @@ export async function getPayrollRunDetails(runId: number) {
       const entries = await sql`
         SELECT pe.*, s.name as staff_name 
         FROM payroll_entries pe
-        JOIN staff s ON pe.staff_id = s.id
+        JOIN staff s ON pe.staff_id = s.id AND s.tenant_id = ${tenantId}
         WHERE pe.run_id = ${runId}
       `;
       

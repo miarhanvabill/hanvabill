@@ -1,9 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { updateInventoryItem, deleteInventoryItem } from "@/app/actions/inventory"
 
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const id = Number.parseInt(params.id)
+    const { id: rawId } = await params
+    const id = Number.parseInt(rawId)
     if (isNaN(id) || id <= 0) {
       return NextResponse.json({ success: false, message: "Invalid ID" }, { status: 400 })
     }
@@ -51,9 +52,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const id = Number.parseInt(params.id)
+    const { id: rawId } = await params
+    const id = Number.parseInt(rawId)
     if (isNaN(id) || id <= 0) {
       return NextResponse.json({ success: false, message: "Invalid ID" }, { status: 400 })
     }

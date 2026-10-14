@@ -31,15 +31,72 @@ export interface CustomerSegment {
   updated_at: string
 }
 
+async function ensureMarketingTables(sql: any, tenantId: string) {
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS customer_segments (
+        id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR(100) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        criteria TEXT,
+        customer_count INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      )
+    `
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS marketing_campaigns (
+        id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR(100) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        type VARCHAR(50) DEFAULT 'whatsapp',
+        subject VARCHAR(255),
+        message TEXT NOT NULL,
+        segment_id INTEGER,
+        status VARCHAR(50) DEFAULT 'draft',
+        sent_count INTEGER DEFAULT 0,
+        opened_count INTEGER DEFAULT 0,
+        clicked_count INTEGER DEFAULT 0,
+        revenue NUMERIC(10, 2) DEFAULT 0,
+        budget NUMERIC(10, 2) DEFAULT 0,
+        scheduled_date TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      )
+    `
+
+    // Seed default segments if none exist
+    const existing = await sql`
+      SELECT id FROM customer_segments WHERE tenant_id = ${tenantId} LIMIT 1
+    `.catch(() => [])
+
+    if (existing.length === 0) {
+      await sql`
+        INSERT INTO customer_segments (tenant_id, name, criteria, customer_count)
+        VALUES 
+          (${tenantId}, 'All Customers', 'all', (SELECT COUNT(*) FROM customers WHERE tenant_id = ${tenantId})),
+          (${tenantId}, 'VIP Big Spenders (₹3,000+)', 'spend > 3000', 0),
+          (${tenantId}, 'Inactive Clients (45+ Days)', 'inactive > 45d', 0),
+          (${tenantId}, 'New Clients (Last 30 Days)', 'created < 30d', 0)
+      `.catch(() => {})
+    }
+  } catch (err) {
+    console.error("Error ensuring marketing tables:", err)
+  }
+}
+
 export async function getMarketingCampaigns() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureMarketingTables(sql, tenantId)
+
       const campaigns = await sql`
         SELECT * FROM marketing_campaigns 
         WHERE tenant_id = ${tenantId}
         ORDER BY created_at DESC
       `
-      return campaigns.map(c => ({
+      return (campaigns as any[]).map((c: any) => ({
         ...c,
         revenue: Number.parseFloat(c.revenue || 0),
         budget: Number.parseFloat(c.budget || 0),
@@ -54,6 +111,8 @@ export async function getMarketingCampaigns() {
 export async function getCustomerSegments() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureMarketingTables(sql, tenantId)
+
       const segments = await sql`
         SELECT * FROM customer_segments 
         WHERE tenant_id = ${tenantId}

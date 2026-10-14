@@ -58,7 +58,7 @@ export default function SalesReportPage() {
           total_profit: Math.round(data.totalRevenue * 0.75) || 0, // Estimated profit
           average_order_value: data.averageOrderValue || 0,
           top_selling_products:
-            data.topServices?.map((service) => ({
+            data.topServices?.map((service: any) => ({
               name: service.name,
               quantity: service.bookings,
               revenue: service.revenue,

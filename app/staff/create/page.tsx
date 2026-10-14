@@ -15,7 +15,9 @@ import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Save, X, Plus } from "lucide-react"
 import Link from "next/link"
 import { createStaff, type Staff } from "@/app/actions/staff"
+import { getCommissionProfiles, type CommissionProfile } from "@/app/actions/commissions"
 import { useToast } from "@/hooks/use-toast"
+import { useEffect } from "react"
 
 const COMMON_SPECIALTIES = [
   "Hair Cutting",
@@ -36,28 +38,33 @@ const COMMON_SPECIALTIES = [
 ]
 
 export default function CreateStaffPage() {
-  console.log("Rendering CreateStaffPage for /staff/create") // This log should appear!
   const router = useRouter()
   const { toast } = useToast()
   const [isPending, startTransition] = useTransition()
+  const [commissionProfiles, setCommissionProfiles] = useState<CommissionProfile[]>([])
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     phone: "",
     address: "",
     position: "", // Maps to 'role' in DB
-    department: "", // Not in DB, client-side only
+    department: "",
     salary: "",
     commission_rate: "", // Stored as TEXT in DB
+    commission_profile_id: "",
     hire_date: "",
-    date_of_birth: "", // Not in DB, client-side only
+    date_of_birth: "",
     specialties: [] as string[], // Maps to 'skills' in DB (TEXT)
-    notes: "", // Not in DB, client-side only
+    notes: "",
     is_active: true,
     avatar_url: "",
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [customSpecialty, setCustomSpecialty] = useState("")
+
+  useEffect(() => {
+    getCommissionProfiles().then(setCommissionProfiles).catch(() => {})
+  }, [])
 
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -142,17 +149,18 @@ export default function CreateStaffPage() {
         const staffData: Omit<Staff, "id" | "created_at" | "updated_at"> = {
           name: formData.name,
           email: formData.email || null,
-          phone: formData.phone || null,
+          phone: formData.phone,
           address: formData.address || null,
           role: formData.position || null, // Map position to role
+          department: formData.department || null,
           salary: formData.salary ? Number.parseFloat(formData.salary) : null,
           commission_rate: formData.commission_rate || null, // Send as string
+          commission_profile_id: formData.commission_profile_id ? Number(formData.commission_profile_id) : null,
           hire_date: formData.hire_date || null,
           is_active: formData.is_active,
           skills: formData.specialties.join(", ") || null, // Map specialties array to skills string
           emergency_contact: null, // Not in form, set to null
           avatar_url: formData.avatar_url || null,
-          // department, date_of_birth, notes are not sent to DB
         }
 
         const result = await createStaff(staffData)
@@ -371,6 +379,26 @@ export default function CreateStaffPage() {
                       />
                       {errors.commission_rate && <p className="text-red-500 text-sm mt-1">{errors.commission_rate}</p>}
                     </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="commission_profile_id">Commission Profile</Label>
+                    <Select
+                      value={formData.commission_profile_id || "none"}
+                      onValueChange={(value) => handleInputChange("commission_profile_id", value === "none" ? "" : value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a commission profile (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No commission profile (use manual rate above)</SelectItem>
+                        {commissionProfiles.map((profile) => (
+                          <SelectItem key={profile.id} value={profile.id}>
+                            {profile.name} — {profile.commission_type === "percentage" ? `${profile.base_rate}%` : profile.commission_type === "tiered" ? "Tiered" : `₹${profile.base_rate}`} ({profile.applies_to})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-gray-500 mt-1">Assign a structured commission profile to automate commission calculation in payroll.</p>
                   </div>
                 </CardContent>
               </Card>

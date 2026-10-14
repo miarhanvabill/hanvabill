@@ -126,13 +126,13 @@ export async function getInvoices() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const result = await sql`
-         SELECT i.*, c.full_name as customer_name, c.phone_number as customer_phone
+        SELECT i.*, c.full_name as customer_name, c.phone_number as customer_phone
         FROM invoices i
-      LEFT JOIN customers c ON i.customer_id = c.id
-      LEFT JOIN bookings b ON i.booking_id = b.id AND c.tenant_id = ${tenantId}
+        LEFT JOIN customers c ON i.customer_id = c.id AND c.tenant_id = ${tenantId}
+        LEFT JOIN bookings b ON i.booking_id = b.id AND b.tenant_id = ${tenantId}
         WHERE i.tenant_id = ${tenantId}
         ORDER BY i.created_at DESC
-        LIMIT 50
+        LIMIT 100
       `
       return { success: true, invoices: result }
     } catch (error) {
@@ -149,6 +149,7 @@ export async function getInvoiceById(id: string) {
         SELECT i.*, c.full_name as customer_name, c.phone_number as customer_phone, c.email as customer_email, b.notes as booking_notes
         FROM invoices i
         LEFT JOIN customers c ON i.customer_id = c.id AND c.tenant_id = ${tenantId}
+        LEFT JOIN bookings b ON i.booking_id = b.id AND b.tenant_id = ${tenantId}
         WHERE i.id = ${id} AND i.tenant_id = ${tenantId}
       `
       if (result.length === 0) return { success: false, message: "Invoice not found" }

@@ -40,7 +40,7 @@ interface Appointment {
   service: string
   serviceId?: number
   staff: string
-  staffId?: number
+  staffId?: number | null
   date: string
   time: string
   duration: number
@@ -92,7 +92,7 @@ export default function AppointmentsPage() {
     customerEmail: "",
     serviceId: "",
     staffId: "",
-    date: new Date().toISOString().split("T")[0],
+    date: new Date().toLocaleDateString("en-CA"),
     time: "",
     notes: "",
   })
@@ -220,7 +220,7 @@ export default function AppointmentsPage() {
           customerEmail: "",
           serviceId: "",
           staffId: "",
-          date: new Date().toISOString().split("T")[0],
+          date: new Date().toLocaleDateString("en-CA"),
           time: "",
           notes: "",
         })
@@ -303,7 +303,7 @@ export default function AppointmentsPage() {
     }
   }
 
-  const selectedDateStr = selectedDate.toISOString().split("T")[0]
+  const selectedDateStr = selectedDate.toLocaleDateString("en-CA")
 
   const filteredAppointments = appointments
     .filter((apt) => {

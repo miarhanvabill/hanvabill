@@ -14,7 +14,7 @@ import { CustomerSelectionModal } from "@/components/customer-selection-modal"
 import { ServiceSelectionModal, type SelectedService } from "@/components/service-selection-modal"
 import { ArrowLeft, User, Calendar, IndianRupee } from "lucide-react"
 import { createBooking } from "@/app/actions/bookings"
-import { getStaff } from "@/app/actions/staff"
+import { getStaff, type Staff } from "@/app/actions/staff"
 import { toast } from "@/hooks/use-toast"
 import Link from "next/link"
 
@@ -30,13 +30,6 @@ interface Customer {
   updated_at: string
   total_bookings?: number
   total_spent?: number
-}
-
-interface Staff {
-  id: number
-  name: string
-  role: string | null
-  is_active: boolean
 }
 
 export default function CreateBookingPage() {

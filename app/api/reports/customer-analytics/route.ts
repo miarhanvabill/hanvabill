@@ -95,15 +95,20 @@ export async function GET(request: Request) {
       // Calculate average lifetime value
       const avgLifetimeValue =
         topCustomers.length > 0
-          ? topCustomers.reduce((sum, c) => sum + Number(c.total_spent), 0) / topCustomers.length
+          ? topCustomers.reduce((sum: number, c: any) => sum + (Number(c.total_spent) || 0), 0) / topCustomers.length
           : 0
 
-      const formattedSegments = customerSegments.map((segment) => ({
+      const formattedSegments = customerSegments.map((segment: any) => ({
         segment: segment.segment,
-        count: Number(segment.count),
-        percentage: totalCustomers > 0 ? (Number(segment.count) / totalCustomers) * 100 : 0,
+        count: Number(segment.count) || 0,
+        percentage: totalCustomers > 0 ? (Number(segment.count || 0) / totalCustomers) * 100 : 0,
         avg_spending: Number(segment.avg_spending) || 0,
       }))
+
+      const avgVisitFrequency =
+        topCustomers.length > 0
+          ? topCustomers.reduce((sum: number, c: any) => sum + (Number(c.visit_count) || 0), 0) / topCustomers.length
+          : 0
 
       const response = {
         totalCustomers,
@@ -111,8 +116,8 @@ export async function GET(request: Request) {
         returningCustomers,
         customerGrowth,
         avgLifetimeValue,
-        avgVisitFrequency: totalCustomers > 0 ? (Number(topCustomers.reduce((sum, c) => sum + Number(c.visit_count), 0)) / topCustomers.length) || 1.0 : 0,
-        topCustomers: topCustomers.map((customer) => ({
+        avgVisitFrequency: Number(avgVisitFrequency.toFixed(1)) || 0,
+        topCustomers: topCustomers.map((customer: any) => ({
           ...customer,
           total_spent: Number(customer.total_spent) || 0,
           visit_count: Number(customer.visit_count) || 0,

@@ -94,8 +94,12 @@ export async function getTenantPermissions(): Promise<{ success: boolean; data?:
 
 export async function createTenantRole(data: any): Promise<{ success: boolean; error?: string }> {
   try {
-    return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
+    return await withTenantAuth(async ({ sql, tenantId, tenantKey, userId }) => {
       try {
+        if (!userId) {
+          return { success: false, error: "Unauthorized: Authentication required" }
+        }
+
         const tid = String(tenantId)
         await ensureTenantRbacSchema(sql, tid)
         const { name, description, color, permissions } = data
@@ -135,8 +139,12 @@ export async function createTenantRole(data: any): Promise<{ success: boolean; e
 
 export async function updateTenantRole(id: string, data: any): Promise<{ success: boolean; error?: string }> {
   try {
-    return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
+    return await withTenantAuth(async ({ sql, tenantId, tenantKey, userId }) => {
       try {
+        if (!userId) {
+          return { success: false, error: "Unauthorized: Authentication required" }
+        }
+
         const tid = String(tenantId)
         await ensureTenantRbacSchema(sql, tid)
         const { name, description, color, permissions } = data
@@ -213,8 +221,12 @@ export async function updateTenantRole(id: string, data: any): Promise<{ success
 
 export async function deleteTenantRole(id: string): Promise<{ success: boolean; error?: string }> {
   try {
-    return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
+    return await withTenantAuth(async ({ sql, tenantId, tenantKey, userId }) => {
       try {
+        if (!userId) {
+          return { success: false, error: "Unauthorized: Authentication required" }
+        }
+
         const tid = String(tenantId)
         const roleIdStr = String(id).trim()
         const check = await sql`
@@ -225,12 +237,16 @@ export async function deleteTenantRole(id: string): Promise<{ success: boolean; 
         if (check.length === 0) return { success: false, error: "Role not found" }
         if (check[0].is_system) return { success: false, error: "Cannot delete system roles" }
         
-        const users = await sql`SELECT id FROM tenant_users WHERE role_id::text = ${roleIdStr}`
+        const users = await sql`
+          SELECT id FROM tenant_users 
+          WHERE role_id::text = ${roleIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})
+        `
         if (users.length > 0) return { success: false, error: "Cannot delete role while users are assigned to it" }
         
         await sql`DELETE FROM tenant_role_permissions WHERE role_id::text = ${roleIdStr}`
         await sql`DELETE FROM tenant_roles WHERE id::text = ${roleIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})`
         
+        await cacheDel(`tenant_users:${tenantId}`)
         revalidatePath("/user-management")
         return { success: true }
       } catch (error: any) {

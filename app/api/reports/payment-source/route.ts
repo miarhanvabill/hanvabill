@@ -42,9 +42,9 @@ export async function GET(request: Request) {
         ORDER BY amount DESC
       `
 
-      const totalAmount = paymentData.reduce((sum, item) => sum + Number(item.amount), 0)
+      const totalAmount = paymentData.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0)
 
-      const formattedData = paymentData.map((item) => {
+      const formattedData = paymentData.map((item: any) => {
         const amount = Number(item.amount) || 0
         const transactions = Number(item.transactions) || 0
 

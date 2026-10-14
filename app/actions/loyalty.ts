@@ -61,13 +61,31 @@ async function ensureLoyaltySettingsSchema(sql: any, tenantId: string) {
     // Ignore errors if columns already exist
   }
 
+  // Loyalty tiers table
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS loyalty_tiers (
+        id SERIAL PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        min_points INTEGER NOT NULL DEFAULT 0,
+        earn_multiplier DECIMAL(5,2) NOT NULL DEFAULT 1.00,
+        badge_color VARCHAR(50),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `
+  } catch (error: any) {
+  }
+
   // Customers table modifications
   try {
     await sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS loyalty_enrolled BOOLEAN NOT NULL DEFAULT true`
     await sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS loyalty_enrolled_at TIMESTAMPTZ`
+    await sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS wallet_balance DECIMAL(10,2) DEFAULT 0`
+    await sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS tier_id INTEGER`
+    await sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS referred_by_customer_id INTEGER`
     // Simplified and very explicit UPDATE query to avoid parameter binding issues
-    // Breaking the condition into two separate steps for absolute clarity
-    // First, get the count of customers needing update for this tenant
     const needsUpdateResult = await sql`
       SELECT COUNT(*) AS count
       FROM customers
@@ -77,8 +95,7 @@ async function ensureLoyaltySettingsSchema(sql: any, tenantId: string) {
     const needsUpdateCount = Number(needsUpdateResult[0]?.count || 0);
 
     if (needsUpdateCount > 0) {
-      // If there are customers to update, perform the update
-       await sql`
+      await sql`
         UPDATE customers
         SET loyalty_enrolled = true,
             loyalty_enrolled_at = COALESCE(loyalty_enrolled_at, NOW())
@@ -108,7 +125,10 @@ async function ensureLoyaltySettingsSchema(sql: any, tenantId: string) {
       )
     `
     await sql`ALTER TABLE loyalty_transactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
-    // Note: tenant_id column for loyalty_transactions should ideally be populated via application logic or a separate migration for existing data.
+    await sql`ALTER TABLE loyalty_transactions ADD COLUMN IF NOT EXISTS tenant_id TEXT`
+    await sql`ALTER TABLE loyalty_transactions ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`
+    await sql`ALTER TABLE loyalty_transactions ADD COLUMN IF NOT EXISTS invoice_id TEXT`
+    await sql`ALTER TABLE loyalty_transactions ADD COLUMN IF NOT EXISTS type TEXT`
   } catch (error: any) {
   }
 
@@ -149,6 +169,7 @@ async function ensureLoyaltySettingsSchema(sql: any, tenantId: string) {
     await sql`CREATE INDEX IF NOT EXISTS idx_gift_card_txn_tenant_code ON gift_card_transactions(tenant_id, code)`
     await sql`CREATE INDEX IF NOT EXISTS idx_loyalty_txn_tenant_customer_id ON loyalty_transactions(tenant_id, customer_id)`
     await sql`CREATE INDEX IF NOT EXISTS idx_loyalty_txn_tenant_created_at ON loyalty_transactions(tenant_id, created_at)`
+    await sql`CREATE INDEX IF NOT EXISTS idx_loyalty_tiers_tenant_id ON loyalty_tiers(tenant_id)`
   } catch (error: any) {
   }
 }
@@ -267,8 +288,9 @@ export async function getLoyaltyStats(tenantId?: string): Promise<LoyaltyStats> 
       sql`
         SELECT COALESCE(SUM(points), 0)::bigint AS s
         FROM loyalty_transactions
-        WHERE transaction_type = 'earned'
-        AND tenant_id = ${resolvedTenantId}
+        WHERE (transaction_type IN ('earned', 'bonus', 'refund', 'referral', 'welcome') OR points > 0)
+          AND transaction_type != 'redeemed'
+          AND tenant_id = ${resolvedTenantId}
       `,
       sql`
         SELECT COALESCE(SUM(amount), 0)::numeric AS s
@@ -302,10 +324,10 @@ export async function getLoyaltyDashboardStats(tenantId?: string): Promise<Loyal
     try {
       const stats = await sql`
         SELECT
-          COALESCE(SUM(CASE WHEN transaction_type = 'earned' OR points > 0 THEN ABS(points) ELSE 0 END), 0) AS total_points_issued,
+          COALESCE(SUM(CASE WHEN transaction_type IN ('earned', 'bonus', 'refund', 'referral', 'welcome') OR points > 0 THEN ABS(points) ELSE 0 END), 0) AS total_points_issued,
           COALESCE(SUM(CASE WHEN transaction_type = 'redeemed' OR points < 0 THEN ABS(points) ELSE 0 END), 0) AS total_points_redeemed,
           COUNT(DISTINCT customer_id) AS active_loyalty_members,
-          COALESCE(SUM(CASE WHEN (transaction_type = 'earned' OR points > 0) AND expires_at IS NOT NULL AND expires_at::timestamptz > NOW() AND expires_at::timestamptz <= NOW() + INTERVAL '7 days' THEN ABS(points) ELSE 0 END), 0) AS points_expiring_this_week
+          COALESCE(SUM(CASE WHEN (transaction_type IN ('earned', 'bonus', 'refund', 'referral', 'welcome') OR points > 0) AND expires_at IS NOT NULL AND expires_at::timestamptz > NOW() AND expires_at::timestamptz <= NOW() + INTERVAL '7 days' THEN ABS(points) ELSE 0 END), 0) AS points_expiring_this_week
         FROM loyalty_transactions
         WHERE tenant_id = ${resolvedTenantId}
       `
@@ -341,44 +363,91 @@ export async function getCustomerLoyalty(id: string | number, tenantId?: string)
             SELECT points, expires_at,
                    SUM(points) OVER (ORDER BY created_at ASC) as cumulative_earned
             FROM loyalty_transactions
-            WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId} AND transaction_type = 'earned'
+            WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId}
+              AND (transaction_type IN ('earned', 'bonus', 'refund', 'referral', 'welcome') OR points > 0)
+              AND transaction_type != 'redeemed'
           ),
           redeemed AS (
-            SELECT COALESCE(SUM(points), 0) as total_redeemed
+            SELECT COALESCE(SUM(ABS(points)), 0) as total_redeemed
             FROM loyalty_transactions
-            WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId} AND transaction_type = 'redeemed'
+            WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId}
+              AND (transaction_type = 'redeemed' OR points < 0)
           )
           SELECT COALESCE(SUM(
             CASE 
               WHEN cumulative_earned <= (SELECT total_redeemed FROM redeemed) THEN 0
               WHEN cumulative_earned - points < (SELECT total_redeemed FROM redeemed) THEN 
-                   CASE WHEN expires_at::timestamptz < NOW() THEN 0 
+                   CASE WHEN expires_at IS NOT NULL AND expires_at::timestamptz < NOW() THEN 0 
                         ELSE cumulative_earned - (SELECT total_redeemed FROM redeemed) 
                    END
-              ELSE CASE WHEN expires_at::timestamptz < NOW() THEN 0 ELSE points END
+              ELSE CASE WHEN expires_at IS NOT NULL AND expires_at::timestamptz < NOW() THEN 0 ELSE points END
             END
           ), 0)
           FROM earned
         ) AS current_points,
         (
-          SELECT COALESCE(SUM(amount), 0)
-          FROM loyalty_transactions
-          WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId} AND transaction_type = 'earned'
+          SELECT COALESCE(
+            NULLIF((
+              SELECT SUM(total_amount)
+              FROM bookings
+              WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId} AND status IN ('completed', 'confirmed')
+            ), 0),
+            (
+              SELECT SUM(amount)
+              FROM loyalty_transactions
+              WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId} AND transaction_type = 'earned'
+            ),
+            0
+          )
         ) AS lifetime_spending
     `
     
-    if (!result || result.length === 0) {
-      return {
-        customer_id: customerId,
-        current_points: 0,
-        total_redeemed: 0,
+    const currentPoints = Number(result[0]?.current_points || 0)
+    const lifetimeSpending = Number(result[0]?.lifetime_spending || 0)
+
+    // Compute tier
+    let tier = "bronze"
+    let tierName = "Bronze"
+    let earnMultiplier = 1.0
+    let badgeColor = "#CD7F32"
+
+    try {
+      const tiersResult = await sql`
+        SELECT name, min_points, earn_multiplier, badge_color
+        FROM loyalty_tiers
+        WHERE tenant_id = ${resolvedTenantId}
+        ORDER BY min_points DESC
+      `
+      if (tiersResult && tiersResult.length > 0) {
+        const matched = tiersResult.find((t: any) => currentPoints >= Number(t.min_points)) || tiersResult[tiersResult.length - 1]
+        if (matched) {
+          tier = matched.name.toLowerCase()
+          tierName = matched.name
+          earnMultiplier = Number(matched.earn_multiplier) || 1.0
+          badgeColor = matched.badge_color || "#CD7F32"
+        }
+      } else {
+        if (lifetimeSpending >= 100000 || currentPoints >= 5000) {
+          tier = "platinum"; tierName = "Platinum"; earnMultiplier = 2.0; badgeColor = "#E5E4E2";
+        } else if (lifetimeSpending >= 50000 || currentPoints >= 3000) {
+          tier = "gold"; tierName = "Gold"; earnMultiplier = 1.5; badgeColor = "#FFD700";
+        } else if (lifetimeSpending >= 25000 || currentPoints >= 1000) {
+          tier = "silver"; tierName = "Silver"; earnMultiplier = 1.25; badgeColor = "#C0C0C0";
+        }
       }
+    } catch {
+      // fallback
     }
     
     return {
       customer_id: customerId,
-      current_points: Number(result[0]?.current_points || 0),
-      total_redeemed: Number(result[0]?.lifetime_spending || 0),
+      current_points: currentPoints,
+      total_redeemed: lifetimeSpending, // legacy spend proxy
+      lifetime_spending: lifetimeSpending,
+      tier,
+      tier_name: tierName,
+      earn_multiplier: earnMultiplier,
+      badge_color: badgeColor,
     }
   }, tenantId)
 }
@@ -390,21 +459,24 @@ export async function getExpiringSoon(customerId: number, days = 7, tenantId?: s
         SELECT points, expires_at,
                SUM(points) OVER (ORDER BY created_at ASC) as cumulative_earned
         FROM loyalty_transactions
-        WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId} AND transaction_type = 'earned'
+        WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId}
+          AND (transaction_type IN ('earned', 'bonus', 'refund', 'referral', 'welcome') OR points > 0)
+          AND transaction_type != 'redeemed'
       ),
       redeemed AS (
-        SELECT COALESCE(SUM(points), 0) as total_redeemed
+        SELECT COALESCE(SUM(ABS(points)), 0) as total_redeemed
         FROM loyalty_transactions
-        WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId} AND transaction_type = 'redeemed'
+        WHERE customer_id = ${customerId} AND tenant_id = ${resolvedTenantId}
+          AND (transaction_type = 'redeemed' OR points < 0)
       )
       SELECT COALESCE(SUM(
         CASE 
           WHEN cumulative_earned <= (SELECT total_redeemed FROM redeemed) THEN 0
           WHEN cumulative_earned - points < (SELECT total_redeemed FROM redeemed) THEN 
-               CASE WHEN expires_at::timestamptz > NOW() AND expires_at::timestamptz <= NOW() + (${days}::text || ' days')::interval THEN cumulative_earned - (SELECT total_redeemed FROM redeemed)
+               CASE WHEN expires_at IS NOT NULL AND expires_at::timestamptz > NOW() AND expires_at::timestamptz <= NOW() + (${days}::text || ' days')::interval THEN cumulative_earned - (SELECT total_redeemed FROM redeemed)
                     ELSE 0 
                END
-          ELSE CASE WHEN expires_at::timestamptz > NOW() AND expires_at::timestamptz <= NOW() + (${days}::text || ' days')::interval THEN points ELSE 0 END
+          ELSE CASE WHEN expires_at IS NOT NULL AND expires_at::timestamptz > NOW() AND expires_at::timestamptz <= NOW() + (${days}::text || ' days')::interval THEN points ELSE 0 END
         END
       ), 0) AS expiring
       FROM earned
@@ -569,18 +641,21 @@ export interface LoyaltyTier {
   updated_at?: string
 }
 
-export async function getLoyaltyTiers(tenantId?: string) {
+export async function getLoyaltyTiers(tenantId?: string): Promise<LoyaltyTier[]> {
   return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
-    return await sql`
+    await ensureLoyaltySettingsSchema(sql, resolvedTenantId)
+    const rows = await sql`
       SELECT * FROM loyalty_tiers
       WHERE tenant_id = ${resolvedTenantId}
       ORDER BY min_points ASC
     `
+    return (rows || []) as LoyaltyTier[]
   }, tenantId)
 }
 
 export async function createLoyaltyTier(tier: Omit<LoyaltyTier, 'id' | 'tenant_id' | 'created_at' | 'updated_at'>, tenantId?: string) {
   return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
+    await ensureLoyaltySettingsSchema(sql, resolvedTenantId)
     const result = await sql`
       INSERT INTO loyalty_tiers (tenant_id, name, min_points, earn_multiplier, badge_color)
       VALUES (${resolvedTenantId}, ${tier.name}, ${tier.min_points}, ${tier.earn_multiplier}, ${tier.badge_color})
@@ -592,6 +667,7 @@ export async function createLoyaltyTier(tier: Omit<LoyaltyTier, 'id' | 'tenant_i
 
 export async function updateLoyaltyTier(id: number, tier: Partial<LoyaltyTier>, tenantId?: string) {
   return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
+    await ensureLoyaltySettingsSchema(sql, resolvedTenantId)
     const result = await sql`
       UPDATE loyalty_tiers
       SET name = COALESCE(${tier.name ?? null}, name),
@@ -608,6 +684,7 @@ export async function updateLoyaltyTier(id: number, tier: Partial<LoyaltyTier>, 
 
 export async function deleteLoyaltyTier(id: number, tenantId?: string) {
   return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
+    await ensureLoyaltySettingsSchema(sql, resolvedTenantId)
     await sql`
       DELETE FROM loyalty_tiers
       WHERE id = ${id} AND tenant_id = ${resolvedTenantId}
@@ -618,9 +695,34 @@ export async function deleteLoyaltyTier(id: number, tenantId?: string) {
 
 export async function processReferralReward(newCustomerId: number, referrerId: number, tenantId?: string) {
   return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
-    // 500 for referrer, 250 for new customer
-    await adjustLoyaltyPoints(referrerId, 500, "bonus", "Referral reward", resolvedTenantId)
-    await adjustLoyaltyPoints(newCustomerId, 250, "bonus", "Referred bonus", resolvedTenantId)
+    await ensureLoyaltySettingsSchema(sql, resolvedTenantId)
+    const settings = await readSettings(sql, resolvedTenantId)
+    const refBonus = Number(settings.referral_bonus) > 0 ? Number(settings.referral_bonus) : 50
+    const welcomeBonus = Number(settings.welcome_bonus) > 0 ? Number(settings.welcome_bonus) : 25
+    await adjustLoyaltyPoints(referrerId, refBonus, "bonus", "Referral reward", resolvedTenantId)
+    await adjustLoyaltyPoints(newCustomerId, welcomeBonus, "bonus", "Referred bonus", resolvedTenantId)
     return { success: true }
+  }, tenantId)
+}
+
+export async function expireOutdatedPoints(tenantId?: string) {
+  return await withTenantAuth(async ({ sql, tenantId: resolvedTenantId }) => {
+    await ensureLoyaltySettingsSchema(sql, resolvedTenantId)
+    const expiredSummary = await sql`
+      SELECT 
+        COUNT(*)::int as expired_tx_count,
+        COALESCE(SUM(points), 0)::numeric as expired_points
+      FROM loyalty_transactions
+      WHERE tenant_id = ${resolvedTenantId}
+        AND (transaction_type IN ('earned', 'bonus', 'refund', 'referral', 'welcome') OR points > 0)
+        AND transaction_type != 'redeemed'
+        AND expires_at IS NOT NULL
+        AND expires_at < NOW()
+    `
+    return {
+      success: true,
+      expiredTransactions: Number(expiredSummary[0]?.expired_tx_count || 0),
+      expiredPoints: Number(expiredSummary[0]?.expired_points || 0),
+    }
   }, tenantId)
 }

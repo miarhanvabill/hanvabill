@@ -6,23 +6,24 @@ export async function GET() {
     try {
       // Fetch tenant-scoped staff data with proper tenant isolation
       const staffMembers = await sql`
-        SELECT id, full_name, email, phone_number, role, is_active, created_at
+        SELECT id, name, email, phone, role, department, is_active, created_at
         FROM staff
         WHERE is_active = true AND tenant_id = ${tenantId}
-        ORDER BY full_name
+        ORDER BY name
       `
 
       // Generate CSV header
-      const csvHeader = "id,full_name,email,phone_number,role,is_active,created_at"
+      const csvHeader = "id,name,email,phone,role,department,is_active,created_at"
       
       // Map data to CSV rows, escaping as needed
-      const csvRows = staffMembers.map(s => {
+      const csvRows = staffMembers.map((s: any) => {
         return [
           s.id,
-          s.full_name,
+          s.name,
           s.email,
-          s.phone_number,
+          s.phone,
           s.role,
+          s.department,
           s.is_active ? "true" : "false",
           s.created_at,
         ]

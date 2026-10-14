@@ -29,7 +29,7 @@ export async function GET() {
           name
       `
 
-      const formattedInventory = inventory.map((item) => ({
+      const formattedInventory = inventory.map((item: any) => ({
         ...item,
         item_name: item.name,
         current_stock: Number(item.stock_quantity) || 0,

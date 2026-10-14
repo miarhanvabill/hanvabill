@@ -34,6 +34,18 @@ export async function getInternalTenantId(tenantKey: string, orgId?: string): Pr
       }
       return idStr;
     }
+
+    // 1b. Check by mini_website_settings custom_url_slug
+    const byMiniWebsiteSlug = await baseSql`
+      SELECT tenant_id as id FROM mini_website_settings 
+      WHERE (LOWER(custom_url_slug) = LOWER(${tenantKey}) OR custom_url_slug = ${tenantKey})
+      LIMIT 1
+    `.catch(() => [])
+    if (byMiniWebsiteSlug.length > 0) {
+      const idStr = String(byMiniWebsiteSlug[0].id);
+      tenantIdCache.set(cacheKey, idStr);
+      return idStr;
+    }
     
     // 2. If not found by slug, try by tenant_key
     const byKeyResult = await baseSql`
@@ -72,7 +84,28 @@ export async function getInternalTenantId(tenantKey: string, orgId?: string): Pr
       return idStr;
     }
 
-    // 5. Fallback: first active tenant in DB
+    // 5. If tenantKey is a specific salon identifier (not 'default' and not '1'),
+    // auto-provision a new tenant record to guarantee multi-tenant data isolation.
+    if (tenantKey && tenantKey !== "default" && tenantKey !== "1") {
+      // Ensure columns exist on tenants table
+      await baseSql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS slug VARCHAR(255);`.catch(() => {});
+      await baseSql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tenant_key VARCHAR(255);`.catch(() => {});
+      await baseSql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active';`.catch(() => {});
+
+      const createdTenant = await baseSql`
+        INSERT INTO tenants (name, slug, tenant_key, status)
+        VALUES (${tenantKey}, ${tenantKey}, ${orgId || tenantKey}, 'active')
+        RETURNING id
+      `.catch(() => []);
+
+      if (createdTenant.length > 0) {
+        const idStr = String(createdTenant[0].id);
+        tenantIdCache.set(cacheKey, idStr);
+        return idStr;
+      }
+    }
+
+    // 6. Fallback: only for 'default' or unauthenticated local dev requests, use first active tenant
     const fallbackActive = await baseSql`
       SELECT id FROM tenants WHERE LOWER(status) = 'active' ORDER BY id ASC LIMIT 1
     `.catch(() => [])
@@ -82,7 +115,7 @@ export async function getInternalTenantId(tenantKey: string, orgId?: string): Pr
       return idStr;
     }
 
-    // 6. Fallback: ANY tenant in DB
+    // 7. Fallback: ANY tenant in DB
     const fallbackAny = await baseSql`
       SELECT id FROM tenants ORDER BY id ASC LIMIT 1
     `.catch(() => [])
@@ -92,7 +125,7 @@ export async function getInternalTenantId(tenantKey: string, orgId?: string): Pr
       return idStr;
     }
 
-    // 7. Ultimate fallback: create default tenant row if table is completely empty
+    // 8. Ultimate fallback: create default tenant row if table is completely empty
     const createdTenant = await baseSql`
       INSERT INTO tenants (name, slug, tenant_key, status)
       VALUES ('Default Business', ${tenantKey}, ${tenantKey}, 'active')

@@ -18,15 +18,20 @@ export interface AttendanceRecord {
 export async function getAttendance(date: string) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      // Ensure updated_at column exists
+      await sql`
+        ALTER TABLE attendance ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      `.catch(() => {})
+
       const attendance = await sql`
         SELECT 
           a.*,
           s.name as staff_name,
           CASE 
-            WHEN a.check_in_time IS NOT NULL AND a.check_out_time IS NOT NULL 
+            WHEN a.check_in_time IS NOT NULL AND a.check_out_time IS NOT NULL AND a.check_out_time::time >= a.check_in_time::time
             THEN CONCAT(
-              EXTRACT(HOUR FROM (a.check_out_time::time - a.check_in_time::time)), 'h ',
-              EXTRACT(MINUTE FROM (a.check_out_time::time - a.check_in_time::time)), 'm'
+              FLOOR(EXTRACT(EPOCH FROM (a.check_out_time::time - a.check_in_time::time)) / 3600), 'h ',
+              FLOOR(MOD(EXTRACT(EPOCH FROM (a.check_out_time::time - a.check_in_time::time)), 3600) / 60), 'm'
             )
             ELSE NULL
           END as working_hours
@@ -38,36 +43,7 @@ export async function getAttendance(date: string) {
       return attendance as AttendanceRecord[]
     } catch (error) {
       console.error("Error fetching attendance:", error)
-      // Return sample data when database is not available
-      return [
-        {
-          id: 1,
-          staff_id: 1,
-          staff_name: "Aamir",
-          date: date,
-          check_in_time: "09:00",
-          check_out_time: "18:00",
-          status: "present",
-          working_hours: "9h 0m",
-        },
-        {
-          id: 2,
-          staff_id: 2,
-          staff_name: "Saleem",
-          date: date,
-          check_in_time: "09:15",
-          check_out_time: "18:00",
-          status: "late",
-          working_hours: "8h 45m",
-        },
-        {
-          id: 3,
-          staff_id: 3,
-          staff_name: "Aman",
-          date: date,
-          status: "absent",
-        },
-      ] as AttendanceRecord[]
+      return [] as AttendanceRecord[]
     }
   })
 }
@@ -82,13 +58,30 @@ export async function markAttendance(data: {
 }) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      // Check if staff exists for this tenant
+      // Check if staff exists for this tenant and get shift start
       const staffCheck = await sql`
-        SELECT id FROM staff WHERE id = ${data.staffId} AND tenant_id = ${tenantId}
+        SELECT id, shift_start::text, shift_end::text 
+        FROM staff 
+        WHERE id = ${data.staffId} AND tenant_id = ${tenantId}
       `
 
       if (staffCheck.length === 0) {
         return { success: false, message: "Staff member not found for this tenant" }
+      }
+
+      // Ensure updated_at column exists
+      await sql`
+        ALTER TABLE attendance ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      `.catch(() => {})
+
+      // Automatic late detection if checking in and status is 'present'
+      let finalStatus = data.status
+      if (data.checkInTime && data.status === "present" && staffCheck[0]?.shift_start) {
+        const shiftStart = staffCheck[0].shift_start.slice(0, 5) // HH:MM
+        // Grace period of 10 minutes can be applied or direct comparison
+        if (data.checkInTime > shiftStart) {
+          finalStatus = "late"
+        }
       }
 
       // Manually check if today's attendance exists to avoid relying on ON CONFLICT constraints
@@ -103,7 +96,7 @@ export async function markAttendance(data: {
         // Update existing record
         await sql`
           UPDATE attendance SET 
-            status = ${data.status},
+            status = ${finalStatus},
             check_in_time = COALESCE(${data.checkInTime || null}, check_in_time),
             check_out_time = COALESCE(${data.checkOutTime || null}, check_out_time),
             notes = COALESCE(${data.notes || null}, notes),
@@ -117,7 +110,7 @@ export async function markAttendance(data: {
             tenant_id, staff_id, date, status, check_in_time, check_out_time, notes
           )
           VALUES (
-            ${tenantId}, ${data.staffId}, ${data.date}, ${data.status}, 
+            ${tenantId}, ${data.staffId}, ${data.date}, ${finalStatus}, 
             ${data.checkInTime || null}, ${data.checkOutTime || null}, ${data.notes || null}
           )
         `
@@ -125,7 +118,7 @@ export async function markAttendance(data: {
 
       revalidatePath("/attendance")
       revalidatePath("/")
-      return { success: true, message: "Attendance marked successfully!" }
+      return { success: true, message: `Attendance marked as ${finalStatus} successfully!` }
     } catch (error) {
       console.error("Error marking attendance:", error)
       return { 
@@ -218,6 +211,11 @@ export async function bulkMarkAttendance(records: {
 }[]) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      // Ensure updated_at column exists
+      await sql`
+        ALTER TABLE attendance ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      `.catch(() => {})
+
       for (const record of records) {
         // Check if staff exists for this tenant
         const staffCheck = await sql`

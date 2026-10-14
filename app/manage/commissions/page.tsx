@@ -44,11 +44,11 @@ export default function CommissionProfilesPage() {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
-    commission_type: "percentage" as const,
+    commission_type: "percentage" as "percentage" | "fixed" | "tiered",
     base_rate: 0,
     min_threshold: 0,
     max_threshold: 0,
-    applies_to: "both" as const,
+    applies_to: "both" as "services" | "products" | "both",
     is_active: true,
   })
 
@@ -84,7 +84,10 @@ export default function CommissionProfilesPage() {
   const handleCreateProfile = async () => {
     try {
       console.log("[v0] Creating commission profile with data:", formData)
-      const result = await createCommissionProfile(formData)
+      const result = await createCommissionProfile({
+        ...formData,
+        tiers: formData.commission_type === "tiered" ? tierFormData : undefined,
+      })
 
       if (result.success && result.data) {
         setProfiles([...profiles, result.data])
@@ -116,7 +119,10 @@ export default function CommissionProfilesPage() {
 
     try {
       console.log("[v0] Updating commission profile:", selectedProfile.id, formData)
-      const result = await updateCommissionProfile(selectedProfile.id, formData)
+      const result = await updateCommissionProfile(selectedProfile.id, {
+        ...formData,
+        tiers: formData.commission_type === "tiered" ? tierFormData : undefined,
+      })
 
       if (result.success && result.data) {
         setProfiles(profiles.map((p) => (p.id === selectedProfile.id ? result.data! : p)))
@@ -186,6 +192,19 @@ export default function CommissionProfilesPage() {
       applies_to: profile.applies_to,
       is_active: profile.is_active,
     })
+    if (profile.tiers && profile.tiers.length > 0) {
+      setTierFormData(profile.tiers.map(t => ({
+        min_amount: t.min_amount,
+        max_amount: t.max_amount,
+        rate: t.rate,
+      })))
+    } else {
+      setTierFormData([
+        { min_amount: 0, max_amount: 1000, rate: 5 },
+        { min_amount: 1000, max_amount: 5000, rate: 10 },
+        { min_amount: 5000, max_amount: 999999, rate: 15 },
+      ])
+    }
     setIsEditDialogOpen(true)
   }
 
@@ -200,6 +219,11 @@ export default function CommissionProfilesPage() {
       applies_to: "both",
       is_active: true,
     })
+    setTierFormData([
+      { min_amount: 0, max_amount: 1000, rate: 5 },
+      { min_amount: 1000, max_amount: 5000, rate: 10 },
+      { min_amount: 5000, max_amount: 999999, rate: 15 },
+    ])
   }
 
   const filteredProfiles = profiles.filter((profile) => {
@@ -643,6 +667,64 @@ export default function CommissionProfilesPage() {
                     }
                     placeholder="0"
                   />
+                </div>
+              </div>
+            )}
+
+            {formData.commission_type === "tiered" && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <Label>Commission Tiers</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={addTier}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Tier
+                  </Button>
+                </div>
+                <div className="space-y-3 max-h-60 overflow-y-auto">
+                  {tierFormData.map((tier, index) => (
+                    <div key={index} className="flex items-center gap-3 p-3 border rounded-lg">
+                      <div className="flex-1 grid grid-cols-3 gap-3">
+                        <div>
+                          <Label className="text-xs">Min Amount (₹)</Label>
+                          <Input
+                            type="number"
+                            value={tier.min_amount}
+                            onChange={(e) =>
+                              updateTier(index, "min_amount", Number.parseFloat(e.target.value) || 0)
+                            }
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Max Amount (₹)</Label>
+                          <Input
+                            type="number"
+                            value={tier.max_amount}
+                            onChange={(e) =>
+                              updateTier(index, "max_amount", Number.parseFloat(e.target.value) || 0)
+                            }
+                            placeholder="1000"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Rate (%)</Label>
+                          <Input
+                            type="number"
+                            value={tier.rate}
+                            onChange={(e) =>
+                              updateTier(index, "rate", Number.parseFloat(e.target.value) || 0)
+                            }
+                            placeholder="10"
+                          />
+                        </div>
+                      </div>
+                      {tierFormData.length > 1 && (
+                        <Button type="button" variant="outline" size="sm" onClick={() => removeTier(index)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

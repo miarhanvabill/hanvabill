@@ -53,7 +53,7 @@ export async function GET() {
 
       console.log("[v0] Calculated stats:", stats[0])
 
-      const formattedProducts = products.map((product) => ({
+      const formattedProducts = products.map((product: any) => ({
         ...product,
         id: Number(product.id),
         current_stock: Number(product.current_stock) || 0,

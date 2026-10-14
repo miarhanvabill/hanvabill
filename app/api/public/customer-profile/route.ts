@@ -66,23 +66,52 @@ export async function GET(req: NextRequest) {
 
     // Active memberships
     const memberships = await sql`
-      SELECT cm.id, m.name, m.description, cm.start_date, cm.end_date, cm.status
+      SELECT cm.id, mp.name, mp.description, cm.start_date, cm.end_date, cm.status
       FROM customer_memberships cm
-      JOIN memberships m ON cm.membership_id = m.id AND m.tenant_id = ${tenantId}
+      JOIN membership_plans mp ON (cm.membership_plan_id = mp.id)
       WHERE cm.customer_id = ${customerId} AND cm.tenant_id = ${tenantId}
         AND cm.status = 'active'
         AND (cm.end_date IS NULL OR cm.end_date >= CURRENT_DATE)
-    `.catch(() => [])
+    `.catch(async () => {
+      return await sql`
+        SELECT cm.id, mp.name, mp.description, cm.start_date, cm.end_date, cm.status
+        FROM customer_memberships cm
+        JOIN membership_plans mp ON (cm.plan_id = mp.id)
+        WHERE cm.customer_id = ${customerId} AND cm.tenant_id = ${tenantId}
+          AND cm.status = 'active'
+          AND (cm.end_date IS NULL OR cm.end_date >= CURRENT_DATE)
+      `.catch(() => [])
+    })
 
     // Active packages
-    const packages = await sql`
-      SELECT cp.id, p.name, cp.sessions_remaining, cp.expiry_date
+    const packageRows = await sql`
+      SELECT cp.id, sp.name, cp.remaining_services, cp.total_services, cp.expires_at
       FROM customer_packages cp
-      JOIN packages p ON cp.package_id = p.id AND p.tenant_id = ${tenantId}
+      JOIN service_packages sp ON cp.package_id = sp.id
       WHERE cp.customer_id = ${customerId} AND cp.tenant_id = ${tenantId}
-        AND cp.sessions_remaining > 0
-        AND (cp.expiry_date IS NULL OR cp.expiry_date >= CURRENT_DATE)
+        AND cp.is_active = true
+        AND (cp.expires_at IS NULL OR cp.expires_at >= CURRENT_DATE)
     `.catch(() => [])
+
+    const packages = packageRows.map((p: any) => {
+      let sessions_remaining = 0;
+      try {
+        const rem = typeof p.remaining_services === 'string' ? JSON.parse(p.remaining_services) : p.remaining_services;
+        if (Array.isArray(rem)) {
+          sessions_remaining = rem.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 1), 0);
+        } else if (typeof rem === 'number') {
+          sessions_remaining = rem;
+        } else if (rem && typeof rem === 'object') {
+          sessions_remaining = Object.values(rem).reduce((sum: number, val: any) => sum + (Number(val) || 0), 0);
+        }
+      } catch (e) {}
+      return {
+        id: p.id,
+        name: p.name,
+        sessions_remaining: sessions_remaining > 0 ? sessions_remaining : 1,
+        expiry_date: p.expires_at
+      };
+    })
 
     // Wallet balance
     const walletRows = await sql`

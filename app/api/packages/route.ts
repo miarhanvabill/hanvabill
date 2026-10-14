@@ -16,7 +16,7 @@ export async function GET() {
           WHERE cp.package_id = sp.id AND cp.tenant_id = ${tenantId}
         ) as sales_count
         FROM service_packages sp
-        WHERE sp.is_active = 'true' 
+        WHERE (sp.is_active = true OR sp.is_active = 'true')
         AND sp.tenant_id = ${tenantId}
         ORDER BY sales_count DESC, sp.name
       `
@@ -25,14 +25,14 @@ export async function GET() {
       const services = await sql`
         SELECT id, name FROM services WHERE tenant_id = ${tenantId}
       `
-      const serviceMap = new Map(services.map(s => [s.id, s.name]))
+      const serviceMap = new Map(services.map((s: any) => [s.id, s.name]))
       
-      const enrichedPackages = packages.map(pkg => {
+      const enrichedPackages = packages.map((pkg: any) => {
         let features: string[] = []
         try {
           const serviceIds = typeof pkg.services === 'string' ? JSON.parse(pkg.services) : pkg.services || [];
           if (Array.isArray(serviceIds)) {
-            features = serviceIds.map(id => serviceMap.get(id) || `Service #${id}`)
+            features = serviceIds.map((id: number) => String(serviceMap.get(id) || `Service #${id}`))
           }
         } catch(e) {
           console.error("Failed to parse package services:", e)

@@ -1,9 +1,9 @@
-// app/actions/giftscard.ts
+// app/actions/gift-cards.ts
 "use server"
 
-import { withTenantAuth } from '@/lib/withTenantAuth';
+import { withTenantAuth } from "@/lib/withTenantAuth"
 
-interface GiftCard {
+export interface GiftCard {
   id: number
   code: string
   amount: number
@@ -15,7 +15,7 @@ interface GiftCard {
   customer_phone?: string
 }
 
-interface GiftCardStats {
+export interface GiftCardStats {
   total_cards: number
   total_value: number
   redeemed_value: number
@@ -25,6 +25,15 @@ interface GiftCardStats {
 export async function getGiftCards(): Promise<GiftCard[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      // Auto-expire outdated gift cards
+      await sql`
+        UPDATE gift_cards 
+        SET status = 'expired', updated_at = NOW()
+        WHERE tenant_id = ${tenantId} 
+          AND status = 'active' 
+          AND expires_at < NOW()
+      `.catch(() => {})
+
       const result = await sql`
         SELECT * FROM gift_cards 
         WHERE tenant_id = ${tenantId}
@@ -35,7 +44,7 @@ export async function getGiftCards(): Promise<GiftCard[]> {
       console.error("Error fetching gift cards:", error)
       throw new Error("Failed to fetch gift cards")
     }
-  });
+  })
 }
 
 export async function createGiftCard(formData: FormData) {
@@ -45,6 +54,10 @@ export async function createGiftCard(formData: FormData) {
       const customerName = formData.get("customerName") as string
       const customerPhone = formData.get("customerPhone") as string
       const expiryDays = Number.parseInt(formData.get("expiryDays") as string) || 365
+
+      if (!amount || isNaN(amount) || amount <= 0) {
+        return { success: false, error: "Valid amount is required" }
+      }
 
       // Generate unique gift card code
       const code = "GC" + Date.now().toString().slice(-8) + Math.random().toString(36).substr(2, 4).toUpperCase()
@@ -62,12 +75,12 @@ export async function createGiftCard(formData: FormData) {
         )
       `
 
-      return { success: true }
+      return { success: true, code }
     } catch (error) {
       console.error("Error creating gift card:", error)
       return { success: false, error: "Failed to create gift card" }
     }
-  });
+  })
 }
 
 export async function getGiftCardStats(): Promise<GiftCardStats> {
@@ -98,7 +111,7 @@ export async function getGiftCardStats(): Promise<GiftCardStats> {
         active_cards: 0,
       }
     }
-  });
+  })
 }
 
 export async function getGiftCardByCode(code: string): Promise<{
@@ -121,12 +134,18 @@ export async function getGiftCardByCode(code: string): Promise<{
 
       const card = rows[0] as GiftCard
 
-      if (card.status !== "active") {
-        return { success: false, error: "Gift card is not active" }
+      if (card.expires_at && new Date(card.expires_at) < new Date()) {
+        if (card.status === "active") {
+          await sql`
+            UPDATE gift_cards SET status = 'expired', updated_at = NOW()
+            WHERE id = ${card.id} AND tenant_id = ${tenantId}
+          `.catch(() => {})
+        }
+        return { success: false, error: "Gift card has expired" }
       }
 
-      if (card.expires_at && new Date(card.expires_at) < new Date()) {
-        return { success: false, error: "Gift card has expired" }
+      if (card.status !== "active") {
+        return { success: false, error: `Gift card is ${card.status}` }
       }
 
       if (Number(card.balance) <= 0) {
@@ -138,5 +157,55 @@ export async function getGiftCardByCode(code: string): Promise<{
       console.error("getGiftCardByCode error:", error)
       return { success: false, error: error.message || "Failed to fetch gift card" }
     }
-  });
+  })
+}
+
+export async function deductGiftCardBalance(
+  code: string,
+  amount: number
+): Promise<{ success: boolean; remaining_balance?: number; error?: string }> {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const check = await getGiftCardByCode(code)
+      if (!check.success || !check.card) {
+        return { success: false, error: check.error || "Invalid gift card" }
+      }
+
+      const card = check.card
+      if (Number(card.balance) < amount) {
+        return { success: false, error: `Insufficient gift card balance. Available: ₹${card.balance}` }
+      }
+
+      const newBalance = Math.round((Number(card.balance) - amount) * 100) / 100
+      const newStatus = newBalance <= 0 ? "used" : "active"
+
+      await sql`
+        UPDATE gift_cards 
+        SET balance = ${newBalance},
+            status = ${newStatus},
+            updated_at = NOW()
+        WHERE id = ${card.id} AND tenant_id = ${tenantId}
+      `
+
+      return { success: true, remaining_balance: newBalance }
+    } catch (error: any) {
+      console.error("deductGiftCardBalance error:", error)
+      return { success: false, error: error?.message || "Failed to deduct gift card balance" }
+    }
+  })
+}
+
+export async function activateGiftCard(id: number): Promise<{ success: boolean; error?: string }> {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      await sql`
+        UPDATE gift_cards 
+        SET status = 'active', updated_at = NOW()
+        WHERE id = ${id} AND tenant_id = ${tenantId}
+      `
+      return { success: true }
+    } catch (error: any) {
+      return { success: false, error: error?.message || "Failed to activate gift card" }
+    }
+  })
 }

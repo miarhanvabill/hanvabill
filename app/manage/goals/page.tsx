@@ -37,6 +37,7 @@ import {
   WifiOff,
 } from "lucide-react"
 import { getGoals, createGoal, updateGoal, deleteGoal, type Goal } from "@/app/actions/goals"
+import { getStaff } from "@/app/actions/staff"
 
 interface StaffMember {
   id: string
@@ -66,115 +67,50 @@ export default function StaffRevenueGoalsPage() {
   // Form state
   const [formData, setFormData] = useState({
     staff_id: "",
-    goal_type: "revenue" as const,
+    goal_type: "revenue" as "revenue" | "services" | "customers",
     target_value: 0,
-    period_type: "monthly" as const,
+    period_type: "monthly" as "daily" | "weekly" | "monthly" | "yearly",
     start_date: "",
     end_date: "",
     reward_amount: 0,
+    description: "",
   })
 
-  // Real-time staff fetching function
+  // Real-time staff fetching function using server action
   const fetchStaffMembers = useCallback(async () => {
     try {
       console.log("🔄 Fetching staff members...")
       setStaffLoading(true)
 
-      const response = await fetch("/api/staff", {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        cache: "no-store", // Ensure fresh data
-      })
+      const staffData = await getStaff()
+      if (Array.isArray(staffData)) {
+        const activeStaff: StaffMember[] = staffData
+          .filter((s) => s.is_active)
+          .map((s) => ({
+            id: String(s.id),
+            name: s.name,
+            role: s.role || "Staff",
+            email: s.email || undefined,
+            phone: s.phone || undefined,
+            is_active: Boolean(s.is_active),
+            created_at: s.created_at || new Date().toISOString(),
+            updated_at: s.updated_at || new Date().toISOString(),
+          }))
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
-      console.log("✅ Staff data received:", data)
-
-      if (data.success && Array.isArray(data.staff)) {
-        const activeStaff = data.staff.filter((staff: StaffMember) => staff.is_active)
         setStaffMembers(activeStaff)
         setLastUpdated(new Date())
         setIsOnline(true)
         console.log(`📊 Updated staff list: ${activeStaff.length} active members`)
       } else {
-        console.warn("⚠️ Invalid staff data format:", data)
-        // Fallback to mock data if API fails
-        const mockStaff: StaffMember[] = [
-          {
-            id: "1",
-            name: "Sarah Johnson",
-            role: "Senior Stylist",
-            email: "sarah@hanva.in",
-            phone: "+1234567890",
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          {
-            id: "2",
-            name: "Mike Chen",
-            role: "Hair Colorist",
-            email: "mike@hanva.in",
-            phone: "+1234567891",
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          {
-            id: "3",
-            name: "Emma Davis",
-            role: "Nail Technician",
-            email: "emma@hanva.in",
-            phone: "+1234567892",
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          {
-            id: "4",
-            name: "Alex Rodriguez",
-            role: "Massage Therapist",
-            email: "alex@hanva.in",
-            phone: "+1234567893",
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-          {
-            id: "5",
-            name: "Lisa Thompson",
-            role: "Esthetician",
-            email: "lisa@hanva.in",
-            phone: "+1234567894",
-            is_active: true,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-        ]
-        setStaffMembers(mockStaff)
-        console.log("🔄 Using fallback mock data")
+        setStaffMembers([])
       }
-    } catch (error) {
-      console.error("❌ Error fetching staff:", error)
-      setIsOnline(false)
-
-      // Show error toast only if we don't have any staff data
-      if (staffMembers.length === 0) {
-        toast({
-          title: "Connection Issue",
-          description: "Unable to fetch latest staff data. Using cached data.",
-          variant: "destructive",
-        })
-      }
+    } catch (err) {
+      console.error("Error loading staff members for goals:", err)
+      setStaffMembers([])
     } finally {
       setStaffLoading(false)
     }
-  }, [staffMembers.length])
+  }, [])
 
   // Real-time polling setup
   useEffect(() => {
@@ -276,6 +212,7 @@ export default function StaffRevenueGoalsPage() {
         start_date: formData.start_date,
         end_date: formData.end_date,
         reward_amount: formData.reward_amount,
+        description: formData.description,
       })
 
       if (result.success) {
@@ -322,6 +259,7 @@ export default function StaffRevenueGoalsPage() {
         start_date: formData.start_date,
         end_date: formData.end_date,
         reward_amount: formData.reward_amount,
+        description: formData.description,
       })
 
       if (result.success) {
@@ -394,6 +332,7 @@ export default function StaffRevenueGoalsPage() {
       start_date: goal.start_date,
       end_date: goal.end_date,
       reward_amount: goal.reward_amount,
+      description: goal.description || "",
     })
     setIsEditDialogOpen(true)
   }
@@ -407,6 +346,7 @@ export default function StaffRevenueGoalsPage() {
       start_date: "",
       end_date: "",
       reward_amount: 0,
+      description: "",
     })
   }
 

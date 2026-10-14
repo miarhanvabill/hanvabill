@@ -18,15 +18,19 @@ import {
   closeRegister,
   payIn,
   payOut,
+  getShiftHistory,
   type CashRegister,
   type CashTransaction,
 } from "@/app/actions/cash-registers"
 import { toast } from "sonner"
 import { format } from "date-fns"
 
+const DENOMINATIONS = [500, 200, 100, 50, 20, 10, 5, 2, 1] as const
+
 export default function CashRegistersPage() {
   const [registers, setRegisters] = useState<CashRegister[]>([])
   const [transactions, setTransactions] = useState<CashTransaction[]>([])
+  const [shiftHistory, setShiftHistory] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   // Modals state
@@ -36,6 +40,18 @@ export default function CashRegistersPage() {
   const [shiftMode, setShiftMode] = useState<"open" | "close">("open")
   const [shiftAmount, setShiftAmount] = useState("")
   const [shiftNotes, setShiftNotes] = useState("")
+  const [showDenominations, setShowDenominations] = useState(false)
+  const [denomCounts, setDenomCounts] = useState<Record<number, number>>({
+    500: 0,
+    200: 0,
+    100: 0,
+    50: 0,
+    20: 0,
+    10: 0,
+    5: 0,
+    2: 0,
+    1: 0,
+  })
 
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false)
   const [transactionType, setTransactionType] = useState<"cash_in" | "cash_out">("cash_in")
@@ -48,15 +64,27 @@ export default function CashRegistersPage() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const data = await getCashRegisters()
+      const [data, shifts] = await Promise.all([
+        getCashRegisters(),
+        getShiftHistory(),
+      ])
       setRegisters(data.registers)
       setTransactions(data.transactions)
+      setShiftHistory(shifts)
     } catch (error) {
       toast.error("Failed to load cash registers")
       console.error(error)
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleDenomChange = (denom: number, valueStr: string) => {
+    const count = parseInt(valueStr, 10) || 0
+    const updated = { ...denomCounts, [denom]: Math.max(0, count) }
+    setDenomCounts(updated)
+    const total = Object.entries(updated).reduce((acc, [d, c]) => acc + Number(d) * Number(c), 0)
+    setShiftAmount(total.toString())
   }
 
   const handleShiftAction = async () => {
@@ -69,9 +97,9 @@ export default function CashRegistersPage() {
       const amount = Number.parseFloat(shiftAmount)
       let result;
       if (shiftMode === "open") {
-        result = await openRegister(activeRegisterId, amount, shiftNotes)
+        result = await openRegister(activeRegisterId, amount, shiftNotes, showDenominations ? denomCounts : undefined)
       } else {
-        result = await closeRegister(activeRegisterId, amount, shiftNotes)
+        result = await closeRegister(activeRegisterId, amount, shiftNotes, showDenominations ? denomCounts : undefined)
       }
 
       if (result.success) {
@@ -79,6 +107,8 @@ export default function CashRegistersPage() {
         setIsShiftModalOpen(false)
         setShiftAmount("")
         setShiftNotes("")
+        setShowDenominations(false)
+        setDenomCounts({ 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 })
         loadData()
       } else {
         toast.error(result.message)
@@ -198,6 +228,9 @@ export default function CashRegistersPage() {
                 <TabsTrigger value="transactions" className="data-[state=active]:bg-slate-100">
                   Transaction Log
                 </TabsTrigger>
+                <TabsTrigger value="history" className="data-[state=active]:bg-slate-100">
+                  Shift History
+                </TabsTrigger>
               </TabsList>
             </div>
 
@@ -288,6 +321,9 @@ export default function CashRegistersPage() {
                                 setActiveRegisterId(register.id)
                                 setShiftMode("close")
                                 setShiftAmount(register.current_balance.toString())
+                                setShowDenominations(false)
+                                setDenomCounts({ 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 })
+                                setShiftNotes("")
                                 setIsShiftModalOpen(true)
                               }}
                             >
@@ -302,6 +338,9 @@ export default function CashRegistersPage() {
                               setActiveRegisterId(register.id)
                               setShiftMode("open")
                               setShiftAmount("0")
+                              setShowDenominations(false)
+                              setDenomCounts({ 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 })
+                              setShiftNotes("")
                               setIsShiftModalOpen(true)
                             }}
                           >
@@ -366,6 +405,78 @@ export default function CashRegistersPage() {
                 </div>
               </Card>
             </TabsContent>
+
+            <TabsContent value="history" className="outline-none">
+              <Card className="border-none shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs text-slate-500 uppercase bg-slate-50/50 border-b">
+                      <tr>
+                        <th className="px-6 py-4 font-medium">Register</th>
+                        <th className="px-6 py-4 font-medium">Opened At</th>
+                        <th className="px-6 py-4 font-medium">Closed At</th>
+                        <th className="px-6 py-4 font-medium text-right">Opening Float</th>
+                        <th className="px-6 py-4 font-medium text-right">Expected</th>
+                        <th className="px-6 py-4 font-medium text-right">Counted</th>
+                        <th className="px-6 py-4 font-medium text-right">Variance</th>
+                        <th className="px-6 py-4 font-medium">Notes & Breakdown</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {shiftHistory.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="px-6 py-12 text-center text-slate-500">
+                            No closed shift records found
+                          </td>
+                        </tr>
+                      ) : (
+                        shiftHistory.map((s) => (
+                          <tr key={s.id} className="hover:bg-slate-50/50">
+                            <td className="px-6 py-4 font-medium text-slate-900">{s.register_name || `Register #${s.register_id}`}</td>
+                            <td className="px-6 py-4 text-xs text-slate-600">
+                              {s.opened_at ? format(new Date(s.opened_at), "MMM d, yyyy h:mm a") : "--"}
+                            </td>
+                            <td className="px-6 py-4 text-xs text-slate-600">
+                              {s.closed_at ? (
+                                format(new Date(s.closed_at), "MMM d, yyyy h:mm a")
+                              ) : (
+                                <Badge variant="outline" className="text-emerald-600 bg-emerald-50 border-emerald-200">
+                                  Currently Open
+                                </Badge>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-right text-slate-600">{formatCurrency(s.opening_balance)}</td>
+                            <td className="px-6 py-4 text-right text-slate-600">{s.expected_balance !== null ? formatCurrency(s.expected_balance) : "--"}</td>
+                            <td className="px-6 py-4 text-right font-semibold text-slate-900">{s.actual_balance !== null ? formatCurrency(s.actual_balance) : "--"}</td>
+                            <td className="px-6 py-4 text-right">
+                              {s.closed_at ? (
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    s.discrepancy === 0
+                                      ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                                      : s.discrepancy > 0
+                                      ? "text-amber-700 bg-amber-50 border-amber-200"
+                                      : "text-rose-700 bg-rose-50 border-rose-200"
+                                  }
+                                >
+                                  {s.discrepancy >= 0 ? "+" : ""}{formatCurrency(s.discrepancy)}
+                                </Badge>
+                              ) : (
+                                "--"
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-xs text-slate-500 max-w-xs truncate" title={s.notes || ""}>
+                              {s.notes || "--"}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </TabsContent>
           </Tabs>
 
         </div>
@@ -373,20 +484,78 @@ export default function CashRegistersPage() {
 
       {/* Shift Modal (Open/Close) */}
       <Dialog open={isShiftModalOpen} onOpenChange={setIsShiftModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[540px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{shiftMode === "open" ? "Open Register Shift" : "Close Register Shift"}</DialogTitle>
+            <DialogTitle className="text-xl">
+              {shiftMode === "open" ? "Open Register Shift" : "Close Register Shift"}
+            </DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 py-2">
             {shiftMode === "close" && activeRegister && (
-              <div className="bg-slate-50 p-4 rounded-lg flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-600">Expected Balance:</span>
-                <span className="text-lg font-bold">{formatCurrency(activeRegister.current_balance)}</span>
+              <div className="bg-slate-50 p-4 rounded-lg flex items-center justify-between border">
+                <div>
+                  <span className="text-xs font-semibold text-slate-500 uppercase">System Expected Balance</span>
+                  <p className="text-2xl font-bold text-slate-900">{formatCurrency(activeRegister.current_balance)}</p>
+                </div>
+                <Badge variant="outline" className="bg-white px-3 py-1 text-xs">
+                  {activeRegister.name}
+                </Badge>
               </div>
             )}
+
+            {/* Denomination Breakdown Calculator */}
+            <div className="border rounded-lg p-3 bg-slate-50/50 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-semibold text-slate-800">Denomination Breakdown</Label>
+                  <p className="text-xs text-slate-500">Count physical currency notes & coins</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-7 bg-white"
+                  onClick={() => setShowDenominations(!showDenominations)}
+                >
+                  {showDenominations ? "Hide Notes Counter" : "Open Notes Counter"}
+                </Button>
+              </div>
+
+              {showDenominations && (
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t">
+                  {DENOMINATIONS.map((denom) => {
+                    const count = denomCounts[denom] || 0
+                    const subtotal = denom * count
+                    return (
+                      <div key={denom} className="bg-white p-2 rounded border flex flex-col justify-between shadow-xs">
+                        <div className="flex items-center justify-between text-xs font-medium text-slate-600 mb-1">
+                          <span className="font-bold">₹{denom}</span>
+                          <span className="text-slate-400 font-mono text-[11px]">= ₹{subtotal.toLocaleString()}</span>
+                        </div>
+                        <Input
+                          type="number"
+                          min="0"
+                          placeholder="0"
+                          className="h-8 text-center text-sm font-semibold"
+                          value={count === 0 ? "" : count}
+                          onChange={(e) => handleDenomChange(denom, e.target.value)}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
             
             <div className="grid gap-2">
-              <Label htmlFor="amount">{shiftMode === "open" ? "Opening Balance" : "Actual Counted Cash"}</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="amount" className="font-semibold text-slate-800">
+                  {shiftMode === "open" ? "Opening Float Balance" : "Actual Counted Cash"}
+                </Label>
+                {showDenominations && (
+                  <span className="text-xs text-emerald-600 font-medium">Auto-summed from notes</span>
+                )}
+              </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <IndianRupee className="h-4 w-4 text-slate-400" />
@@ -394,7 +563,8 @@ export default function CashRegistersPage() {
                 <Input
                   id="amount"
                   type="number"
-                  className="pl-9"
+                  step="any"
+                  className="pl-9 text-lg font-bold"
                   placeholder="0.00"
                   value={shiftAmount}
                   onChange={(e) => setShiftAmount(e.target.value)}
@@ -402,23 +572,49 @@ export default function CashRegistersPage() {
               </div>
             </div>
 
-            {shiftMode === "close" && discrepancy !== 0 && (
-              <div className={`p-3 rounded-md flex gap-2 text-sm ${discrepancy > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium">Discrepancy: {formatCurrency(Math.abs(discrepancy))}</p>
-                  <p className="opacity-90">{discrepancy > 0 ? 'Over expected amount' : 'Short of expected amount'}</p>
+            {shiftMode === "close" && activeRegister && (
+              <div
+                className={`p-3 rounded-lg border flex items-center justify-between text-sm ${
+                  discrepancy === 0
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : discrepancy > 0
+                    ? "bg-amber-50 text-amber-800 border-amber-200"
+                    : "bg-rose-50 text-rose-800 border-rose-200"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <div>
+                    <span className="font-semibold">
+                      {discrepancy === 0
+                        ? "Drawer Balanced (₹0.00)"
+                        : discrepancy > 0
+                        ? `Cash Over (+${formatCurrency(discrepancy)})`
+                        : `Cash Short (-${formatCurrency(Math.abs(discrepancy))})`}
+                    </span>
+                    <p className="text-xs opacity-85">
+                      {discrepancy === 0
+                        ? "Counted amount matches system expected balance."
+                        : discrepancy > 0
+                        ? "Drawer has more cash than system tracked."
+                        : "Drawer is missing cash compared to system tracked."}
+                    </p>
+                  </div>
                 </div>
+                <span className="text-base font-bold font-mono">
+                  {discrepancy >= 0 ? "+" : ""}{formatCurrency(discrepancy)}
+                </span>
               </div>
             )}
 
             <div className="grid gap-2">
-              <Label htmlFor="notes">Notes (Optional)</Label>
+              <Label htmlFor="notes">Shift Notes / Handover Comments</Label>
               <Textarea
                 id="notes"
-                placeholder={shiftMode === "open" ? "Any starting notes..." : "Explain any discrepancy..."}
+                placeholder={shiftMode === "open" ? "Starting float, cashier name, notes..." : "Reason for discrepancy, handover notes..."}
                 value={shiftNotes}
                 onChange={(e) => setShiftNotes(e.target.value)}
+                rows={2}
               />
             </div>
           </div>

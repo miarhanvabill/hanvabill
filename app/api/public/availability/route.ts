@@ -32,33 +32,48 @@ export async function GET(request: NextRequest) {
 
     // Verify tenant exists and is active
     const tenantCheck = await sql`
-      SELECT id FROM tenants WHERE id = ${tenantId} AND status = 'active' LIMIT 1
-    `;
+      SELECT id FROM tenants 
+      WHERE (id::text = ${String(tenantId)} OR slug = ${String(tenantId)} OR tenant_key = ${String(tenantId)}) 
+        AND status = 'active' 
+      LIMIT 1
+    `.catch(() => []);
     if (tenantCheck.length === 0) {
       return NextResponse.json({ error: "Tenant not found or inactive" }, { status: 404 });
     }
+    const resolvedTenantId = tenantCheck[0].id;
 
     // Query booked time slots — filter by staff if provided
     let bookedSlots: any[];
-    if (staffId) {
+    if (staffId && staffId !== 'any') {
       bookedSlots = await sql`
-        SELECT booking_time, staff_id, status
+        SELECT booking_time
         FROM bookings
-        WHERE tenant_id = ${tenantId}
+        WHERE tenant_id = ${resolvedTenantId}
           AND booking_date = ${date}
           AND staff_id = ${staffId}
           AND status != 'cancelled'
         ORDER BY booking_time
       `;
     } else {
+      // For "Any staff", a slot is only unavailable if all active stylists are booked
+      const staffCountRows = await sql`
+        SELECT COUNT(*)::int as count 
+        FROM staff 
+        WHERE tenant_id = ${resolvedTenantId} AND is_active = true
+      `.catch(() => [{ count: 1 }]);
+      const activeStaffCount = Math.max(Number(staffCountRows[0]?.count || 1), 1);
+
       bookedSlots = await sql`
-        SELECT booking_time, staff_id, status
+        SELECT booking_time
         FROM bookings
-        WHERE tenant_id = ${tenantId}
+        WHERE tenant_id = ${resolvedTenantId}
           AND booking_date = ${date}
           AND status != 'cancelled'
+          AND staff_id IS NOT NULL
+        GROUP BY booking_time
+        HAVING COUNT(DISTINCT staff_id) >= ${activeStaffCount}
         ORDER BY booking_time
-      `;
+      `.catch(() => []);
     }
 
     // Normalize times to HH:MM strings

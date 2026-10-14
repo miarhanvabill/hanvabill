@@ -19,7 +19,8 @@ import Link from "next/link" // Import Link
 
 // Define the StaffMember interface to match the Staff interface from actions
 // and add client-side specific fields if necessary (like avatar for display)
-interface StaffDisplayMember extends Staff {
+interface StaffDisplayMember extends Omit<Staff, "id"> {
+  id: string // Client-side only for display
   avatar?: string // Client-side only for display
   workingHours?: string // Client-side only for display, or fetch from DB if available
   displayStatus: "active" | "inactive" | "on-leave" // Derived from is_active
@@ -43,13 +44,25 @@ export default function StaffManagePage() {
   const [selectedRole, setSelectedRole] = useState("all")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingStaff, setEditingStaff] = useState<StaffDisplayMember | null>(null)
-  const [formData, setFormData] = useState<Omit<Staff, "id" | "created_at" | "updated_at"> & { salary: string; status: "active" | "inactive" | "on-leave"; workingHours: string; skills: string; commission_rate: string }>({
+  const [formData, setFormData] = useState<{
+    name: string
+    email: string
+    phone: string
+    role: string
+    salary: string
+    address: string
+    workingHours: string
+    status: "active" | "inactive" | "on-leave"
+    hire_date: string
+    emergency_contact: string
+    commission_rate: string
+    skills: string
+  }>({
     name: "",
     email: "",
     phone: "",
     role: "", // Maps to position in forms
     salary: "",
-    // specialization: "", // Removed as per DB schema
     address: "",
     workingHours: "9:00 AM - 6:00 PM",
     status: "active", // Client-side status for form
@@ -109,7 +122,6 @@ export default function StaffManagePage() {
       phone: "",
       role: "",
       salary: "",
-      // specialization: "", // Removed
       address: "",
       workingHours: "9:00 AM - 6:00 PM",
       status: "active",
@@ -122,10 +134,10 @@ export default function StaffManagePage() {
   }
 
   const handleSubmit = async () => {
-    if (!formData.name || !formData.email || !formData.role) {
+    if (!formData.name || !formData.phone || !formData.role) {
       toast({
         title: "Validation Error",
-        description: "Please fill in all required fields (Name, Email, Role).",
+        description: "Please fill in all required fields (Name, Phone, Role).",
         variant: "destructive",
       })
       return
@@ -134,13 +146,12 @@ export default function StaffManagePage() {
     const staffDataToSend: Omit<Staff, "id" | "created_at" | "updated_at"> = {
       name: formData.name,
       email: formData.email || null,
-      phone: formData.phone || null,
+      phone: formData.phone,
       role: formData.role || null,
       salary: formData.salary ? Number.parseFloat(formData.salary) : null, // Still parse salary to number for DB
-      // specialization: formData.specialization || null, // Removed
       address: formData.address || null,
-      hire_date: formData.hire_date, // Use hire_date
-      is_active: formData.status === "active" ? true : false, // Map client status to is_active boolean
+      hire_date: formData.hire_date || null, // Use hire_date
+      is_active: formData.status === "active", // Map client status to is_active boolean
       emergency_contact: formData.emergency_contact || null,
       commission_rate: formData.commission_rate || null, // Send as string
       skills: formData.skills || null, // Send as string
@@ -180,7 +191,6 @@ export default function StaffManagePage() {
       phone: member.phone || "",
       role: member.role || "",
       salary: member.salary?.toString() || "",
-      // specialization: member.specialization || "", // Removed
       address: member.address || "",
       workingHours: member.workingHours || "9:00 AM - 6:00 PM", // Use existing or default
       status: member.displayStatus, // Use derived status for form

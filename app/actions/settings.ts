@@ -5,6 +5,7 @@
 import { withTenantAuth } from "@/lib/withTenantAuth"
 import type { BusinessSettings } from "@/types/settings"
 import { cacheFetch, cacheDel } from '@/lib/cache'
+import { revalidatePath } from "next/cache"
 
 const DEFAULT_BUSINESS_SETTINGS: BusinessSettings = {
   profile: {
@@ -147,6 +148,7 @@ async function ensureStoreSettingsTable(sql: any) {
       )
     `.catch(() => {});
     await sql`ALTER TABLE store_settings ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100) DEFAULT '1';`.catch(() => {});
+    await sql`CREATE INDEX IF NOT EXISTS idx_store_settings_tenant_key ON store_settings(tenant_id, setting_key);`.catch(() => {});
   } catch (error) {
     console.warn("ensureStoreSettingsTable non-fatal error:", error);
   }
@@ -156,14 +158,15 @@ export async function getBusinessSettings(): Promise<BusinessSettings> {
   try {
     return await withTenantAuth(async ({ sql, tenantId }) => {
       try {
-        return await cacheFetch(`business_settings:${tenantId}`, async () => {
+        const tid = String(tenantId).trim()
+        return await cacheFetch(`business_settings:${tid}`, async () => {
           try {
             await ensureStoreSettingsTable(sql)
 
             const rows = await sql`
               SELECT setting_key, setting_value, setting_type
               FROM store_settings
-              WHERE tenant_id = ${String(tenantId)}
+              WHERE tenant_id = ${tid}
               ORDER BY setting_key
             `.catch(() => [])
 
@@ -281,8 +284,12 @@ export async function updateBusinessSettings(
   section: string,
   data: any,
 ): Promise<{ success: boolean; message: string }> {
-  return await withTenantAuth(async ({ sql, tenantId }) => {
+  return await withTenantAuth(async ({ sql, tenantId, userId }) => {
     try {
+      if (!userId) {
+        return { success: false, message: "Unauthorized: Please sign in to update settings" }
+      }
+
       if (!section || typeof section !== "string" || section.trim() === "") {
         console.warn("Invalid section name provided:", section)
         return { success: false, message: "Invalid section name" }
@@ -293,6 +300,7 @@ export async function updateBusinessSettings(
         return { success: false, message: "Invalid data provided" }
       }
 
+      const tid = String(tenantId).trim()
       await ensureStoreSettingsTable(sql)
 
       const flattenData = (obj: any, prefix = ""): Array<{ key: string; value: any; type: string }> => {
@@ -390,14 +398,14 @@ export async function updateBusinessSettings(
           const updateResult = await sql`
             UPDATE store_settings 
             SET setting_value = ${setting.value}, setting_type = ${setting.type}, updated_at = NOW()
-            WHERE setting_key = ${setting.key} AND tenant_id = ${tenantId}
+            WHERE setting_key = ${setting.key} AND tenant_id = ${tid}
             RETURNING id
           `
 
           if (updateResult.length === 0) {
             await sql`
               INSERT INTO store_settings (tenant_id, setting_key, setting_value, setting_type, created_at, updated_at)
-              VALUES (${tenantId}, ${setting.key}, ${setting.value}, ${setting.type}, NOW(), NOW())
+              VALUES (${tid}, ${setting.key}, ${setting.value}, ${setting.type}, NOW(), NOW())
             `
           }
 
@@ -416,7 +424,9 @@ export async function updateBusinessSettings(
             ? `${section} settings partially updated (${successCount} success, ${errorCount} failed)`
             : `${section} settings updated successfully`
 
-        await cacheDel(`business_settings:${tenantId}`);
+        await cacheDel(`business_settings:${tid}`);
+        revalidatePath("/manage/store-settings");
+        revalidatePath("/settings");
         return { success: true, message }
       } else {
         return {
@@ -437,15 +447,21 @@ export async function updateBusinessSettings(
 }
 
 export async function updateAllSettings(settings: BusinessSettings): Promise<{ success: boolean; message: string }> {
-  return await withTenantAuth(async ({ sql, tenantId }) => {
+  return await withTenantAuth(async ({ sql, tenantId, userId }) => {
     try {
+      if (!userId) {
+        return { success: false, message: "Unauthorized: Please sign in to update settings" }
+      }
+      const tid = String(tenantId).trim()
       await ensureStoreSettingsTable(sql)
 
       for (const [section, data] of Object.entries(settings)) {
         await updateBusinessSettings(section, data)
       }
 
-      await cacheDel(`business_settings:${tenantId}`);
+      await cacheDel(`business_settings:${tid}`);
+      revalidatePath("/manage/store-settings");
+      revalidatePath("/settings");
       return { success: true, message: "All settings updated successfully" }
     } catch (error) {
       console.error("Error updating all settings:", error)

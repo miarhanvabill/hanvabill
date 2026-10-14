@@ -69,12 +69,14 @@ export interface WhatsAppTemplateVariables {
 export const CANONICAL_EVENT_TYPES: Record<string, string> = {
   booking_created: "booking_created",
   booking_confirmation: "booking_created",
+  appointment_confirmation: "booking_created",
   reminder_24h: "reminder_24h",
   appointment_reminder_24h: "reminder_24h",
   reminder_2h: "reminder_2h",
   appointment_reminder_2h: "reminder_2h",
   invoice_receipt: "invoice_receipt",
   invoice: "invoice_receipt",
+  instant_invoice: "invoice_receipt",
   review_request: "review_request",
   review: "review_request",
   birthday: "birthday",
@@ -564,7 +566,11 @@ export interface AutomationCronSummary {
  * - Anniversary greetings
  * - Win-back messages (customers inactive > 45 days)
  */
-export async function runAutomationsCronForTenant(sql: any, tenantId: string): Promise<AutomationCronSummary> {
+export async function runAutomationsCronForTenant(
+  sql: any,
+  tenantId: string,
+  options?: { forceDailyBatches?: boolean },
+): Promise<AutomationCronSummary> {
   const summary: AutomationCronSummary = {
     tenantId,
     reminders24hSent: 0,
@@ -585,17 +591,17 @@ export async function runAutomationsCronForTenant(sql: any, tenantId: string): P
       return summary
     }
 
-    const todayDate = new Date().toISOString().split("T")[0]
-    const currentYear = new Date().getFullYear()
-    const currentMonthYear = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`
-
-    // Calculate current hour in IST
+    // Accurate calculation of current date, month, year, and hour in IST (UTC+5:30)
     const istOffset = 5.5 * 60 * 60 * 1000
     const istTime = new Date(Date.now() + istOffset)
+    const todayDate = istTime.toISOString().split("T")[0]
+    const currentYear = istTime.getUTCFullYear()
+    const currentMonthYear = `${currentYear}-${String(istTime.getUTCMonth() + 1).padStart(2, "0")}`
     const currentIstHour = istTime.getUTCHours()
     
-    // Only run daily batch jobs (Birthdays, 24h reminders) if it's 9 AM or later in IST
-    const shouldRunDailyBatches = currentIstHour >= 9
+    // Only run daily marketing/greeting batch jobs if it's between 9 AM and 9 PM IST or if forceDailyBatches is true
+    const isDaytime = currentIstHour >= 9 && currentIstHour < 21
+    const shouldRunDailyBatches = Boolean(options?.forceDailyBatches || isDaytime)
 
     // 1. Scan 24-hour reminders: Bookings scheduled for tomorrow (pending or confirmed)
     if (shouldRunDailyBatches) {
@@ -691,8 +697,8 @@ export async function runAutomationsCronForTenant(sql: any, tenantId: string): P
         GROUP BY b.id, b.booking_number, b.booking_date, b.booking_time, b.total_amount, b.status, b.customer_id, c.full_name, c.phone_number, st.name
       `
 
-      const now = new Date()
-      const currentMinutes = now.getHours() * 60 + now.getMinutes()
+      // Calculate current minutes in IST timezone matching salon booking_time
+      const currentMinutes = istTime.getUTCHours() * 60 + istTime.getUTCMinutes()
 
       for (const booking of todayUpcomingBookings) {
         if (!booking.booking_time) continue
@@ -815,263 +821,297 @@ export async function runAutomationsCronForTenant(sql: any, tenantId: string): P
     }
 
     // 4. Scan Anniversary Greetings (month & day match today)
-    try {
-      const anniversaryCustomers = await sql`
-        SELECT id, full_name, phone_number, date_of_anniversary
-        FROM customers
-        WHERE tenant_id = ${tenantId}
-          AND date_of_anniversary IS NOT NULL
-          AND phone_number IS NOT NULL
-          AND EXTRACT(MONTH FROM date_of_anniversary) = EXTRACT(MONTH FROM CURRENT_DATE)
-          AND EXTRACT(DAY FROM date_of_anniversary) = EXTRACT(DAY FROM CURRENT_DATE)
-      `
-
-      for (const customer of anniversaryCustomers) {
-        const refId = `customer:${customer.id}:anniv:${currentYear}`
-        const alreadySent = await sql`
-          SELECT 1 FROM whatsapp_automation_logs 
-          WHERE tenant_id = ${tenantId} 
-            AND event_type = 'anniversary' 
-            AND reference_id = ${refId}
-            AND status = 'sent'
-          LIMIT 1
+    if (shouldRunDailyBatches) {
+      try {
+        const anniversaryCustomers = await sql`
+          SELECT id, full_name, phone_number, date_of_anniversary
+          FROM customers
+          WHERE tenant_id = ${tenantId}
+            AND date_of_anniversary IS NOT NULL
+            AND phone_number IS NOT NULL
+            AND EXTRACT(MONTH FROM date_of_anniversary) = EXTRACT(MONTH FROM CURRENT_DATE)
+            AND EXTRACT(DAY FROM date_of_anniversary) = EXTRACT(DAY FROM CURRENT_DATE)
         `
-        if (alreadySent.length === 0) {
-          const res = await triggerWhatsAppAutomation({
-            tenantId,
-            eventType: "anniversary",
-            recipientPhone: customer.phone_number,
-            customerId: Number(customer.id),
-            referenceId: refId,
-            variables: {
-              customer_name: customer.full_name,
-              coupon_code: "CELEBRATE",
-            },
-            sql,
-          })
-          if (res.success) {
-            summary.anniversariesSent++
-            summary.totalSent++
+
+        for (const customer of anniversaryCustomers) {
+          const refId = `customer:${customer.id}:anniv:${currentYear}`
+          const alreadySent = await sql`
+            SELECT 1 FROM whatsapp_automation_logs 
+            WHERE tenant_id = ${tenantId} 
+              AND event_type = 'anniversary' 
+              AND reference_id = ${refId}
+              AND status = 'sent'
+            LIMIT 1
+          `
+          if (alreadySent.length === 0) {
+            const res = await triggerWhatsAppAutomation({
+              tenantId,
+              eventType: "anniversary",
+              recipientPhone: customer.phone_number,
+              customerId: Number(customer.id),
+              referenceId: refId,
+              variables: {
+                customer_name: customer.full_name,
+                coupon_code: "CELEBRATE",
+              },
+              sql,
+            })
+            if (res.success) {
+              summary.anniversariesSent++
+              summary.totalSent++
+            }
           }
         }
+      } catch (e: any) {
+        console.error(`[WhatsApp Cron] Error processing anniversary greetings for tenant ${tenantId}:`, e)
+        summary.errors.push(`Anniversaries: ${e.message}`)
       }
-    } catch (e: any) {
-      console.error(`[WhatsApp Cron] Error processing anniversary greetings for tenant ${tenantId}:`, e)
-      summary.errors.push(`Anniversaries: ${e.message}`)
     }
 
     // 5. Scan We Miss You (Win-Back): Customers with no visits in 45+ days
-    try {
-      const inactiveCustomers = await sql`
-        SELECT c.id, c.full_name, c.phone_number,
-          COALESCE(MAX(b.booking_date), c.created_at::date) as last_visit
-        FROM customers c
-        LEFT JOIN bookings b ON c.id = b.customer_id AND b.tenant_id = ${tenantId}
-        WHERE c.tenant_id = ${tenantId}
-          AND c.phone_number IS NOT NULL
-        GROUP BY c.id, c.full_name, c.phone_number, c.created_at
-        HAVING COALESCE(MAX(b.booking_date), c.created_at::date) < CURRENT_DATE - INTERVAL '45 days'
-        LIMIT 20
-      `
-
-      for (const customer of inactiveCustomers) {
-        const refId = `customer:${customer.id}:winback:${currentMonthYear}`
-        // Check if sent in last 30 days
-        const alreadySent = await sql`
-          SELECT 1 FROM whatsapp_automation_logs 
-          WHERE tenant_id = ${tenantId} 
-            AND event_type = 'we_miss_you' 
-            AND (reference_id = ${refId} OR (customer_id = ${customer.id} AND sent_at > NOW() - INTERVAL '30 days'))
-            AND status = 'sent'
-          LIMIT 1
+    if (shouldRunDailyBatches) {
+      try {
+        const inactiveCustomers = await sql`
+          SELECT c.id, c.full_name, c.phone_number,
+            COALESCE(MAX(b.booking_date), c.created_at::date) as last_visit
+          FROM customers c
+          LEFT JOIN bookings b ON c.id = b.customer_id AND b.tenant_id = ${tenantId}
+          WHERE c.tenant_id = ${tenantId}
+            AND c.phone_number IS NOT NULL
+          GROUP BY c.id, c.full_name, c.phone_number, c.created_at
+          HAVING COALESCE(MAX(b.booking_date), c.created_at::date) < CURRENT_DATE - INTERVAL '45 days'
+          LIMIT 20
         `
-        if (alreadySent.length === 0) {
-          const res = await triggerWhatsAppAutomation({
-            tenantId,
-            eventType: "we_miss_you",
-            recipientPhone: customer.phone_number,
-            customerId: Number(customer.id),
-            referenceId: refId,
-            variables: {
-              customer_name: customer.full_name,
-              coupon_code: "WELCOMEBACK",
-            },
-            sql,
-          })
-          if (res.success) {
-            summary.winbacksSent++
-            summary.totalSent++
+
+        for (const customer of inactiveCustomers) {
+          const refId = `customer:${customer.id}:winback:${currentMonthYear}`
+          // Check if sent in last 30 days
+          const alreadySent = await sql`
+            SELECT 1 FROM whatsapp_automation_logs 
+            WHERE tenant_id = ${tenantId} 
+              AND event_type = 'we_miss_you' 
+              AND (reference_id = ${refId} OR (customer_id = ${customer.id} AND sent_at > NOW() - INTERVAL '30 days'))
+              AND status = 'sent'
+            LIMIT 1
+          `
+          if (alreadySent.length === 0) {
+            const res = await triggerWhatsAppAutomation({
+              tenantId,
+              eventType: "we_miss_you",
+              recipientPhone: customer.phone_number,
+              customerId: Number(customer.id),
+              referenceId: refId,
+              variables: {
+                customer_name: customer.full_name,
+                coupon_code: "WELCOMEBACK",
+              },
+              sql,
+            })
+            if (res.success) {
+              summary.winbacksSent++
+              summary.totalSent++
+            }
           }
         }
+      } catch (e: any) {
+        console.error(`[WhatsApp Cron] Error processing win-back automations for tenant ${tenantId}:`, e)
+        summary.errors.push(`Winback: ${e.message}`)
       }
-    } catch (e: any) {
-      console.error(`[WhatsApp Cron] Error processing win-back automations for tenant ${tenantId}:`, e)
-      summary.errors.push(`Winback: ${e.message}`)
     }
 
     // 6. Scan Smart Campaign Rules (Custom AI/Logic rules e.g. 30 days after Hair Color)
-    try {
-      const smartRules = await sql`
-        SELECT * FROM smart_campaign_rules
-        WHERE tenant_id = ${tenantId}
-          AND is_enabled = true
-      `.catch(() => [])
+    if (shouldRunDailyBatches) {
+      try {
+        const smartRules = await sql`
+          SELECT * FROM smart_campaign_rules
+          WHERE tenant_id = ${tenantId}
+            AND is_enabled = true
+        `.catch(() => [])
 
-      if (smartRules.length > 0) {
-        const tenantInfo = await sql`SELECT slug, name FROM tenants WHERE id = ${tenantId} LIMIT 1`.catch(() => [])
-        const businessName = waConfig.salonName || tenantInfo[0]?.name || "Our Salon"
-        const bookingSlug = tenantInfo[0]?.slug || tenantId
-        const bookingLink = `https://biz.hanva.in/book/${bookingSlug}`
+        if (smartRules.length > 0) {
+          const tenantInfo = await sql`SELECT slug, name FROM tenants WHERE id = ${tenantId} LIMIT 1`.catch(() => [])
+          const businessName = waConfig.salonName || tenantInfo[0]?.name || "Our Salon"
+          const bookingSlug = tenantInfo[0]?.slug || tenantId
+          const bookingLink = `https://biz.hanva.in/book/${bookingSlug}`
 
-        for (const rule of smartRules) {
-          const days = Number(rule.trigger_days || 30)
-          let serviceKeywords: string[] = []
-          try {
-            serviceKeywords = rule.service_names ? JSON.parse(rule.service_names) : []
-          } catch {
-            serviceKeywords = []
-          }
-          const minSpend = Number(rule.min_spend || 0)
-          const cooldownDays = Number(rule.cooldown_days || 14)
-
-          let candidates: any[] = []
-
-          if (rule.trigger_type === "days_after_service") {
-            candidates = await sql`
-              SELECT 
-                c.id, c.full_name as name, c.phone_number as phone, b.booking_date,
-                COALESCE(STRING_AGG(s.name, ', '), 'Salon Service') as service_name
-              FROM bookings b
-              JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
-              LEFT JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
-              LEFT JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
-              WHERE b.tenant_id = ${tenantId}
-                AND b.status = 'completed'
-                AND DATE(b.booking_date) = CURRENT_DATE - (${days}::text || ' days')::interval
-                AND c.phone_number IS NOT NULL
-              GROUP BY c.id, c.full_name, c.phone_number, b.booking_date
-            `.catch(() => [])
-
-            if (serviceKeywords.length > 0) {
-              const lowerKeywords = serviceKeywords.map(k => k.toLowerCase())
-              candidates = candidates.filter(cand =>
-                lowerKeywords.some(k => (cand.service_name || "").toLowerCase().includes(k))
-              )
-            }
-          } else if (rule.trigger_type === "days_since_last_visit") {
-            candidates = await sql`
-              SELECT 
-                c.id, c.full_name as name, c.phone_number as phone,
-                MAX(b.booking_date) as booking_date, 'Previous Visit' as service_name
-              FROM customers c
-              LEFT JOIN bookings b ON c.id = b.customer_id AND b.tenant_id = ${tenantId} AND b.status = 'completed'
-              WHERE c.tenant_id = ${tenantId}
-                AND c.phone_number IS NOT NULL
-              GROUP BY c.id, c.full_name, c.phone_number
-              HAVING MAX(b.booking_date) <= CURRENT_DATE - (${days}::text || ' days')::interval
-                 AND MAX(b.booking_date) >= CURRENT_DATE - ((${days} + 30)::text || ' days')::interval
-            `.catch(() => [])
-          } else if (rule.trigger_type === "days_before_birthday") {
-            candidates = await sql`
-              SELECT 
-                id, full_name as name, phone_number as phone,
-                CURRENT_DATE as booking_date, 'Birthday Special' as service_name
-              FROM customers
-              WHERE tenant_id = ${tenantId}
-                AND date_of_birth IS NOT NULL
-                AND phone_number IS NOT NULL
-                AND EXTRACT(MONTH FROM date_of_birth) = EXTRACT(MONTH FROM (CURRENT_DATE + (${days}::text || ' days')::interval))
-                AND EXTRACT(DAY FROM date_of_birth) = EXTRACT(DAY FROM (CURRENT_DATE + (${days}::text || ' days')::interval))
-            `.catch(() => [])
-          } else if (rule.trigger_type === "high_spender_followup") {
-            candidates = await sql`
-              SELECT 
-                c.id, c.full_name as name, c.phone_number as phone, b.booking_date,
-                'VIP Experience' as service_name
-              FROM bookings b
-              JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
-              WHERE b.tenant_id = ${tenantId}
-                AND b.status = 'completed'
-                AND b.total_amount >= ${minSpend}
-                AND DATE(b.booking_date) = CURRENT_DATE - (${days}::text || ' days')::interval
-                AND c.phone_number IS NOT NULL
-              GROUP BY c.id, c.full_name, c.phone_number, b.booking_date
-            `.catch(() => [])
-          }
-
-          let ruleSentCount = 0
-          for (const cand of candidates) {
-            // Anti-spam cooldown check
-            if (cooldownDays > 0) {
-              const recent = await sql`
-                SELECT 1 FROM smart_campaign_logs
-                WHERE tenant_id = ${tenantId}
-                  AND rule_id = ${rule.id}
-                  AND customer_id = ${cand.id}
-                  AND sent_at > NOW() - (${cooldownDays}::text || ' days')::interval
-                LIMIT 1
-              `.catch(() => [])
-              if (recent.length > 0) continue
-            }
-
-            // Exclude active upcoming bookings if configured
-            if (rule.exclude_active_bookings) {
-              const upcoming = await sql`
-                SELECT 1 FROM bookings
-                WHERE tenant_id = ${tenantId}
-                  AND customer_id = ${cand.id}
-                  AND status IN ('pending', 'confirmed')
-                  AND DATE(booking_date) >= CURRENT_DATE
-                LIMIT 1
-              `.catch(() => [])
-              if (upcoming.length > 0) continue
-            }
-
-            const msgText = interpolateTemplate(rule.message_template, {
-              customer_name: cand.name,
-              business_name: businessName,
-              service_name: cand.service_name || "salon service",
-              booking_link: bookingLink,
-              coupon_code: rule.coupon_code || "SPECIAL",
-            })
-
+          for (const rule of smartRules) {
+            const days = Number(rule.trigger_days || 30)
+            let serviceKeywords: string[] = []
             try {
-              const sendResult = await sendViaHanvaOldApi(
-                { userid: waConfig.userid, password: waConfig.password, wabaNumber: waConfig.wabaNumber },
-                cand.phone,
-                msgText
-              )
-
-              await sql`
-                INSERT INTO smart_campaign_logs (
-                  tenant_id, rule_id, customer_id, customer_phone, customer_name,
-                  message_content, status, msg_id, sent_at
-                ) VALUES (
-                  ${tenantId}, ${rule.id}, ${cand.id}, ${cand.phone}, ${cand.name},
-                  ${msgText}, 'sent', ${sendResult.msgId || null}, NOW()
-                )
-              `.catch(() => {})
-
-              ruleSentCount++
-              summary.smartCampaignsSent = (summary.smartCampaignsSent || 0) + 1
-              summary.totalSent++
-            } catch (err: any) {
-              console.error(`[WhatsApp Cron] Error sending smart campaign to ${cand.phone}:`, err)
+              serviceKeywords = rule.service_names ? JSON.parse(rule.service_names) : []
+            } catch {
+              serviceKeywords = []
             }
-          }
+            const minSpend = Number(rule.min_spend || 0)
+            const cooldownDays = Number(rule.cooldown_days || 14)
 
-          if (ruleSentCount > 0) {
-            await sql`
-              UPDATE smart_campaign_rules
-              SET total_sent = total_sent + ${ruleSentCount}, last_run_at = NOW()
-              WHERE id = ${rule.id}
-            `.catch(() => {})
+            let candidates: any[] = []
+
+            if (rule.trigger_type === "days_after_service") {
+              candidates = await sql`
+                SELECT 
+                  c.id, c.full_name as name, c.phone_number as phone, b.booking_date,
+                  COALESCE(STRING_AGG(s.name, ', '), 'Salon Service') as service_name
+                FROM bookings b
+                JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+                LEFT JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
+                LEFT JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
+                WHERE b.tenant_id = ${tenantId}
+                  AND b.status = 'completed'
+                  AND DATE(b.booking_date) = CURRENT_DATE - (${days}::text || ' days')::interval
+                  AND c.phone_number IS NOT NULL
+                GROUP BY c.id, c.full_name, c.phone_number, b.booking_date
+              `.catch(() => [])
+
+              if (serviceKeywords.length > 0) {
+                const lowerKeywords = serviceKeywords.map(k => k.toLowerCase())
+                candidates = candidates.filter(cand =>
+                  lowerKeywords.some(k => (cand.service_name || "").toLowerCase().includes(k))
+                )
+              }
+            } else if (rule.trigger_type === "days_since_last_visit") {
+              candidates = await sql`
+                SELECT 
+                  c.id, c.full_name as name, c.phone_number as phone,
+                  MAX(b.booking_date) as booking_date, 'Previous Visit' as service_name
+                FROM customers c
+                LEFT JOIN bookings b ON c.id = b.customer_id AND b.tenant_id = ${tenantId} AND b.status = 'completed'
+                WHERE c.tenant_id = ${tenantId}
+                  AND c.phone_number IS NOT NULL
+                GROUP BY c.id, c.full_name, c.phone_number
+                HAVING MAX(b.booking_date) <= CURRENT_DATE - (${days}::text || ' days')::interval
+                   AND MAX(b.booking_date) >= CURRENT_DATE - ((${days} + 30)::text || ' days')::interval
+              `.catch(() => [])
+            } else if (rule.trigger_type === "days_before_birthday") {
+              candidates = await sql`
+                SELECT 
+                  id, full_name as name, phone_number as phone,
+                  CURRENT_DATE as booking_date, 'Birthday Special' as service_name
+                FROM customers
+                WHERE tenant_id = ${tenantId}
+                  AND date_of_birth IS NOT NULL
+                  AND phone_number IS NOT NULL
+                  AND EXTRACT(MONTH FROM date_of_birth) = EXTRACT(MONTH FROM (CURRENT_DATE + (${days}::text || ' days')::interval))
+                  AND EXTRACT(DAY FROM date_of_birth) = EXTRACT(DAY FROM (CURRENT_DATE + (${days}::text || ' days')::interval))
+              `.catch(() => [])
+            } else if (rule.trigger_type === "high_spender_followup") {
+              candidates = await sql`
+                SELECT 
+                  c.id, c.full_name as name, c.phone_number as phone, b.booking_date,
+                  'VIP Experience' as service_name
+                FROM bookings b
+                JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+                WHERE b.tenant_id = ${tenantId}
+                  AND b.status = 'completed'
+                  AND b.total_amount >= ${minSpend}
+                  AND DATE(b.booking_date) = CURRENT_DATE - (${days}::text || ' days')::interval
+                  AND c.phone_number IS NOT NULL
+                GROUP BY c.id, c.full_name, c.phone_number, b.booking_date
+              `.catch(() => [])
+            } else if (rule.trigger_type === "membership_expiring") {
+              candidates = await sql`
+                SELECT 
+                  c.id, c.full_name as name, c.phone_number as phone, cm.end_date as booking_date,
+                  mp.name || ' Membership Expiring' as service_name
+                FROM customer_memberships cm
+                JOIN customers c ON cm.customer_id = c.id AND c.tenant_id = ${tenantId}
+                JOIN membership_plans mp ON cm.membership_plan_id = mp.id AND mp.tenant_id = ${tenantId}
+                WHERE cm.tenant_id = ${tenantId}
+                  AND cm.status = 'active'
+                  AND DATE(cm.end_date) = CURRENT_DATE + (${days}::text || ' days')::interval
+                  AND c.phone_number IS NOT NULL
+              `.catch(() => [])
+            }
+
+            let ruleSentCount = 0
+            for (const cand of candidates) {
+              // Anti-spam cooldown check
+              if (cooldownDays > 0) {
+                const recent = await sql`
+                  SELECT 1 FROM smart_campaign_logs
+                  WHERE tenant_id = ${tenantId}
+                    AND rule_id = ${rule.id}
+                    AND customer_id = ${cand.id}
+                    AND sent_at > NOW() - (${cooldownDays}::text || ' days')::interval
+                  LIMIT 1
+                `.catch(() => [])
+                if (recent.length > 0) continue
+              }
+
+              // Exclude active upcoming bookings if configured
+              if (rule.exclude_active_bookings) {
+                const upcoming = await sql`
+                  SELECT 1 FROM bookings
+                  WHERE tenant_id = ${tenantId}
+                    AND customer_id = ${cand.id}
+                    AND status IN ('pending', 'confirmed')
+                    AND DATE(booking_date) >= CURRENT_DATE
+                  LIMIT 1
+                `.catch(() => [])
+                if (upcoming.length > 0) continue
+              }
+
+              const msgText = interpolateTemplate(rule.message_template, {
+                customer_name: cand.name,
+                business_name: businessName,
+                service_name: cand.service_name || "salon service",
+                booking_link: bookingLink,
+                coupon_code: rule.coupon_code || "SPECIAL",
+              })
+
+              try {
+                const sendResult = await sendViaHanvaOldApi(
+                  { userid: waConfig.userid, password: waConfig.password, wabaNumber: waConfig.wabaNumber },
+                  cand.phone,
+                  msgText
+                )
+
+                await sql`
+                  INSERT INTO smart_campaign_logs (
+                    tenant_id, rule_id, customer_id, customer_phone, customer_name,
+                    message_content, status, msg_id, sent_at
+                  ) VALUES (
+                    ${tenantId}, ${rule.id}, ${cand.id}, ${cand.phone}, ${cand.name},
+                    ${msgText}, 'sent', ${sendResult.msgId || null}, NOW()
+                  )
+                `.catch(() => {})
+
+                // Log to whatsapp_messages table as well for chat timeline & unified analytics
+                try {
+                  const tenantRows = await sql`SELECT tenant_key FROM tenants WHERE id = ${tenantId} LIMIT 1`.catch(() => [])
+                  const tenantKey = tenantRows.length > 0 ? tenantRows[0].tenant_key : null
+                  await sql`
+                    INSERT INTO whatsapp_messages (
+                      tenant_id, tenant_key, customer_id, phone_number, message_type,
+                      message_content, direction, status, msg_id, trigger_type, created_at
+                    ) VALUES (
+                      ${tenantId}, ${tenantKey}, ${cand.id || null}, ${sendResult.safePhone}, 'text',
+                      ${msgText}, 'outbound', 'sent', ${sendResult.msgId || null}, ${'smart_campaign:' + rule.trigger_type}, NOW()
+                    )
+                  `.catch(() => {})
+                } catch {}
+
+                ruleSentCount++
+                summary.smartCampaignsSent = (summary.smartCampaignsSent || 0) + 1
+                summary.totalSent++
+              } catch (err: any) {
+                console.error(`[WhatsApp Cron] Error sending smart campaign to ${cand.phone}:`, err)
+              }
+            }
+
+            if (ruleSentCount > 0) {
+              await sql`
+                UPDATE smart_campaign_rules
+                SET total_sent = total_sent + ${ruleSentCount}, last_run_at = NOW()
+                WHERE id = ${rule.id}
+              `.catch(() => {})
+            }
           }
         }
+      } catch (e: any) {
+        console.error(`[WhatsApp Cron] Error processing smart campaign rules for tenant ${tenantId}:`, e)
+        summary.errors.push(`Smart Campaigns: ${e.message}`)
       }
-    } catch (e: any) {
-      console.error(`[WhatsApp Cron] Error processing smart campaign rules for tenant ${tenantId}:`, e)
-      summary.errors.push(`Smart Campaigns: ${e.message}`)
     }
 
     return summary

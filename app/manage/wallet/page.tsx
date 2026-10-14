@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { toast } from "@/hooks/use-toast"
 import { Plus, Search, Wallet, TrendingUp, Users, Gift, Eye, History } from "lucide-react"
 import { formatCurrency } from "@/lib/currency"
-import { getCustomerWallets, getWalletTransactions, addWalletPoints } from "@/app/actions/wallet"
+import { getCustomerWallets, getWalletTransactions, addWalletPoints, topUpWallet } from "@/app/actions/wallet"
 interface WalletTransaction {
   id: string
   customerId: string
@@ -30,10 +30,11 @@ interface CustomerWallet {
   customerId: string
   customerName: string
   customerPhone: string
+  walletBalance?: number
   totalPoints: number
   lifetimeEarned: number
   lifetimeRedeemed: number
-  tier: "bronze" | "silver" | "gold" | "platinum"
+  tier: "bronze" | "silver" | "gold" | "platinum" | string
   lastActivity: string
 }
 
@@ -47,6 +48,11 @@ export default function WalletManagePage() {
   const [selectedWallet, setSelectedWallet] = useState<CustomerWallet | null>(null)
   const [isAddPointsDialogOpen, setIsAddPointsDialogOpen] = useState(false)
   const [isTransactionHistoryOpen, setIsTransactionHistoryOpen] = useState(false)
+  const [isTopUpDialogOpen, setIsTopUpDialogOpen] = useState(false)
+  const [topUpAmount, setTopUpAmount] = useState("")
+  const [topUpMethod, setTopUpMethod] = useState("cash")
+  const [topUpNotes, setTopUpNotes] = useState("")
+  const [isToppingUp, setIsToppingUp] = useState(false)
   const [formData, setFormData] = useState({
     points: "",
     type: "bonus" as "bonus" | "refund",
@@ -147,6 +153,51 @@ export default function WalletManagePage() {
     }
   }
 
+  const handleTopUpSubmit = async () => {
+    if (!selectedWallet) return
+    const amt = parseFloat(topUpAmount)
+    if (isNaN(amt) || amt <= 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid amount greater than 0.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsToppingUp(true)
+    try {
+      const res = await topUpWallet(
+        Number(selectedWallet.customerId),
+        amt,
+        topUpMethod,
+        topUpNotes || "Manual wallet balance top-up"
+      )
+
+      if (res.success) {
+        await fetchWalletData()
+        setIsTopUpDialogOpen(false)
+        setTopUpAmount("")
+        setTopUpNotes("")
+        setSelectedWallet(null)
+        toast({
+          title: "Wallet Top-up Successful",
+          description: `Credited ${formatCurrency(amt)} to ${selectedWallet.customerName}'s wallet!`,
+        })
+      } else {
+        throw new Error(res.error || "Failed to top up wallet")
+      }
+    } catch (err: any) {
+      toast({
+        title: "Top-up Error",
+        description: err.message || "Failed to top up wallet balance",
+        variant: "destructive",
+      })
+    } finally {
+      setIsToppingUp(false)
+    }
+  }
+
   const filteredWallets = wallets.filter(
     (wallet) =>
       wallet.customerName.toLowerCase().includes(searchTerm.toLowerCase()) || wallet.customerPhone.includes(searchTerm),
@@ -167,6 +218,7 @@ export default function WalletManagePage() {
     }
   }
 
+  const totalWalletBalance = wallets.reduce((sum, wallet) => sum + (Number(wallet.walletBalance) || 0), 0)
   const totalPoints = wallets.reduce((sum, wallet) => sum + wallet.totalPoints, 0)
   const totalCustomers = wallets.length
   const averagePoints = totalCustomers > 0 ? Math.round(totalPoints / totalCustomers) : 0
@@ -185,8 +237,8 @@ export default function WalletManagePage() {
   return (
     <div className="flex-1 flex flex-col">
       <PageHeader
-        title="Wallet Management"
-        subtitle="Manage customer loyalty points and wallet balances"
+        title="Wallet & Loyalty Management"
+        subtitle="Manage customer prepaid wallet balances (₹) and reward points"
         action={
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-sm">
@@ -219,11 +271,25 @@ export default function WalletManagePage() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Total Points</p>
-                    <p className="text-2xl font-bold">{totalPoints.toLocaleString()}</p>
+                    <p className="text-sm font-medium text-gray-600">Total Prepaid Balance</p>
+                    <p className="text-2xl font-bold text-green-700">{formatCurrency(totalWalletBalance)}</p>
+                  </div>
+                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                    <Wallet className="w-4 h-4 text-green-700" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Total Reward Points</p>
+                    <p className="text-2xl font-bold text-purple-700">{totalPoints.toLocaleString()} pts</p>
                   </div>
                   <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                    <Wallet className="w-4 h-4 text-purple-600" />
+                    <Gift className="w-4 h-4 text-purple-600" />
                   </div>
                 </div>
               </CardContent>
@@ -247,27 +313,13 @@ export default function WalletManagePage() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Average Points</p>
-                    <p className="text-2xl font-bold">{averagePoints}</p>
-                  </div>
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <TrendingUp className="w-4 h-4 text-green-600" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
                     <p className="text-sm font-medium text-gray-600">Gold+ Members</p>
                     <p className="text-2xl font-bold">
                       {wallets.filter((w) => w.tier === "gold" || w.tier === "platinum").length}
                     </p>
                   </div>
                   <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
-                    <Gift className="w-4 h-4 text-yellow-600" />
+                    <TrendingUp className="w-4 h-4 text-yellow-600" />
                   </div>
                 </div>
               </CardContent>
@@ -300,10 +352,11 @@ export default function WalletManagePage() {
                       <p className="text-sm text-gray-600">{wallet.customerPhone}</p>
                       <Badge className={`mt-2 ${getTierColor(wallet.tier)} capitalize`}>{wallet.tier}</Badge>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
                         size="sm"
+                        title="View Transactions"
                         onClick={() => {
                           setSelectedWallet(wallet)
                           setIsTransactionHistoryOpen(true)
@@ -312,35 +365,53 @@ export default function WalletManagePage() {
                         <Eye className="w-4 h-4" />
                       </Button>
                       <Button
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
+                        className="text-purple-600 border-purple-200 hover:bg-purple-50 text-xs px-2"
                         onClick={() => {
                           setSelectedWallet(wallet)
                           setIsAddPointsDialogOpen(true)
                         }}
-                        className="text-green-600 hover:text-green-700"
                       >
-                        <Plus className="w-4 h-4" />
+                        + Pts
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700 text-xs px-2"
+                        onClick={() => {
+                          setSelectedWallet(wallet)
+                          setIsTopUpDialogOpen(true)
+                        }}
+                      >
+                        + Top-up ₹
                       </Button>
                     </div>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    <div className="text-center p-4 bg-purple-50 rounded-lg">
-                      <p className="text-sm text-gray-600">Current Balance</p>
-                      <p className="text-3xl font-bold text-purple-600">{wallet.totalPoints}</p>
-                      <p className="text-xs text-gray-500">points</p>
+                    <div className="grid grid-cols-2 gap-2 text-center">
+                      <div className="p-3 bg-green-50/80 border border-green-100 rounded-lg">
+                        <p className="text-xs text-gray-500 font-medium">Prepaid Balance</p>
+                        <p className="text-xl font-bold text-green-700">{formatCurrency(wallet.walletBalance || 0)}</p>
+                        <p className="text-[10px] text-green-600">Store Credit</p>
+                      </div>
+                      <div className="p-3 bg-purple-50/80 border border-purple-100 rounded-lg">
+                        <p className="text-xs text-gray-500 font-medium">Loyalty Points</p>
+                        <p className="text-xl font-bold text-purple-700">{wallet.totalPoints}</p>
+                        <p className="text-[10px] text-purple-600">Reward Pts</p>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <p className="text-gray-600">Lifetime Earned</p>
-                        <p className="font-semibold text-green-600">{wallet.lifetimeEarned}</p>
+                        <p className="font-semibold text-green-600">{wallet.lifetimeEarned} pts</p>
                       </div>
                       <div>
                         <p className="text-gray-600">Lifetime Redeemed</p>
-                        <p className="font-semibold text-red-600">{wallet.lifetimeRedeemed}</p>
+                        <p className="font-semibold text-red-600">{wallet.lifetimeRedeemed} pts</p>
                       </div>
                     </div>
 
@@ -529,6 +600,87 @@ export default function WalletManagePage() {
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Top-up Prepaid Wallet Dialog */}
+      <Dialog open={isTopUpDialogOpen} onOpenChange={setIsTopUpDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Top-Up Customer Wallet Balance</DialogTitle>
+          </DialogHeader>
+          {selectedWallet && (
+            <div className="space-y-4">
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <p className="font-medium">{selectedWallet.customerName}</p>
+                <p className="text-sm text-gray-600">{selectedWallet.customerPhone}</p>
+                <p className="text-sm text-green-700 font-semibold mt-1">
+                  Current Balance: {formatCurrency(selectedWallet.walletBalance || 0)}
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="topUpAmount">Top-up Amount (₹) *</Label>
+                <Input
+                  id="topUpAmount"
+                  type="number"
+                  min="1"
+                  step="any"
+                  value={topUpAmount}
+                  onChange={(e) => setTopUpAmount(e.target.value)}
+                  placeholder="e.g. 1000"
+                  required
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="topUpMethod">Payment Method *</Label>
+                <Select value={topUpMethod} onValueChange={setTopUpMethod}>
+                  <SelectTrigger id="topUpMethod">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="upi">UPI / QR</SelectItem>
+                    <SelectItem value="card">Debit / Credit Card</SelectItem>
+                    <SelectItem value="bonus">Promotional Credit</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="topUpNotes">Description / Notes</Label>
+                <Textarea
+                  id="topUpNotes"
+                  value={topUpNotes}
+                  onChange={(e) => setTopUpNotes(e.target.value)}
+                  placeholder="e.g. Advance deposit for festival package..."
+                />
+              </div>
+
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsTopUpDialogOpen(false)
+                    setSelectedWallet(null)
+                    setTopUpAmount("")
+                    setTopUpNotes("")
+                  }}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleTopUpSubmit}
+                  disabled={isToppingUp || !topUpAmount}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                >
+                  {isToppingUp ? "Processing..." : "Confirm Top-Up"}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

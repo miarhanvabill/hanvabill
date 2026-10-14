@@ -13,21 +13,67 @@ import {
   getTenantWhatsAppConfig,
 } from "@/lib/whatsapp-automations"
 
-// Aliases for compatibility
-export type AutomationRule = WhatsAppAutomationRule & {
-  category?: string
-  description?: string
-  allowed_variables?: string[]
+// Aliases and unified types for compatibility
+export interface AutomationRule {
+  id: string
+  numericId?: number
+  tenant_id?: string
+  event_type: string
+  triggerEvent?: string
+  name: string
+  is_enabled: boolean
+  enabled: boolean
+  template_text: string
+  template: string
+  delay_minutes: number
+  timingDelay: string
+  send_time: string
+  category: string
+  description: string
+  allowed_variables: string[]
+  availableVariables: Array<{ tag: string; label: string; sample: string }>
+  buttonText?: string
+  created_at?: string
+  updated_at?: string
 }
 
-export type OutboundLog = WhatsAppAutomationLog
+export interface OutboundLog {
+  id: number | string
+  tenant_id?: string
+  rule_id?: number | null
+  event_type?: string
+  trigger_type?: string
+  customer_id?: number | null
+  customer_name?: string | null
+  recipient_phone?: string
+  phone_number?: string
+  message_content: string
+  reference_id?: string | null
+  status: "sent" | "delivered" | "read" | "failed" | "skipped" | string
+  error_message?: string | null
+  msg_id?: string | null
+  sent_at?: string
+  created_at: string
+}
 
 export interface WhatsAppAnalyticsData {
   totalSent: number
-  deliveredRate: number
-  readRate: number
-  failedCount: number
+  totalSentToday: number
+  totalSentAllTime: number
   todaySent: number
+  deliveredRate: number
+  deliveryRate: number
+  deliveredCount: number
+  failedCount: number
+  readRate: number
+  readCount: number
+  clickRate: number
+  dailyTrends: {
+    date: string
+    sent: number
+    delivered: number
+    read: number
+  }[]
   topAutomations: {
     event_type: string
     sent_count: number
@@ -84,7 +130,7 @@ const EVENT_METADATA: Record<string, { category: string; description: string; al
   },
 }
 
-function enrichRule(r: any): any {
+function enrichRule(r: any): AutomationRule {
   const meta = EVENT_METADATA[r.event_type] || {
     category: "General",
     description: "Automated WhatsApp trigger",
@@ -110,6 +156,7 @@ function enrichRule(r: any): any {
     is_enabled: Boolean(r.is_enabled),
     delay_minutes: delayMin,
     timingDelay: delayMin > 0 ? `${delayMin} min delay` : "Instant trigger",
+    send_time: r.send_time || "09:00",
     category: meta.category,
     description: meta.description,
     allowed_variables: meta.allowed_variables,
@@ -118,6 +165,7 @@ function enrichRule(r: any): any {
       label: v.replace(/_/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase()),
       sample: v === "customer_name" ? "Priya Sharma" : v === "total_amount" ? "₹2,499" : "Sample",
     })),
+    buttonText: "Save Changes",
   }
 }
 
@@ -286,7 +334,7 @@ export async function toggleWhatsAppAutomationRule(
   })
 }
 
-export async function toggleAutomationRule(id: number, enabled: boolean) {
+export async function toggleAutomationRule(id: number | string, enabled: boolean) {
   return await toggleWhatsAppAutomationRule(id, enabled)
 }
 
@@ -294,9 +342,10 @@ export async function toggleAutomationRule(id: number, enabled: boolean) {
  * Send a sample/test automation message to a given phone number
  */
 export async function sendTestAutomationMessage(
-  eventType: string,
+  eventTypeOrId: string | number,
   phoneNumber: string,
   sampleData?: Record<string, string>,
+  customTemplateText?: string,
 ): Promise<{ success: boolean; message: string; messageContent?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
@@ -304,7 +353,6 @@ export async function sendTestAutomationMessage(
         return { success: false, message: "Phone number is required" }
       }
 
-      const canonicalEvent = CANONICAL_EVENT_TYPES[eventType] || eventType
       const waConfig = await getTenantWhatsAppConfig(sql, tenantId)
 
       if (!waConfig.enabled) {
@@ -314,29 +362,60 @@ export async function sendTestAutomationMessage(
         }
       }
 
-      // Fetch rule template
-      const rules = await sql`
-        SELECT template_text FROM whatsapp_automation_rules
-        WHERE tenant_id = ${tenantId} AND event_type = ${canonicalEvent}
-        LIMIT 1
-      `
+      let canonicalEvent = "booking_created"
+      let template = customTemplateText || ""
 
-      const template = rules.length > 0
-        ? rules[0].template_text
-        : DEFAULT_AUTOMATION_TEMPLATES[canonicalEvent]?.template || "Test message for {{business_name}}"
+      const numId = Number(eventTypeOrId)
+      if (!isNaN(numId) && numId > 0) {
+        const ruleRows = await sql`
+          SELECT event_type, template_text FROM whatsapp_automation_rules
+          WHERE id = ${numId} AND tenant_id = ${tenantId}
+          LIMIT 1
+        `
+        if (ruleRows.length > 0) {
+          canonicalEvent = ruleRows[0].event_type
+          if (!template) template = ruleRows[0].template_text
+        }
+      } else if (typeof eventTypeOrId === "string") {
+        canonicalEvent = CANONICAL_EVENT_TYPES[eventTypeOrId] || eventTypeOrId
+        if (!template) {
+          const ruleRows = await sql`
+            SELECT template_text FROM whatsapp_automation_rules
+            WHERE event_type = ${canonicalEvent} AND tenant_id = ${tenantId}
+            LIMIT 1
+          `
+          if (ruleRows.length > 0) {
+            template = ruleRows[0].template_text
+          } else {
+            template = DEFAULT_AUTOMATION_TEMPLATES[canonicalEvent]?.template || "Test message for {{business_name}}"
+          }
+        }
+      }
+
+      if (!template) {
+        template = DEFAULT_AUTOMATION_TEMPLATES[canonicalEvent]?.template || "Hello {{customer_name}}, this is a test message from {{business_name}}!"
+      }
 
       const defaultSampleVars: Record<string, string> = {
         customer_name: "Valued Customer",
         business_name: waConfig.salonName || "Hanva Salon",
+        salon_name: waConfig.salonName || "Hanva Salon",
         service_name: "Haircut & Beard Styling",
+        service_names: "Haircut & Beard Styling",
         booking_date: new Date().toISOString().split("T")[0],
         booking_time: "11:30 AM",
         staff_name: "Alex",
         total_amount: "850",
+        invoice_no: "INV-TEST-001",
         invoice_url: "https://biz.hanva.in/inv/test-preview",
         gmb_url: waConfig.googleMyBusinessUrl || "https://maps.google.com",
+        review_url: waConfig.googleMyBusinessUrl || "https://maps.google.com",
         points: "150",
+        points_earned: "50",
         coupon_code: "SPECIAL10",
+        discount_percent: "20",
+        validity_days: "7",
+        booking_url: "https://biz.hanva.in/book",
         ...sampleData,
       }
 
@@ -351,6 +430,7 @@ export async function sendTestAutomationMessage(
 
       if (result.success) {
         revalidatePath("/whatsapp")
+        revalidatePath("/manage/whatsapp-config")
         return {
           success: true,
           message: "Test message sent successfully!",
@@ -372,8 +452,27 @@ export async function sendTestAutomationMessage(
   })
 }
 
-export async function testSendAutomationTemplate(id: number, phone: string) {
-  return await sendTestAutomationMessage(id, phone)
+export async function testSendAutomationTemplate(
+  param1: number | string | {
+    ruleId?: string | number
+    eventType?: string
+    phoneNumber: string
+    templateText?: string
+    sampleVariables?: Record<string, string>
+  },
+  phone?: string,
+  sampleData?: Record<string, string>,
+  customTemplateText?: string,
+) {
+  if (typeof param1 === "object" && param1 !== null) {
+    return await sendTestAutomationMessage(
+      param1.ruleId || param1.eventType || "booking_created",
+      param1.phoneNumber,
+      param1.sampleVariables,
+      param1.templateText,
+    )
+  }
+  return await sendTestAutomationMessage(param1, phone || "", sampleData, customTemplateText)
 }
 
 /**
@@ -382,9 +481,10 @@ export async function testSendAutomationTemplate(id: number, phone: string) {
 export async function runPendingAutomationsCron() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const summary = await runAutomationsCronForTenant(sql, tenantId)
+      const summary = await runAutomationsCronForTenant(sql, tenantId, { forceDailyBatches: true })
 
       revalidatePath("/whatsapp")
+      revalidatePath("/manage/whatsapp-config")
       return {
         success: true,
         message: `Automations completed: ${summary.totalSent} message(s) sent.`,
@@ -434,29 +534,6 @@ export async function getWhatsAppAutomationLogs(limit: number = 50): Promise<Wha
   })
 }
 
-export interface WhatsAppAnalyticsData {
-  totalSentToday: number
-  totalSentAllTime: number
-  deliveryRate: number
-  deliveredCount: number
-  failedCount: number
-  readRate: number
-  readCount: number
-  clickRate: number
-  dailyTrends: {
-    date: string
-    sent: number
-    delivered: number
-    read: number
-  }[]
-  topAutomations: {
-    event_type: string
-    sent_count: number
-    delivered_count: number
-  }[]
-  recentLogs: any[]
-}
-
 /**
  * Fetch WhatsApp delivery analytics and logs
  */
@@ -464,7 +541,7 @@ export async function getWhatsAppAnalytics(): Promise<WhatsAppAnalyticsData> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       // 1. Total counts from whatsapp_messages table
-      const [messagesStats, todayStats, logs] = await Promise.all([
+      const [messagesStats, todayStats, logs, topAutomationsRaw] = await Promise.all([
         sql`
           SELECT 
             COUNT(*) as total_sent,
@@ -487,11 +564,11 @@ export async function getWhatsAppAnalytics(): Promise<WhatsAppAnalyticsData> {
           SELECT 
             w.id,
             w.phone_number,
-            w.message_type as trigger_type,
+            COALESCE(w.trigger_type, w.message_type, 'invoice_receipt') as trigger_type,
             w.message_content,
             w.status,
             w.created_at,
-            c.full_name as customer_name
+            COALESCE(c.full_name, 'Valued Customer') as customer_name
           FROM whatsapp_messages w
           LEFT JOIN customers c ON (w.customer_id = c.id OR w.phone_number = c.phone_number OR w.phone_number = REPLACE(c.phone_number, '+', ''))
           WHERE w.tenant_id::text = ${tenantId}::text
@@ -499,6 +576,18 @@ export async function getWhatsAppAnalytics(): Promise<WhatsAppAnalyticsData> {
           ORDER BY w.created_at DESC
           LIMIT 50
         `,
+        sql`
+          SELECT 
+            COALESCE(trigger_type, message_type, 'General') as event_type,
+            COUNT(*)::int as sent_count,
+            COUNT(CASE WHEN status IN ('delivered', 'read') THEN 1 END)::int as delivered_count
+          FROM whatsapp_messages
+          WHERE tenant_id::text = ${tenantId}::text
+            AND direction = 'outbound'
+          GROUP BY COALESCE(trigger_type, message_type, 'General')
+          ORDER BY sent_count DESC
+          LIMIT 5
+        `.catch(() => []),
       ])
 
       const totalSent = Number(messagesStats[0]?.total_sent || 0)
@@ -536,24 +625,36 @@ export async function getWhatsAppAnalytics(): Promise<WhatsAppAnalyticsData> {
         })
       }
 
+      const topAutomations = (topAutomationsRaw || []).map((t: any) => ({
+        event_type: String(t.event_type || "General"),
+        sent_count: Number(t.sent_count || 0),
+        delivered_count: Number(t.delivered_count || 0),
+      }))
+
       return {
+        totalSent: totalSent,
         totalSentToday: todaySent,
         totalSentAllTime: totalSent,
-        deliveryRate,
+        todaySent: todaySent,
+        deliveredRate: deliveryRate,
+        deliveryRate: deliveryRate,
         deliveredCount,
         failedCount,
         readRate,
         readCount,
         clickRate,
         dailyTrends,
-        topAutomations: [],
-        recentLogs: logs || [],
+        topAutomations,
+        recentLogs: (logs || []) as OutboundLog[],
       }
     } catch (error) {
       console.error("[Actions] Error fetching WhatsApp analytics:", error)
       return {
+        totalSent: 0,
         totalSentToday: 0,
         totalSentAllTime: 0,
+        todaySent: 0,
+        deliveredRate: 0,
         deliveryRate: 0,
         deliveredCount: 0,
         failedCount: 0,

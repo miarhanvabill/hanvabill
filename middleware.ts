@@ -26,6 +26,9 @@ const isPublicRoute = createRouteMatcher([
   "/api/webhooks(.*)",
   "/api/public/(.*)",
   "/test-forms(.*)",
+  "/manifest(.*)",
+  "/sw.js",
+  "/favicon.ico",
 ]);
 
 const clerkMw = clerkMiddleware(async (auth, req) => {
@@ -55,7 +58,7 @@ const clerkMw = clerkMiddleware(async (auth, req) => {
 
   // 3) Resolve tenant from Clerk session claims
   const authObject = await auth();
-  const claims = authObject.sessionClaims || {};
+  const claims = (authObject.sessionClaims || {}) as Record<string, any>;
   const tenantId =
     (claims.org_id as string) ||
     (claims.tenantId as string) ||

@@ -44,7 +44,7 @@ export async function getBookingsPageData(params?: {
       const offset = Number(params?.offset) || 0
       const limit = Number(params?.limit) || 50
 
-      const cacheKey = `bookings:page_data:${startStr || "all"}:${endStr || "all"}:${statusStr || "all"}:${searchStr || "none"}:${offset}:${limit}`
+      const cacheKey = `tenant:${tenantId}:bookings:page_data:${startStr || "all"}:${endStr || "all"}:${statusStr || "all"}:${searchStr || "none"}:${offset}:${limit}`
 
       return await cacheFetch(
         cacheKey,

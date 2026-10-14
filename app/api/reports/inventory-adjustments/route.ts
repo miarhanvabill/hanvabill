@@ -67,7 +67,7 @@ export async function GET(request: Request) {
         `
       }
 
-      const formattedAdjustments = adjustments.map((adj) => ({
+      const formattedAdjustments = adjustments.map((adj: any) => ({
         id: adj.id,
         product_id: adj.product_id,
         product_name: adj.product_name,

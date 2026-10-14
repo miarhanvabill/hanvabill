@@ -33,14 +33,14 @@ export async function GET(request: NextRequest) {
         ORDER BY date DESC
       `
       
-      const response = dailyRevenue.map(row => ({
+      const response = dailyRevenue.map((row: any) => ({
         date: row.date,
-        bookingCount: Number(row.bookingcount),
-        revenue: Number(row.revenue),
+        bookingCount: Number(row.bookingcount || row.bookingCount) || 0,
+        revenue: Number(row.revenue) || 0,
         tips: 0,
         totalOutstanding: 0,
-        collectedOutstanding: 0
-      }));
+        collectedOutstanding: 0,
+      }))
 
       return NextResponse.json(response, {
         headers: {

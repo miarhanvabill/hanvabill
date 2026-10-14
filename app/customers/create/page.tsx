@@ -30,6 +30,7 @@ export default function CreateCustomer() {
     phoneNumber: "",
     fullName: "",
     email: "",
+    address: "",
     smsNumber: "",
     code: "",
     instagramHandle: "",
@@ -82,7 +83,7 @@ export default function CreateCustomer() {
         })
         router.push("/customers")
       } else {
-        throw new Error(result.error || "Failed to create customer")
+        throw new Error((result as any).message || (result as any).error || "Failed to create customer")
       }
     } catch (error: any) {
       toast({
@@ -251,6 +252,16 @@ export default function CreateCustomer() {
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-slate-700">Address</Label>
+                    <Input
+                      value={formData.address}
+                      onChange={(e) => handleInputChange("address", e.target.value)}
+                      className="border-gray-300 focus:ring-slate-500"
+                      placeholder="Street, City, Pincode"
+                    />
                   </div>
                 </CardContent>
               </Card>

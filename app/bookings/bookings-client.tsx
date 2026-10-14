@@ -20,6 +20,7 @@ import { BulkUploadModal } from "@/components/bulk-upload-modal"
 import { bookingTemplate } from "@/lib/csv-templates"
 
 function QuickBookModal({ onBookingCreated }: { onBookingCreated?: () => void }) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [dbServices, setDbServices] = useState<{ id: number; name: string; price: number; duration_minutes: number }[]>([])
@@ -28,7 +29,7 @@ function QuickBookModal({ onBookingCreated }: { onBookingCreated?: () => void })
     customerPhone: "",
     customerEmail: "",
     selectedServiceId: "",
-    bookingDate: new Date().toISOString().split("T")[0],
+    bookingDate: new Date().toLocaleDateString("en-CA"),
     bookingTime: "",
     totalAmount: "",
     status: "pending",
@@ -104,7 +105,7 @@ function QuickBookModal({ onBookingCreated }: { onBookingCreated?: () => void })
           customerPhone: "",
           customerEmail: "",
           selectedServiceId: "",
-          bookingDate: new Date().toISOString().split("T")[0],
+          bookingDate: new Date().toLocaleDateString("en-CA"),
           bookingTime: "",
           totalAmount: "",
           status: "pending",
@@ -113,7 +114,7 @@ function QuickBookModal({ onBookingCreated }: { onBookingCreated?: () => void })
         if (onBookingCreated) {
           onBookingCreated()
         } else {
-          window.location.reload()
+          router.refresh()
         }
       } else {
         throw new Error((result as any).message || (result as any).error || "Failed to create booking")
@@ -296,7 +297,7 @@ function AppointmentsSection({
   bookings: any[]
   onStatusUpdate: (id: number, status: string) => void
 }) {
-  const todayStr = new Date().toISOString().split("T")[0]
+  const todayStr = new Date().toLocaleDateString("en-CA")
   const pendingAppointments = bookings.filter((b) => b.status === "pending")
   const confirmedAppointments = bookings.filter((b) => b.status === "confirmed")
   const todayAppointments = bookings.filter((b) => b.booking_date === todayStr)

@@ -30,9 +30,6 @@ export async function GET(request: Request) {
       }
       const startIso = startDate.toISOString().split("T")[0]
 
-      // Build status filter
-      const statusFilter = status === "all" ? "" : `AND e.status = '${status}'`
-
       const enquiries = await sql`
         SELECT 
           e.*,
@@ -45,20 +42,20 @@ export async function GET(request: Request) {
         ) AND b.booking_date >= e.inquiry_date::date
         WHERE e.inquiry_date >= ${startIso}
         AND e.tenant_id = ${tenantId}
-        ${statusFilter ? sql.unsafe(statusFilter) : sql``}
+        ${status !== "all" ? sql`AND e.status = ${status}` : sql``}
         ORDER BY e.inquiry_date DESC
       `
 
       // Calculate stats
       const totalEnquiries = enquiries.length
-      const newEnquiries = enquiries.filter((e) => e.status === "new").length
-      const contacted = enquiries.filter((e) => e.status === "contacted").length
-      const converted = enquiries.filter((e) => e.status === "converted").length
-      const closed = enquiries.filter((e) => e.status === "closed").length
+      const newEnquiries = enquiries.filter((e: any) => e.status === "new").length
+      const contacted = enquiries.filter((e: any) => e.status === "contacted").length
+      const converted = enquiries.filter((e: any) => e.status === "converted").length
+      const closed = enquiries.filter((e: any) => e.status === "closed").length
       const conversionRate = totalEnquiries > 0 ? (converted / totalEnquiries) * 100 : 0
       const totalConversionValue = enquiries
-        .filter((e) => e.conversion_value)
-        .reduce((sum, e) => sum + Number(e.conversion_value), 0)
+        .filter((e: any) => e.conversion_value)
+        .reduce((sum: number, e: any) => sum + (Number(e.conversion_value) || 0), 0)
 
       const stats = {
         total_enquiries: totalEnquiries,
@@ -71,7 +68,7 @@ export async function GET(request: Request) {
         average_response_time: 2.5, // Mock average response time in hours
       }
 
-      const formattedEnquiries = enquiries.map((enquiry) => ({
+      const formattedEnquiries = enquiries.map((enquiry: any) => ({
         ...enquiry,
         conversion_value: enquiry.conversion_value ? Number(enquiry.conversion_value) : null,
       }))

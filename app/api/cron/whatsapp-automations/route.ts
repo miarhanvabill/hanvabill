@@ -52,14 +52,16 @@ async function handleCron(request: NextRequest) {
       // Find all active tenants
       let tenants: Array<{ id: string }> = []
       try {
-        tenants = await baseSql`
+        const rows = await baseSql`
           SELECT id FROM tenants WHERE status = 'active'
         `
+        tenants = rows.map((r: any) => ({ id: String(r.id) }))
       } catch (err) {
         console.warn("[WhatsApp Cron API] Error fetching from tenants table, falling back to distinct store_settings:", err)
-        tenants = await baseSql`
+        const fallbackRows = await baseSql`
           SELECT DISTINCT tenant_id as id FROM store_settings WHERE setting_key = 'whatsapp.enabled' AND setting_value = 'true'
         `
+        tenants = fallbackRows.map((r: any) => ({ id: String(r.id) }))
       }
 
       console.log(`[WhatsApp Cron API] Found ${tenants.length} tenants to process`)

@@ -60,7 +60,7 @@ export async function getCashRegisters() {
       const transactions = Array.isArray(transactionsResult) ? transactionsResult : transactionsResult.rows || []
 
       return {
-        registers: registers.map((register) => ({
+        registers: registers.map((register: any) => ({
           ...register,
           id: Number(register.id),
           current_shift_id: register.current_shift_id ? Number(register.current_shift_id) : null,
@@ -71,7 +71,7 @@ export async function getCashRegisters() {
           updated_at: register.updated_at ? format(new Date(register.updated_at), "yyyy-MM-dd'T'HH:mm:ssxxx") : format(new Date(), "yyyy-MM-dd'T'HH:mm:ssxxx"),
           opened_at: register.opened_at ? format(new Date(register.opened_at), "yyyy-MM-dd'T'HH:mm:ssxxx") : null,
         })) as CashRegister[],
-        transactions: transactions.map((transaction) => ({
+        transactions: transactions.map((transaction: any) => ({
           ...transaction,
           id: Number(transaction.id),
           register_id: Number(transaction.register_id),
@@ -202,7 +202,7 @@ export async function getRegisterTransactions(registerId: number) {
         LIMIT 50
       `
 
-      return transactions.map((transaction) => ({
+      return transactions.map((transaction: any) => ({
         ...transaction,
         id: Number(transaction.id),
         register_id: Number(transaction.register_id),
@@ -216,7 +216,12 @@ export async function getRegisterTransactions(registerId: number) {
   })
 }
 
-export async function openRegister(registerId: number, openingBalance: number, notes?: string) {
+export async function openRegister(
+  registerId: number,
+  openingBalance: number,
+  notes?: string,
+  denominations?: Record<string, number>
+) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const registerCheck = await sql`
@@ -228,9 +233,20 @@ export async function openRegister(registerId: number, openingBalance: number, n
       if (!reg) return { success: false, message: "Register not found" }
       if (reg.current_shift_id) return { success: false, message: "Register is already open" }
 
+      let denominationSummary = ""
+      if (denominations && Object.keys(denominations).length > 0) {
+        const parts = Object.entries(denominations)
+          .filter(([_, count]) => count > 0)
+          .map(([denom, count]) => `₹${denom}×${count}`)
+        if (parts.length > 0) {
+          denominationSummary = `[Opening Denominations: ${parts.join(", ")}]`
+        }
+      }
+      const initialNotes = [notes, denominationSummary].filter(Boolean).join(" | ")
+
       const shiftResult = await sql`
         INSERT INTO register_shifts (register_id, tenant_id, opening_balance, expected_balance, notes)
-        VALUES (${registerId}, ${tenantId}, ${openingBalance}, ${openingBalance}, ${notes || null})
+        VALUES (${registerId}, ${tenantId}, ${openingBalance}, ${openingBalance}, ${initialNotes || null})
         RETURNING id
       `
       const shiftId = Array.isArray(shiftResult) ? shiftResult[0]?.id : shiftResult.rows?.[0]?.id;
@@ -243,14 +259,19 @@ export async function openRegister(registerId: number, openingBalance: number, n
       
       revalidatePath("/cash-registers")
       return { success: true, message: "Register opened successfully" }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
-      throw new Error("Failed to open register")
+      return { success: false, message: e.message || "Failed to open register" }
     }
   })
 }
 
-export async function closeRegister(registerId: number, actualBalance: number, notes?: string) {
+export async function closeRegister(
+  registerId: number,
+  actualBalance: number,
+  notes?: string,
+  denominations?: Record<string, number>
+) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const registerCheck = await sql`
@@ -261,26 +282,90 @@ export async function closeRegister(registerId: number, actualBalance: number, n
       if (!reg) return { success: false, message: "Register not found" }
       if (!reg.current_shift_id) return { success: false, message: "Register is not open" }
       
-      const expectedBalance = Number(reg.current_balance)
-      const discrepancy = actualBalance - expectedBalance
+      const expectedBalance = Number(reg.current_balance) || 0
+      const discrepancy = Number((actualBalance - expectedBalance).toFixed(2))
+
+      let denominationSummary = ""
+      if (denominations && Object.keys(denominations).length > 0) {
+        const parts = Object.entries(denominations)
+          .filter(([_, count]) => count > 0)
+          .map(([denom, count]) => `₹${denom}×${count}`)
+        if (parts.length > 0) {
+          denominationSummary = `[Closing Denominations: ${parts.join(", ")}]`
+        }
+      }
+
+      const closeNotes = [notes, denominationSummary].filter(Boolean).join(" | ")
 
       await sql`
         UPDATE register_shifts
-        SET closed_at = CURRENT_TIMESTAMP, actual_balance = ${actualBalance}, discrepancy = ${discrepancy}, notes = COALESCE(notes || '\n', '') || ${notes || ''}
+        SET closed_at = CURRENT_TIMESTAMP,
+            actual_balance = ${actualBalance},
+            discrepancy = ${discrepancy},
+            notes = CASE 
+              WHEN notes IS NOT NULL AND notes != '' AND ${closeNotes} != '' 
+                THEN notes || E'\n' || ${closeNotes}
+              WHEN ${closeNotes} != '' 
+                THEN ${closeNotes}
+              ELSE notes
+            END
         WHERE id = ${reg.current_shift_id} AND tenant_id = ${tenantId}
       `
 
       await sql`
         UPDATE cash_registers 
-        SET current_shift_id = NULL, updated_at = CURRENT_TIMESTAMP
+        SET current_shift_id = NULL, current_balance = ${actualBalance}, updated_at = CURRENT_TIMESTAMP
         WHERE id = ${registerId} AND tenant_id = ${tenantId}
       `
 
       revalidatePath("/cash-registers")
-      return { success: true, message: "Register closed successfully" }
-    } catch (e) {
+      const discrepancyMsg = discrepancy === 0 
+        ? "Drawer balanced perfectly (₹0 variance)." 
+        : `Discrepancy: ${discrepancy > 0 ? '+' : ''}₹${discrepancy.toFixed(2)}.`
+      return { success: true, message: `Register closed successfully. ${discrepancyMsg}` }
+    } catch (e: any) {
       console.error(e)
-      throw new Error("Failed to close register")
+      return { success: false, message: e.message || "Failed to close register" }
+    }
+  })
+}
+
+export async function getShiftHistory(registerId?: number) {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const shiftsResult = registerId
+        ? await sql`
+            SELECT rs.*, cr.name as register_name
+            FROM register_shifts rs
+            JOIN cash_registers cr ON rs.register_id = cr.id AND cr.tenant_id = ${tenantId}
+            WHERE rs.tenant_id = ${tenantId} AND rs.register_id = ${registerId}
+            ORDER BY rs.opened_at DESC
+            LIMIT 50
+          `
+        : await sql`
+            SELECT rs.*, cr.name as register_name
+            FROM register_shifts rs
+            JOIN cash_registers cr ON rs.register_id = cr.id AND cr.tenant_id = ${tenantId}
+            WHERE rs.tenant_id = ${tenantId}
+            ORDER BY rs.opened_at DESC
+            LIMIT 50
+          `
+      const shifts = Array.isArray(shiftsResult) ? shiftsResult : (shiftsResult as any).rows || []
+      return shifts.map((s: any) => ({
+        id: Number(s.id),
+        register_id: Number(s.register_id),
+        register_name: s.register_name,
+        opened_at: s.opened_at ? format(new Date(s.opened_at), "yyyy-MM-dd'T'HH:mm:ssxxx") : null,
+        closed_at: s.closed_at ? format(new Date(s.closed_at), "yyyy-MM-dd'T'HH:mm:ssxxx") : null,
+        opening_balance: Number.parseFloat(s.opening_balance?.toString() || "0"),
+        expected_balance: s.expected_balance ? Number.parseFloat(s.expected_balance.toString()) : null,
+        actual_balance: s.actual_balance ? Number.parseFloat(s.actual_balance.toString()) : null,
+        discrepancy: s.discrepancy ? Number.parseFloat(s.discrepancy.toString()) : 0,
+        notes: s.notes || "",
+      }))
+    } catch (error) {
+      console.error("Error fetching shift history:", error)
+      return []
     }
   })
 }

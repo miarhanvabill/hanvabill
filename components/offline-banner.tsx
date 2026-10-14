@@ -1,17 +1,41 @@
 "use client"
+
 import { useEffect, useState } from "react"
-import { Wifi, WifiOff } from "lucide-react"
+import { Wifi, WifiOff, Loader2, CheckCircle2 } from "lucide-react"
+import { replayPendingQueue } from "@/lib/offline/idb-queue"
 
 export function OfflineBanner() {
   const [online, setOnline] = useState(true)
   const [showBanner, setShowBanner] = useState(false)
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncCount, setSyncCount] = useState(0)
 
   useEffect(() => {
-    const handleOnline = () => {
+    const handleOnline = async () => {
       setOnline(true)
       setShowBanner(true)
-      // Hide the "back online" banner after 3 seconds
-      setTimeout(() => setShowBanner(false), 3000)
+      setIsSyncing(true)
+
+      // Notify Service Worker if active
+      if (navigator.serviceWorker?.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: "REPLAY_QUEUE" })
+      }
+
+      // Replay IndexedDB queue directly (works in Safari, Chrome, Firefox)
+      try {
+        const result = await replayPendingQueue()
+        if (result.processed > 0) {
+          setSyncCount(result.processed)
+        }
+      } catch (err) {
+        console.warn("[OfflineBanner] Failed to replay queue:", err)
+      } finally {
+        setIsSyncing(false)
+        setTimeout(() => {
+          setShowBanner(false)
+          setSyncCount(0)
+        }, 4000)
+      }
     }
 
     const handleOffline = () => {
@@ -22,6 +46,11 @@ export function OfflineBanner() {
     window.addEventListener("online", handleOnline)
     window.addEventListener("offline", handleOffline)
     setOnline(navigator.onLine)
+
+    // Also check on mount if there's any pending queue to replay while online
+    if (navigator.onLine) {
+      replayPendingQueue().catch(() => {})
+    }
 
     return () => {
       window.removeEventListener("online", handleOnline)
@@ -41,8 +70,22 @@ export function OfflineBanner() {
     >
       {online ? (
         <>
-          <Wifi className="h-4 w-4" />
-          <span className="text-sm font-medium">Back online! Syncing data...</span>
+          {isSyncing ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin text-green-700" />
+              <span className="text-sm font-medium">Back online! Syncing data...</span>
+            </>
+          ) : syncCount > 0 ? (
+            <>
+              <CheckCircle2 className="h-4 w-4 text-green-700" />
+              <span className="text-sm font-medium">Back online! Synced {syncCount} offline change{syncCount > 1 ? "s" : ""}.</span>
+            </>
+          ) : (
+            <>
+              <Wifi className="h-4 w-4" />
+              <span className="text-sm font-medium">Back online! Connected to server.</span>
+            </>
+          )}
         </>
       ) : (
         <>

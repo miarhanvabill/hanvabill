@@ -105,7 +105,7 @@ export async function ensureReviewsTable(sql: any) {
   }
 }
 
-export async function submitReviewPublic(tenantId: string, bookingId: number, rating: number, reviewText: string = '') {
+export async function submitReviewPublic(tenantId: string, bookingId: number | null, rating: number, reviewText: string = '') {
   const sql = baseSql;
   
   try {
@@ -113,17 +113,19 @@ export async function submitReviewPublic(tenantId: string, bookingId: number, ra
     
     // Get customer_id from booking if possible
     let customerId = null;
-    try {
-      const bookings = await sql`SELECT customer_id FROM bookings WHERE id = ${bookingId} AND tenant_id = ${tenantId}`;
-      if (bookings.length > 0) {
-        customerId = bookings[0].customer_id;
-      }
-    } catch(e) {}
+    if (bookingId) {
+      try {
+        const bookings = await sql`SELECT customer_id FROM bookings WHERE id = ${bookingId} AND tenant_id = ${tenantId}`;
+        if (bookings.length > 0) {
+          customerId = bookings[0].customer_id;
+        }
+      } catch(e) {}
+    }
     
     // Insert
     await sql`
       INSERT INTO reviews (tenant_id, customer_id, booking_id, rating, review_text, platform, status)
-      VALUES (${tenantId}, ${customerId}, ${bookingId}, ${rating}, ${reviewText}, 'Direct', 'approved')
+      VALUES (${tenantId}, ${customerId}, ${bookingId || null}, ${rating}, ${reviewText}, 'Direct', 'approved')
     `;
     return { success: true };
   } catch(e: any) {

@@ -17,13 +17,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'tenantId, phone, and otp are required' }, { status: 400 })
     }
 
+    // Resolve tenant ID safely
+    const tenant = await sql`
+      SELECT id FROM tenants 
+      WHERE (id::text = ${String(tenantId)} OR slug = ${String(tenantId)} OR tenant_key = ${String(tenantId)}) 
+        AND status = 'active' 
+      LIMIT 1
+    `.catch(() => [])
+    if (tenant.length === 0) {
+      return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
+    }
+    const internalTenantId = Number(tenant[0].id)
+
     const normalizedPhone = String(phone).replace(/[^0-9]/g, '')
     const otpHash = hashOTP(String(otp))
 
     // Find valid, unverified OTP record
     const otpRecord = await sql`
       SELECT id, attempts FROM customer_otps
-      WHERE tenant_id = ${parseInt(tenantId)}
+      WHERE (tenant_id = ${internalTenantId} OR tenant_id::text = ${String(tenantId)})
         AND phone = ${normalizedPhone}
         AND expires_at > NOW()
         AND verified = FALSE
@@ -61,7 +73,7 @@ export async function POST(req: NextRequest) {
     const customerRows = await sql`
       SELECT id, full_name, phone_number, email, date_of_birth, date_of_anniversary, gender
       FROM customers
-      WHERE tenant_id = ${parseInt(tenantId)}
+      WHERE tenant_id = ${internalTenantId}
         AND (
           phone_number = ${normalizedPhone}
           OR phone_number = ${'+' + normalizedPhone}
@@ -78,7 +90,7 @@ export async function POST(req: NextRequest) {
       // New customer — create record
       const newCustomer = await sql`
         INSERT INTO customers (tenant_id, phone_number, full_name, created_at)
-        VALUES (${parseInt(tenantId)}, ${normalizedPhone}, ${'Customer'}, NOW())
+        VALUES (${internalTenantId}, ${normalizedPhone}, ${'Customer'}, NOW())
         RETURNING id, full_name, phone_number, email, date_of_birth, date_of_anniversary, gender
       `.catch(() => [])
       customer = newCustomer[0]
@@ -93,7 +105,7 @@ export async function POST(req: NextRequest) {
     // Sign 7-day JWT
     const token = signCustomerToken({
       customerId: Number(customer.id),
-      tenantId: parseInt(tenantId),
+      tenantId: internalTenantId,
       phone: normalizedPhone,
       name: customer.full_name || 'Customer'
     })

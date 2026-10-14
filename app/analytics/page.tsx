@@ -133,9 +133,11 @@ export default function AnalyticsPage() {
             revenueByCategory: [],
             customerAcquisition: [],
             customerDemographics: { male: 0, female: 0, others: 0 },
+            demographicSpending: { male: 0, female: 0, others: 0 },
             topServices: [],
             staffPerformance: [],
             staffUtilization: [],
+            revenueTrend: [],
           })
         }
       } finally {
@@ -454,7 +456,7 @@ export default function AnalyticsPage() {
                             <RechartsTooltip 
                               cursor={{ fill: '#f3f4f6' }}
                               contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                              formatter={(value: number) => [`₹${value.toLocaleString()}`, 'Revenue']}
+                              formatter={(value: any) => [`₹${Number(value || 0).toLocaleString()}`, 'Revenue'] as [string, string]}
                             />
                             <Bar dataKey="revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                           </BarChart>
@@ -480,7 +482,7 @@ export default function AnalyticsPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {(analytics?.revenueByCategory || []).length > 0 ? (
+                      {analytics && analytics.revenueByCategory.length > 0 ? (
                         <>
                           <div className="h-[200px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
@@ -500,7 +502,7 @@ export default function AnalyticsPage() {
                                   ))}
                                 </Pie>
                                 <RechartsTooltip 
-                                  formatter={(value: number) => `₹${value.toLocaleString()}`}
+                                  formatter={(value: any) => [`₹${Number(value || 0).toLocaleString()}`, 'Revenue'] as [string, string]}
                                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                 />
                               </RechartsPieChart>
@@ -573,7 +575,7 @@ export default function AnalyticsPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {(analytics?.customerAcquisition || []).length > 0 ? (
+                      {analytics && analytics.customerAcquisition.length > 0 ? (
                         analytics.customerAcquisition.map((src, idx) => (
                           <div key={src.source} className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
@@ -657,7 +659,7 @@ export default function AnalyticsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y">
-                        {(analytics?.topServices || []).length > 0 ? (
+                        {analytics && analytics.topServices.length > 0 ? (
                           analytics.topServices.map((s) => (
                             <tr key={s.name} className="hover:bg-gray-50">
                               <td className="p-4 font-medium">{s.name}</td>
@@ -713,7 +715,7 @@ export default function AnalyticsPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y">
-                          {(analytics?.staffPerformance || []).length > 0 ? (
+                          {analytics && analytics.staffPerformance.length > 0 ? (
                             analytics.staffPerformance.map((s) => (
                               <tr key={s.name} className="hover:bg-gray-50">
                                 <td className="p-4 font-medium">{s.name}</td>
@@ -749,7 +751,7 @@ export default function AnalyticsPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {(analytics?.staffUtilization || []).length > 0 ? (
+                      {analytics && analytics.staffUtilization.length > 0 ? (
                         analytics.staffUtilization.map((s) => (
                           <div key={s.name}>
                             <div className="flex justify-between mb-2 text-sm font-medium">

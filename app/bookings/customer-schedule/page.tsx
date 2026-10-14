@@ -24,6 +24,7 @@ import {
 import Link from "next/link"
 import { toast } from "@/hooks/use-toast"
 import { formatCurrency } from "@/lib/currency"
+import { format } from "date-fns"
 import { getServices, type Service } from "@/app/actions/services"
 import { getStaff, type Staff } from "@/app/actions/staff"
 import { createBooking, getBookedSlotsForDate } from "@/app/actions/bookings"
@@ -125,14 +126,14 @@ export default function CustomerSchedulePage() {
     }
   }, [])
 
-  // Fetch real booked slots when date and staff change
+  // Fetch real booked slots when date, staff, or service changes
   useEffect(() => {
     if (!selectedDate) return
 
-    const dateStr = selectedDate.toISOString().split("T")[0]
+    const dateStr = format(selectedDate, "yyyy-MM-dd")
     setIsLoadingSlots(true)
 
-    getBookedSlotsForDate(dateStr, selectedStaff?.id)
+    getBookedSlotsForDate(dateStr, selectedStaff?.id, selectedService?.duration_minutes || 30)
       .then((slots) => {
         setBookedSlots(slots || [])
         setIsLoadingSlots(false)
@@ -141,7 +142,7 @@ export default function CustomerSchedulePage() {
         setBookedSlots([])
         setIsLoadingSlots(false)
       })
-  }, [selectedDate, selectedStaff])
+  }, [selectedDate, selectedStaff, selectedService])
 
   // Extract unique categories from real services
   const categories = useMemo(() => {
@@ -211,7 +212,7 @@ export default function CustomerSchedulePage() {
 
     setIsSubmitting(true)
     try {
-      const dateStr = selectedDate.toISOString().split("T")[0]
+      const dateStr = format(selectedDate, "yyyy-MM-dd")
       const formData = new FormData()
       formData.append("customerName", customerInfo.name.trim())
       formData.append("customerPhone", customerInfo.phone.trim())

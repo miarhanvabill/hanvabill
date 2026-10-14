@@ -15,10 +15,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const dateRange = searchParams.get("dateRange") || "30"
 
-    // Use withTenantAuth to get tenant context and SQL client
-    const analyticsData = await withTenantAuth(async ({ sql, tenantId }) => {
-      return await getBusinessAnalytics(dateRange, tenantId, sql)
-    })
+    const analyticsData = await getBusinessAnalytics(dateRange)
 
     // Prepare CSV rows
     const csvData: (string | number)[][] = [

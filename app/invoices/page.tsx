@@ -165,7 +165,73 @@ export default function InvoicesPage() {
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-7xl mx-auto space-y-6">
           {/* Stats Cards */}
-          {/* ... unchanged stats cards ... */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Total Invoiced</p>
+                    <p className="text-2xl font-bold mt-1">
+                      {formatCurrency(invoices.reduce((sum, inv) => sum + Number(inv.amount || 0), 0))}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Total Invoices</p>
+                    <p className="text-2xl font-bold mt-1">{invoices.length}</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-green-100 text-green-600 flex items-center justify-center">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Paid Invoices</p>
+                    <p className="text-2xl font-bold mt-1">
+                      {invoices.filter((inv) => (inv.status || "paid") === "paid").length}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Average Ticket</p>
+                    <p className="text-2xl font-bold mt-1">
+                      {formatCurrency(
+                        invoices.length > 0
+                          ? invoices.reduce((sum, inv) => sum + Number(inv.amount || 0), 0) / invoices.length
+                          : 0
+                      )}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Controls */}
           <Card>
@@ -236,9 +302,11 @@ export default function InvoicesPage() {
                     </DialogContent>
                   </Dialog>
 
-                  <Button className="gap-2">
-                    <Plus className="w-4 h-4" />
-                    New Invoice
+                  <Button className="gap-2" asChild>
+                    <Link href="/new-sale">
+                      <Plus className="w-4 h-4" />
+                      New Sale
+                    </Link>
                   </Button>
                 </div>
               </div>
@@ -286,8 +354,15 @@ export default function InvoicesPage() {
                           </td>
                           <td className="p-4">
                             <div className="flex items-center gap-2">
-                              <Button variant="ghost" size="sm">
-                                <Eye className="w-4 h-4" />
+                              <Button variant="ghost" size="sm" asChild>
+                                <a
+                                  href={invoice.share_token ? getInvoiceShareUrl(invoice.share_token) : `/invoices/preview`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title="View Public Invoice"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </a>
                               </Button>
                               <Button
                                 variant="ghost"

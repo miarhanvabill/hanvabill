@@ -34,7 +34,7 @@ function EditStaffForm({ staff }: { staff: Staff }) {
     phone: staff.phone || "",
     address: staff.address || "",
     position: staff.role || "", // Map DB 'role' to form 'position'
-    department: "", // Not in DB, client-side only
+    department: staff.department || "",
     salary: staff.salary?.toString() || "",
     commission_rate: staff.commission_rate || "", // Stored as TEXT in DB
     commission_profile_id: (staff as any).commission_profile_id?.toString() || "",
@@ -109,9 +109,10 @@ function EditStaffForm({ staff }: { staff: Staff }) {
         const updateData: Partial<Omit<Staff, "id" | "created_at" | "updated_at">> & { commission_profile_id?: number | null } = {
           name: formData.name,
           email: formData.email || null,
-          phone: formData.phone || null,
+          phone: formData.phone || undefined,
           address: formData.address || null,
           role: formData.position || null, // Map position to role
+          department: formData.department || null,
           salary: formData.salary ? Number.parseFloat(formData.salary) : null,
           commission_rate: formData.commission_rate || null, // Send as string
           commission_profile_id: formData.commission_profile_id ? Number(formData.commission_profile_id) : null,
@@ -120,7 +121,6 @@ function EditStaffForm({ staff }: { staff: Staff }) {
           skills: Array.isArray(formData.specialties) ? formData.specialties.join(", ") || null : formData.specialties || null, // Map specialties array to skills string
           emergency_contact: null, // Not in form, set to null
           avatar_url: formData.avatar_url || null,
-          // department, date_of_birth, notes are not sent to DB
         }
 
         const result = await updateStaff(staff.id, updateData)
@@ -457,7 +457,8 @@ export default function EditStaffPage() {
   useEffect(() => {
     const fetchStaff = async () => {
       try {
-        const parsedId = Number.parseInt(params.id)
+        const idParam = Array.isArray(params?.id) ? params.id[0] : (params?.id as string | undefined)
+        const parsedId = Number.parseInt(idParam || "0", 10)
         if (isNaN(parsedId)) {
           setError(true)
           return

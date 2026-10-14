@@ -1,6 +1,7 @@
 "use server"
 
 import { withTenantAuth } from "@/lib/withTenantAuth"
+export type { AutoConsumptionRule, ConsumptionLog, ConsumptionStats } from "@/types/auto-consumption"
 import type { AutoConsumptionRule, ConsumptionLog, ConsumptionStats } from "@/types/auto-consumption"
 
 export async function getAutoConsumptionRules(): Promise<AutoConsumptionRule[]> {
@@ -33,11 +34,13 @@ export async function getAutoConsumptionRules(): Promise<AutoConsumptionRule[]> 
         ORDER BY acr.created_at DESC
       `
 
-      return rules.map((rule) => ({
+      return rules.map((rule: any) => ({
         ...rule,
         id: rule.id.toString(),
         serviceId: rule.serviceId?.toString() || "",
+        serviceName: rule.serviceName || "All Services",
         productId: rule.productId?.toString() || "",
+        productName: rule.productName || "Unnamed Product",
         totalConsumptions: Number.parseInt(rule.totalConsumptions) || 0,
         estimatedCost: Number.parseFloat(rule.estimatedCost) || 0,
         conditions: rule.conditions || [],
@@ -77,16 +80,19 @@ export async function getConsumptionLogs(): Promise<ConsumptionLog[]> {
         LIMIT 50
       `
 
-      return logs.map((log) => ({
+      return logs.map((log: any) => ({
         ...log,
         id: log.id.toString(),
         ruleId: log.ruleId?.toString() || "",
+        ruleName: log.ruleName || "Standard Usage",
         serviceBookingId: log.serviceBookingId?.toString() || "",
-        customerName: log.customerName || "Unknown Customer",
-        staffName: log.staffName || "Unknown Staff",
-        productConsumed: log.productConsumed || "Unknown Product",
+        customerName: log.customerName || "Walk-in Customer",
+        staffName: log.staffName || "Staff Member",
+        productConsumed: log.productConsumed || "Salon Product",
         amount: Number.parseFloat(log.amount) || 0,
         cost: Number.parseFloat(log.cost) || 0,
+        timestamp: log.timestamp ? String(log.timestamp) : new Date().toISOString(),
+        status: log.status || "completed",
       }))
     } catch (error) {
       console.error("Error fetching consumption logs:", error)
@@ -137,7 +143,7 @@ export async function getConsumptionStats(): Promise<ConsumptionStats> {
         totalConsumptions: Number.parseInt(consumption.total_consumptions) || 0,
         totalCost: Number.parseFloat(consumption.total_cost) || 0,
         avgConsumptionPerService: Number.parseFloat(consumption.avg_consumption_per_service) || 0,
-        topConsumedProducts: topProducts.map((product) => ({
+        topConsumedProducts: topProducts.map((product: any) => ({
           productName: product.product_name || "Unknown Product",
           totalAmount: Number.parseFloat(product.total_amount) || 0,
           totalCost: Number.parseFloat(product.total_cost) || 0,
@@ -354,11 +360,12 @@ export async function triggerConsumption(
 ): Promise<{ success: boolean; message: string }> {
   return withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      // Get rule details
+      // Get rule details - correctly alias cost to cost_per_unit
       const rule = await sql`
-        SELECT acr.*, p.cost_per_unit
+        SELECT acr.*, COALESCE(p.cost, inv.cost_price, 0) as cost_per_unit, COALESCE(p.name, inv.name, 'Product') as product_name, p.sku
         FROM auto_consumption_rules acr
         LEFT JOIN products p ON acr.product_id = p.id AND p.tenant_id = ${tenantId}
+        LEFT JOIN inventory inv ON (acr.product_id = inv.id OR LOWER(p.name) = LOWER(inv.name)) AND inv.tenant_id = ${tenantId}
         WHERE acr.id = ${Number.parseInt(ruleId)} AND acr.is_active = true AND acr.tenant_id = ${tenantId}
       `
 
@@ -386,17 +393,42 @@ export async function triggerConsumption(
           ${cost},
           'completed',
           CURRENT_TIMESTAMP,
-          ${Number.parseInt(staffId)},
+          ${staffId ? Number.parseInt(staffId) : null},
           ${tenantId}
         )
       `
 
-      // Update product inventory if applicable
+      // Deduct from products table
       await sql`
         UPDATE products 
-        SET stock_quantity = stock_quantity - ${ruleData.consumption_amount}
-        WHERE id = ${ruleData.product_id} AND track_inventory = true AND tenant_id = ${tenantId}
-      `
+        SET stock_quantity = GREATEST(0, stock_quantity - ${ruleData.consumption_amount}),
+            updated_at = NOW()
+        WHERE id = ${ruleData.product_id} AND tenant_id = ${tenantId}
+      `.catch(() => {})
+
+      // Deduct from inventory table
+      await sql`
+        UPDATE inventory 
+        SET quantity = GREATEST(0, quantity - ${ruleData.consumption_amount}),
+            status = CASE 
+              WHEN GREATEST(0, quantity - ${ruleData.consumption_amount}) = 0 THEN 'out_of_stock'
+              WHEN GREATEST(0, quantity - ${ruleData.consumption_amount}) <= COALESCE(reorder_level, min_stock_level, 5) THEN 'low_stock'
+              ELSE 'active'
+            END,
+            updated_at = NOW()
+        WHERE (id = ${ruleData.product_id} OR LOWER(name) = LOWER(${ruleData.product_name})) AND tenant_id = ${tenantId}
+      `.catch(() => {})
+
+      // Audit entry in inventory_adjustments
+      await sql`
+        INSERT INTO inventory_adjustments (
+          tenant_id, product_id, adjustment_type, quantity, reason, notes, created_at
+        ) VALUES (
+          ${tenantId}, ${ruleData.product_id}, 'decrease', ${ruleData.consumption_amount},
+          ${'Auto-consumption: ' + (ruleData.name || 'Service Usage')},
+          ${'Triggered for booking #' + serviceBookingId}, NOW()
+        )
+      `.catch(() => {})
 
       return {
         success: true,
@@ -412,6 +444,94 @@ export async function triggerConsumption(
   })
 }
 
+/**
+ * Automatically evaluates and executes active auto-consumption rules
+ * when a salon service is completed or billed.
+ */
+export async function processServiceAutoConsumption(params: {
+  tenantId: string
+  sql: any
+  serviceId: number | string
+  serviceName?: string
+  bookingId?: number | string
+  invoiceId?: number | string
+  staffId?: number | string
+  staffName?: string
+}) {
+  const { tenantId, sql, serviceId, serviceName, bookingId, invoiceId, staffId, staffName } = params
+  try {
+    const rules = await sql`
+      SELECT acr.*, COALESCE(p.cost, inv.cost_price, 0) as cost_per_unit, COALESCE(p.name, inv.name, 'Product') as product_name, p.sku
+      FROM auto_consumption_rules acr
+      LEFT JOIN products p ON acr.product_id = p.id AND p.tenant_id = ${tenantId}
+      LEFT JOIN inventory inv ON (acr.product_id = inv.id OR LOWER(p.name) = LOWER(inv.name)) AND inv.tenant_id = ${tenantId}
+      WHERE acr.service_id = ${Number(serviceId)} AND acr.is_active = true AND acr.trigger_type = 'automatic' AND acr.tenant_id = ${tenantId}
+    `
+    for (const rule of rules) {
+      const amount = Number(rule.consumption_amount) || 0
+      const cost = amount * (Number(rule.cost_per_unit) || 0)
+      
+      // Log consumption
+      await sql`
+        INSERT INTO auto_consumption_logs (
+          rule_id, service_booking_id, product_id, amount_consumed,
+          unit, cost, status, triggered_at, created_by, tenant_id
+        ) VALUES (
+          ${rule.id}, ${bookingId ? Number(bookingId) : 0}, ${rule.product_id},
+          ${amount}, ${rule.unit || 'ml'}, ${cost}, 'completed',
+          NOW(), ${staffId ? Number(staffId) : null}, ${tenantId}
+        )
+      `.catch(() => {})
+
+      // Record in product_consumptions table for checkout audit
+      await sql`
+        INSERT INTO product_consumptions (
+          tenant_id, invoice_id, booking_id, product_id, product_name, sku,
+          quantity_deducted, unit, service_name, staff_name, notes, created_at
+        ) VALUES (
+          ${tenantId}, ${invoiceId ? Number(invoiceId) : null}, ${bookingId ? Number(bookingId) : null},
+          ${rule.product_id}, ${rule.product_name}, ${rule.sku || null},
+          ${amount}, ${rule.unit || 'ml'}, ${serviceName || null}, ${staffName || null},
+          ${'Auto-consumed via rule: ' + rule.name}, NOW()
+        )
+      `.catch(() => {})
+
+      // Deduct from products
+      await sql`
+        UPDATE products 
+        SET stock_quantity = GREATEST(0, stock_quantity - ${amount}), updated_at = NOW()
+        WHERE id = ${rule.product_id} AND tenant_id = ${tenantId}
+      `.catch(() => {})
+
+      // Deduct from inventory
+      await sql`
+        UPDATE inventory 
+        SET quantity = GREATEST(0, quantity - ${amount}),
+            status = CASE 
+              WHEN GREATEST(0, quantity - ${amount}) = 0 THEN 'out_of_stock'
+              WHEN GREATEST(0, quantity - ${amount}) <= COALESCE(reorder_level, min_stock_level, 5) THEN 'low_stock'
+              ELSE 'active'
+            END,
+            updated_at = NOW()
+        WHERE (id = ${rule.product_id} OR LOWER(name) = LOWER(${rule.product_name})) AND tenant_id = ${tenantId}
+      `.catch(() => {})
+
+      // Record in inventory_adjustments
+      await sql`
+        INSERT INTO inventory_adjustments (
+          tenant_id, product_id, adjustment_type, quantity, reason, notes, created_at
+        ) VALUES (
+          ${tenantId}, ${rule.product_id}, 'decrease', ${amount},
+          ${'Auto-consumption: ' + (rule.name || 'Service Usage')},
+          ${'Auto-deducted for service: ' + (serviceName || 'Service #' + serviceId)}, NOW()
+        )
+      `.catch(() => {})
+    }
+  } catch (err) {
+    console.error("Error in processServiceAutoConsumption:", err)
+  }
+}
+
 export async function getAvailableServices(): Promise<Array<{ id: string; name: string }>> {
   return withTenantAuth(async ({ sql, tenantId }) => {
     try {
@@ -422,7 +542,7 @@ export async function getAvailableServices(): Promise<Array<{ id: string; name: 
         ORDER BY name
       `
 
-      return services.map((service) => ({
+      return services.map((service: any) => ({
         id: service.id.toString(),
         name: service.name,
       }))
@@ -443,7 +563,7 @@ export async function getAvailableProducts(): Promise<Array<{ id: string; name: 
         ORDER BY name
       `
 
-      return products.map((product) => ({
+      return products.map((product: any) => ({
         id: product.id.toString(),
         name: product.name,
         unit: product.unit || "ml",
@@ -454,3 +574,4 @@ export async function getAvailableProducts(): Promise<Array<{ id: string; name: 
     }
   })
 }
+

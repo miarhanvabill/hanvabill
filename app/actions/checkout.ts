@@ -58,14 +58,49 @@ export interface FinalizeCheckoutResult {
   }
 }
 
-export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<FinalizeCheckoutResult> {
-  return await withTenantAuth(async ({ sql, tenantId }) => {
+export async function finalizeCheckout(
+  input: FinalizeCheckoutInput,
+  authContext?: { sql: any; tenantId: string }
+): Promise<FinalizeCheckoutResult> {
+  const runner = async ({ sql, tenantId }: { sql: any; tenantId: string }) => {
     const customerId = Number(input.customer_id)
     if (!Number.isFinite(customerId) || customerId <= 0) {
       return { success: false, message: "Invalid customer id" }
     }
 
     try {
+      // 1. Idempotency Check: prevent double charges or duplicate invoices on retry
+      if (input.idempotency_key) {
+        try {
+          await sql`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255);`.catch(() => {})
+          const existingInvoices = await sql`
+            SELECT * FROM invoices 
+            WHERE tenant_id = ${tenantId} AND idempotency_key = ${input.idempotency_key}
+            LIMIT 1
+          `.catch(() => [])
+          
+          if (existingInvoices.length > 0) {
+            const existing = existingInvoices[0]
+            console.log(`[POS Checkout] Idempotent request intercepted for key: ${input.idempotency_key}`)
+            return {
+              success: true,
+              invoice: existing,
+              message: "Checkout already processed (idempotent)",
+              totals: {
+                subtotal: Number(existing.subtotal || 0),
+                couponDiscount: Number(existing.discount_amount || 0),
+                gstAmount: Number(existing.gst_amount || 0),
+                giftCardDiscount: 0,
+                loyaltyDiscount: 0,
+                total: Number(existing.amount || 0),
+              },
+            }
+          }
+        } catch (idempErr) {
+          console.warn("[POS Checkout] Idempotency check warning:", idempErr)
+        }
+      }
+
       // Verify customer exists and belongs to tenant
       const [customer] = await sql`
         SELECT id, full_name, phone_number, email FROM customers WHERE id = ${customerId} AND tenant_id = ${tenantId}
@@ -75,37 +110,57 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
         return { success: false, message: "Customer not found or unauthorized" }
       }
 
-
+      // Fetch business tax and payment settings
       let taxRate = 18;
+      let taxInclusive = false;
+      let discountLimit = 100;
       try {
-        const taxRow = await sql`
-          SELECT setting_value 
+        const settingsRows = await sql`
+          SELECT setting_key, setting_value 
           FROM store_settings 
-          WHERE tenant_id = ${tenantId.toString()} AND setting_key = 'business.taxRate'
-          LIMIT 1
+          WHERE tenant_id = ${tenantId.toString()} 
+            AND setting_key IN ('business.taxRate', 'payments.taxInclusive', 'payments.discountLimit')
         `;
-        if (taxRow.length > 0) {
-          const val = Number.parseFloat(taxRow[0].setting_value);
-          if (!isNaN(val)) taxRate = val;
+        for (const row of settingsRows) {
+          if (row.setting_key === 'business.taxRate') {
+            const val = Number.parseFloat(row.setting_value);
+            if (!isNaN(val)) taxRate = val;
+          } else if (row.setting_key === 'payments.taxInclusive') {
+            taxInclusive = row.setting_value === 'true' || row.setting_value === true;
+          } else if (row.setting_key === 'payments.discountLimit') {
+            const val = Number.parseFloat(row.setting_value);
+            if (!isNaN(val)) discountLimit = val;
+          }
         }
       } catch(e) {
-         console.error("Error fetching taxRate:", e);
+         console.error("Error fetching tax and discount settings:", e);
       }
 
-      // Calculate totals
+      // Calculate totals with discount limit cap
       const subtotal = input.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
-      const couponDiscount = Number(input.coupon_discount) || Number(input.manual_discount) || 0
-      const gstAmount = ((subtotal - couponDiscount) * taxRate) / 100
+      
+      let manualDiscount = Number(input.manual_discount) || 0
+      if (discountLimit > 0 && discountLimit < 100) {
+        const maxManualAllowed = (subtotal * discountLimit) / 100
+        manualDiscount = Math.min(manualDiscount, maxManualAllowed)
+      }
+      const couponDiscount = Number(input.coupon_discount) || 0
+      const totalDiscount = couponDiscount > 0 ? couponDiscount : manualDiscount
+      const netSubtotal = Math.max(0, subtotal - totalDiscount)
+
+      // Tax/GST calculation: Tax Inclusive vs Exclusive
+      let gstAmount = 0
+      if (taxInclusive) {
+        const baseAmount = taxRate > 0 ? netSubtotal / (1 + taxRate / 100) : netSubtotal
+        gstAmount = Math.round((netSubtotal - baseAmount) * 100) / 100
+      } else {
+        gstAmount = Math.round(((netSubtotal * taxRate) / 100) * 100) / 100
+      }
 
       const giftCardDiscount = input.gift_cards?.reduce((sum, gc) => sum + gc.amount, 0) || 0
       const loyaltyDiscount = input.redeem_points || 0
-      const totalRaw = Math.max(
-        0,
-        Math.max(
-          0,
-          Math.min(Number.MAX_SAFE_INTEGER, subtotal + gstAmount - couponDiscount - giftCardDiscount - loyaltyDiscount),
-        ),
-      )
+      const amountBeforeRedemptions = taxInclusive ? netSubtotal : (netSubtotal + gstAmount)
+      const totalRaw = Math.max(0, amountBeforeRedemptions - giftCardDiscount - loyaltyDiscount)
       const total = Math.round(totalRaw * 100) / 100
 
       let bookingId: number | null = null
@@ -130,7 +185,7 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
           SELECT id FROM services WHERE id = ANY(${serviceIds}) AND is_active = true AND tenant_id = ${tenantId}
         `
 
-        const existingServiceIds = new Set(existingServices.map((s) => Number(s.id)))
+        const existingServiceIds = new Set(existingServices.map((s: any) => Number(s.id)))
         const invalidServiceIds = serviceIds.filter((id) => !existingServiceIds.has(id))
 
         if (invalidServiceIds.length > 0) {
@@ -168,10 +223,10 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
             ${[
             input.notes,
             input.coupon_code ? `Coupon: ${input.coupon_code} (-${couponDiscount})` : null,
-            input.manual_discount > 0 ? `Manual Discount: -${input.manual_discount}` : null,
+            input.manual_discount && input.manual_discount > 0 ? `Manual Discount: -${input.manual_discount}` : null,
             loyaltyDiscount > 0 ? `Loyalty Redeemed: ₹${loyaltyDiscount}` : null,
             giftCardDiscount > 0 ? `Gift Card Redeemed: ₹${giftCardDiscount}` : null,
-            input.points_earned_client > 0 ? `Points Earned: ${input.points_earned_client}` : null,
+            input.points_earned_client && input.points_earned_client > 0 ? `Points Earned: ${input.points_earned_client}` : null,
           ].filter(Boolean).join(' | ')},
             ${tenantId},
             NOW(),
@@ -214,23 +269,59 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
         `
       }
 
+      // Deduct Gift Card balances if redeemed during checkout
+      if (input.gift_cards && input.gift_cards.length > 0) {
+        for (const gc of input.gift_cards) {
+          if (gc.code && gc.amount > 0) {
+            await sql`
+              UPDATE gift_cards 
+              SET balance = GREATEST(0, balance - ${gc.amount}),
+                  status = CASE WHEN balance - ${gc.amount} <= 0 THEN 'used' ELSE status END,
+                  updated_at = NOW()
+              WHERE UPPER(code) = UPPER(${gc.code}) 
+              AND tenant_id = ${tenantId}
+            `.catch((err: any) => console.error("Error deducting gift card balance in checkout:", err))
+          }
+        }
+      }
+
+      // Auto-deduct sessions from active customer packages if booking has services
+      if (bookingId && serviceItems.length > 0) {
+        import("@/app/actions/customer-packages")
+          .then(({ deductBookingPackageSessions }) => {
+            deductBookingPackageSessions(bookingId, customerId).catch((err) =>
+              console.error("Error auto-deducting package sessions during checkout:", err)
+            )
+          })
+          .catch((err) => console.error("Error importing customer-packages:", err))
+      }
+
       const membershipItems = input.items.filter((item) => item.type === "membership")
       for (const membershipItem of membershipItems) {
         // Verify membership plan exists within tenant
         const [membershipPlan] = await sql`
-          SELECT id FROM membership_plans WHERE id = ${membershipItem.id} AND tenant_id = ${tenantId}
+          SELECT id, duration_months, price FROM membership_plans WHERE id = ${membershipItem.id} AND tenant_id = ${tenantId}
         `
         
         if (!membershipPlan) {
           return { success: false, message: `Membership plan ${membershipItem.id} not found` }
         }
 
-        // Create customer membership record with tenant_id
+        // Create customer membership record with tenant_id and actual duration_months
         const startDate = new Date().toISOString().split("T")[0]
-        const endDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0] // 1 year from now
+        const durationMonths = Number(membershipPlan.duration_months) || 12
+        const endDateObj = new Date()
+        endDateObj.setMonth(endDateObj.getMonth() + durationMonths)
+        const endDate = endDateObj.toISOString().split("T")[0]
+        const amountPaid = Number(membershipItem.price) || Number(membershipPlan.price) || 0
+
         await sql`
-          INSERT INTO customer_memberships (customer_id, membership_plan_id, start_date, end_date, tenant_id, created_at, updated_at)
-          VALUES (${customerId}, ${membershipItem.id}, ${startDate}, ${endDate}, ${tenantId}, NOW(), NOW())
+          INSERT INTO customer_memberships (
+            customer_id, membership_plan_id, start_date, end_date, tenant_id, status, amount_paid, bookings_used, created_at, updated_at
+          )
+          VALUES (
+            ${customerId}, ${membershipItem.id}, ${startDate}, ${endDate}, ${tenantId}, 'active', ${amountPaid}, 0, NOW(), NOW()
+          )
         `
       }
 
@@ -276,40 +367,81 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
       }
 
       // Create invoice with proper item categorization and tenant_id
-      const [invoice] = await sql`
-        INSERT INTO invoices (
-          invoice_number, customer_id, booking_id, amount, subtotal, discount_amount, gst_amount,
-          payment_method, service_details, product_details, invoice_date, due_date,
-          notes, tenant_id, share_token, created_at, updated_at
-        ) VALUES (
-          ${invoiceNumber},
-          ${customerId},
-          ${bookingId},
-          ${Math.round(total * 100) / 100},
-          ${subtotal},
-          ${couponDiscount},
-          ${gstAmount},
-          ${input.payment_method},
-          ${JSON.stringify([...serviceItems, ...packageItems, ...membershipItems])},
-          ${JSON.stringify(productItems)},
-          ${invoiceDate},
-          ${dueDate},
-                    ${[
-            input.notes,
-            input.coupon_code ? `Coupon: ${input.coupon_code} (-${couponDiscount})` : null,
-            input.manual_discount && input.manual_discount > 0 ? `Manual Discount: -${input.manual_discount}` : null,
-            loyaltyDiscount > 0 ? `Loyalty Redeemed: ₹${loyaltyDiscount}` : null,
-            giftCardDiscount > 0 ? `Gift Card Redeemed: ₹${giftCardDiscount}` : null,
-            input.points_earned_client && input.points_earned_client > 0 ? `Points Earned: ${input.points_earned_client}` : null,
-          ].filter(Boolean).join(' | ')},
-          ${tenantId},
-          ${crypto.randomBytes(16).toString("hex")},
-          NOW(),
-          NOW()
-        ) RETURNING *
-      `
+      let invoice: any;
+      const shareToken = crypto.randomBytes(16).toString("hex")
+      try {
+        const rows = await sql`
+          INSERT INTO invoices (
+            invoice_number, customer_id, booking_id, amount, subtotal, discount_amount, gst_amount,
+            payment_method, service_details, product_details, invoice_date, due_date,
+            notes, tenant_id, share_token, idempotency_key, created_at, updated_at
+          ) VALUES (
+            ${invoiceNumber},
+            ${customerId},
+            ${bookingId},
+            ${Math.round(total * 100) / 100},
+            ${subtotal},
+            ${couponDiscount},
+            ${gstAmount},
+            ${input.payment_method},
+            ${JSON.stringify([...serviceItems, ...packageItems, ...membershipItems])},
+            ${JSON.stringify(productItems)},
+            ${invoiceDate},
+            ${dueDate},
+            ${[
+              input.notes,
+              input.coupon_code ? `Coupon: ${input.coupon_code} (-${couponDiscount})` : null,
+              input.manual_discount && input.manual_discount > 0 ? `Manual Discount: -${input.manual_discount}` : null,
+              loyaltyDiscount > 0 ? `Loyalty Redeemed: ₹${loyaltyDiscount}` : null,
+              giftCardDiscount > 0 ? `Gift Card Redeemed: ₹${giftCardDiscount}` : null,
+              input.points_earned_client && input.points_earned_client > 0 ? `Points Earned: ${input.points_earned_client}` : null,
+            ].filter(Boolean).join(' | ')},
+            ${tenantId},
+            ${shareToken},
+            ${input.idempotency_key || null},
+            NOW(),
+            NOW()
+          ) RETURNING *
+        `
+        invoice = rows[0]
+      } catch (err) {
+        // Fallback without idempotency_key column if schema issue
+        const rows = await sql`
+          INSERT INTO invoices (
+            invoice_number, customer_id, booking_id, amount, subtotal, discount_amount, gst_amount,
+            payment_method, service_details, product_details, invoice_date, due_date,
+            notes, tenant_id, share_token, created_at, updated_at
+          ) VALUES (
+            ${invoiceNumber},
+            ${customerId},
+            ${bookingId},
+            ${Math.round(total * 100) / 100},
+            ${subtotal},
+            ${couponDiscount},
+            ${gstAmount},
+            ${input.payment_method},
+            ${JSON.stringify([...serviceItems, ...packageItems, ...membershipItems])},
+            ${JSON.stringify(productItems)},
+            ${invoiceDate},
+            ${dueDate},
+            ${[
+              input.notes,
+              input.coupon_code ? `Coupon: ${input.coupon_code} (-${couponDiscount})` : null,
+              input.manual_discount && input.manual_discount > 0 ? `Manual Discount: -${input.manual_discount}` : null,
+              loyaltyDiscount > 0 ? `Loyalty Redeemed: ₹${loyaltyDiscount}` : null,
+              giftCardDiscount > 0 ? `Gift Card Redeemed: ₹${giftCardDiscount}` : null,
+              input.points_earned_client && input.points_earned_client > 0 ? `Points Earned: ${input.points_earned_client}` : null,
+            ].filter(Boolean).join(' | ')},
+            ${tenantId},
+            ${shareToken},
+            NOW(),
+            NOW()
+          ) RETURNING *
+        `
+        invoice = rows[0]
+      }
 
-      // --- Staff Commission Splits ---
+      // --- Staff Commission Splits (Services & Retail Products) ---
       try {
         await sql`
           CREATE TABLE IF NOT EXISTS staff_commission_splits (
@@ -326,17 +458,19 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
         await sql`CREATE INDEX IF NOT EXISTS idx_commission_splits_invoice ON staff_commission_splits(invoice_id);`
         await sql`CREATE INDEX IF NOT EXISTS idx_commission_splits_staff ON staff_commission_splits(staff_id, tenant_id);`
 
-        for (const item of serviceItems) {
+        const commissionItems = input.items.filter((item) => (item.staff_members && item.staff_members.length > 0) || item.staff_id)
+        for (const item of commissionItems) {
           if (item.staff_members && item.staff_members.length > 0) {
             for (const member of item.staff_members) {
-              const amount = (item.price * item.quantity * member.split_percentage) / 100
+              const splitPct = Number(member.split_percentage) || 0
+              const amount = Math.round(((item.price * item.quantity * splitPct) / 100) * 100) / 100
               await sql`
                 INSERT INTO staff_commission_splits (
                   tenant_id, invoice_id, service_item_name, staff_id, 
                   split_percentage, revenue_amount, created_at
                 ) VALUES (
-                  ${tenantId}, ${invoice.id}, ${item.name}, ${member.id},
-                  ${member.split_percentage}, ${amount}, NOW()
+                  ${Number(tenantId)}, ${invoice.id}, ${item.name}, ${Number(member.id)},
+                  ${splitPct}, ${amount}, NOW()
                 )
               `
             }
@@ -346,7 +480,7 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
                 tenant_id, invoice_id, service_item_name, staff_id, 
                 split_percentage, revenue_amount, created_at
               ) VALUES (
-                ${tenantId}, ${invoice.id}, ${item.name}, ${item.staff_id},
+                ${Number(tenantId)}, ${invoice.id}, ${item.name}, ${Number(item.staff_id)},
                 100, ${item.price * item.quantity}, NOW()
               )
             `
@@ -464,6 +598,32 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
             `.catch(() => {})
           }
         }
+
+        // 3. Auto-trigger active consumption rules for billed services if no manual consumptions passed
+        if (!input.product_consumptions || input.product_consumptions.length === 0) {
+          try {
+            const serviceItems = input.items.filter((item) => item.type === "service" || !item.type)
+            if (serviceItems.length > 0) {
+              const { processServiceAutoConsumption } = await import("@/app/actions/auto-consumption")
+              for (const sItem of serviceItems) {
+                if (sItem.id) {
+                  await processServiceAutoConsumption({
+                    tenantId,
+                    sql,
+                    serviceId: sItem.id,
+                    serviceName: sItem.name,
+                    bookingId: bookingId || undefined,
+                    invoiceId: invoice.id,
+                    staffId: sItem.staff_id || (sItem.staff_members?.[0]?.id ? Number(sItem.staff_members[0].id) : undefined),
+                    staffName: sItem.staff_members?.[0]?.name,
+                  }).catch(() => {})
+                }
+              }
+            }
+          } catch (autoErr) {
+            console.error("Auto-consumption evaluation failed during checkout:", autoErr)
+          }
+        }
       } catch (stockErr) {
         console.error("Failed to deduct inventory stock during checkout:", stockErr)
       }
@@ -532,7 +692,7 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
               customer_name: customer.full_name,
               booking_number: invoiceNumber,
               total_amount: total,
-              invoice_url: `https://biz.hanva.in/inv/${share_token}`,
+              invoice_url: `https://biz.hanva.in/inv/${invoice.share_token}`,
               points: pointsEarned,
               coupon_code: input.coupon_code || "",
             },
@@ -608,5 +768,10 @@ export async function finalizeCheckout(input: FinalizeCheckoutInput): Promise<Fi
       }
       return { success: false, message: error?.message || "Failed to finalize checkout" }
     }
-  })
+  }
+
+  if (authContext) {
+    return await runner(authContext)
+  }
+  return await withTenantAuth(runner)
 }

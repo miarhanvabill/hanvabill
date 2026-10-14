@@ -74,11 +74,13 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url)
   const method = req.method.toUpperCase()
 
-  if (url.pathname.startsWith("/api/")) {
+  // Only intercept /api/ routes in Service Worker
+  if (!url.pathname.startsWith("/api/")) {
     return
   }
 
-  if (method === "GET" && url.pathname.startsWith("/api/")) {
+  // 1. Handle GET API requests with stale-while-revalidate / network-first with cache fallback
+  if (method === "GET") {
     event.respondWith(
       (async () => {
         try {
@@ -95,7 +97,7 @@ self.addEventListener("fetch", (event) => {
           const cachedRes = await cache.match(req)
           if (cachedRes) return cachedRes
           return new Response(
-            JSON.stringify({ error: "Offline and no cached data" }),
+            JSON.stringify({ error: "Offline and no cached data", offline: true }),
             { status: 503, headers: { "Content-Type": "application/json" } }
           )
         }
@@ -104,10 +106,9 @@ self.addEventListener("fetch", (event) => {
     return
   }
 
+  // 2. Handle POST / PUT / DELETE mutations: attempt network first, queue in IndexedDB on failure
   const isWrite = method === "POST" || method === "PUT" || method === "DELETE"
-  const isApi = url.pathname.startsWith("/api/")
-
-  if (!isWrite || !isApi) return
+  if (!isWrite) return
 
   event.respondWith(
     (async () => {
@@ -116,44 +117,38 @@ self.addEventListener("fetch", (event) => {
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
         return res
       } catch (err) {
-        if (!self.navigator.onLine) {
-          let body
+        // Network failure or explicitly offline: queue into IndexedDB
+        let body
+        try {
+          body = await req.clone().json()
+        } catch {
+          body = {}
+        }
+        const tenant_id = req.headers.get("x-tenant-id") || body?.tenant_id || "default"
+
+        const headersObj = {}
+        req.headers.forEach((v, k) => (headersObj[k] = v))
+
+        const record = {
+          id: `sw_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+          tenant_id,
+          endpoint: url.pathname + url.search,
+          method,
+          payload: body || {},
+          headers: headersObj,
+          synced: false,
+          timestamp: Date.now(),
+        }
+        await idbPut(record)
+
+        if ("sync" in self.registration) {
           try {
-            body = await req.clone().json()
-          } catch {
-            body = {}
-          }
-          const tenant_id = req.headers.get("x-tenant-id") || body?.tenant_id || "default"
-
-          const headersObj = {}
-          req.headers.forEach((v, k) => (headersObj[k] = v))
-
-          const record = {
-            id: `sw_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-            tenant_id,
-            endpoint: url.pathname,
-            method,
-            payload: body || {},
-            headers: headersObj,
-            synced: false,
-            timestamp: Date.now(),
-          }
-          await idbPut(record)
-
-          if ("sync" in self.registration) {
-            try {
-              await self.registration.sync.register(`sync-tenant-${tenant_id}`)
-            } catch {}
-          }
-
-          return new Response(JSON.stringify({ queued: true, offline: true }), {
-            status: 202,
-            headers: { "Content-Type": "application/json" },
-          })
+            await self.registration.sync.register(`sync-tenant-${tenant_id}`)
+          } catch {}
         }
 
-        return new Response(JSON.stringify({ error: "Network error", detail: String(err) }), {
-          status: 503,
+        return new Response(JSON.stringify({ queued: true, offline: true, id: record.id }), {
+          status: 202,
           headers: { "Content-Type": "application/json" },
         })
       }
@@ -161,36 +156,43 @@ self.addEventListener("fetch", (event) => {
   )
 })
 
+async function drainQueueForTenant(tenantId) {
+  const pending = await idbGetAllPendingByTenant(tenantId)
+  for (const rec of pending) {
+    try {
+      const res = await fetch(rec.endpoint, {
+        method: rec.method,
+        headers: {
+          "Content-Type": "application/json",
+          "x-tenant-id": tenantId,
+          ...(rec.headers || {}),
+        },
+        body: JSON.stringify(rec.payload),
+      })
+      // Delete if success or if unretryable 4xx client error
+      if (res.ok || (res.status >= 400 && res.status < 500)) {
+        await idbDelete(rec.id)
+      } else {
+        break
+      }
+    } catch {
+      break
+    }
+  }
+
+  const clientsArr = await self.clients.matchAll({ type: "window" })
+  clientsArr.forEach((client) => client.postMessage({ type: "SYNC_COMPLETE", tenant_id: tenantId }))
+}
+
 self.addEventListener("sync", (event) => {
   if (!event.tag.startsWith("sync-tenant-")) return
   const tenantId = event.tag.replace("sync-tenant-", "")
+  event.waitUntil(drainQueueForTenant(tenantId))
+})
 
-  event.waitUntil(
-    (async () => {
-      const pending = await idbGetAllPendingByTenant(tenantId)
-      for (const rec of pending) {
-        try {
-          const res = await fetch(rec.endpoint, {
-            method: rec.method,
-            headers: {
-              "Content-Type": "application/json",
-              "x-tenant-id": tenantId,
-              ...(rec.headers || {}),
-            },
-            body: JSON.stringify(rec.payload),
-          })
-          if (res.ok) {
-            await idbDelete(rec.id)
-          } else {
-            break
-          }
-        } catch {
-          break
-        }
-      }
-
-      const clientsArr = await self.clients.matchAll({ type: "window" })
-      clientsArr.forEach((client) => client.postMessage({ type: "SYNC_COMPLETE", tenant_id: tenantId }))
-    })(),
-  )
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "REPLAY_QUEUE") {
+    const tenantId = event.data.tenant_id || "default"
+    event.waitUntil(drainQueueForTenant(tenantId))
+  }
 })

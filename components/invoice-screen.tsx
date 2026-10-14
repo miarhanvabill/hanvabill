@@ -11,12 +11,12 @@ import { getBusinessSettings } from "@/app/actions/settings"
 import { InvoiceTemplate } from "@/components/invoice-template"
 import { useEffect } from "react"
 
-interface Customer {
+export interface Customer {
   id: number
   name: string
   email: string
   phone: string
-  address: string
+  address?: string
 }
 
 interface CartItem {
@@ -31,7 +31,7 @@ interface CartItem {
   validityDays?: number
 }
 
-interface Invoice {
+export interface Invoice {
   id: number
   customer: Customer
   items: CartItem[]

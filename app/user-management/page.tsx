@@ -744,7 +744,15 @@ export default function UserManagementPage() {
   const handleDeleteUser = async (userId: string) => {
     const user = users.find((u) => u.id === userId)
     try {
-      await deleteTenantUser(userId)
+      const res = await deleteTenantUser(userId)
+      if (res && !res.success) {
+        toast({
+          title: "Error Deleting User",
+          description: res.error || "Failed to delete user.",
+          variant: "destructive",
+        })
+        return
+      }
       if (selectedUser?.id === userId) {
         setSelectedUser(null)
       }
@@ -768,7 +776,15 @@ export default function UserManagementPage() {
     if (!user) return
     
     try {
-      await toggleTenantUserStatus(userId, user.isActive)
+      const res = await toggleTenantUserStatus(userId, user.isActive)
+      if (res && !res.success) {
+        toast({
+          title: "Error Updating Status",
+          description: res.error || "Failed to update user status.",
+          variant: "destructive",
+        })
+        return
+      }
       toast({
         title: !user.isActive ? "User Activated" : "User Deactivated",
         description: `${user.name} is now ${!user.isActive ? "active" : "inactive"}.`,
@@ -860,14 +876,21 @@ export default function UserManagementPage() {
     const role = roles.find((r) => r.id === roleId)
     if (role && !role.isSystem) {
       try {
-        await deleteTenantRole(roleId)
+        const res = await deleteTenantRole(roleId)
+        if (res && !res.success) {
+          toast({
+            title: "Cannot Delete Role",
+            description: res.error || "Failed to delete role.",
+            variant: "destructive",
+          })
+          return
+        }
         if (selectedRole?.id === roleId) {
           setSelectedRole(null)
         }
         toast({
           title: "Role Deleted",
           description: `${role.name} role has been deleted.`,
-          variant: "destructive",
         })
         loadData()
       } catch (error) {

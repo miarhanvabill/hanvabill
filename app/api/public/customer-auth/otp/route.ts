@@ -24,11 +24,15 @@ export async function POST(req: NextRequest) {
 
     // Verify tenant is active
     const tenant = await sql`
-      SELECT id FROM tenants WHERE id = ${parseInt(tenantId)} AND status = 'active' LIMIT 1
-    `
+      SELECT id FROM tenants 
+      WHERE (id::text = ${String(tenantId)} OR slug = ${String(tenantId)} OR tenant_key = ${String(tenantId)}) 
+        AND status = 'active' 
+      LIMIT 1
+    `.catch(() => [])
     if (tenant.length === 0) {
       return NextResponse.json({ error: 'Tenant not found' }, { status: 404 })
     }
+    const internalTenantId = Number(tenant[0].id)
 
     // Create OTP table if needed
     await sql`
@@ -47,7 +51,7 @@ export async function POST(req: NextRequest) {
     // Rate limit: max 3 OTPs per phone per 10 minutes
     const recentOTPs = await sql`
       SELECT COUNT(*) as count FROM customer_otps
-      WHERE tenant_id = ${parseInt(tenantId)}
+      WHERE tenant_id = ${internalTenantId}
         AND phone = ${normalizedPhone}
         AND created_at > NOW() - INTERVAL '10 minutes'
     `.catch((err) => {
@@ -66,20 +70,20 @@ export async function POST(req: NextRequest) {
 
     await sql`
       INSERT INTO customer_otps (tenant_id, phone, otp_hash, expires_at)
-      VALUES (${parseInt(tenantId)}, ${normalizedPhone}, ${otpHash}, ${expiresAt})
+      VALUES (${internalTenantId}, ${normalizedPhone}, ${otpHash}, ${expiresAt})
     `
 
     // Get salon name
     const settingRow = await sql`
       SELECT setting_value FROM store_settings 
-      WHERE tenant_id = ${parseInt(tenantId)} AND setting_key = 'profile.salonName' LIMIT 1
+      WHERE tenant_id = ${internalTenantId} AND setting_key = 'profile.salonName' LIMIT 1
     `.catch(() => [])
     const salonName = settingRow[0]?.setting_value || 'the salon'
 
     // Get WA credentials
     const waConfig = await sql`
       SELECT setting_key, setting_value FROM store_settings
-      WHERE tenant_id = ${parseInt(tenantId)}
+      WHERE tenant_id = ${internalTenantId}
         AND setting_key IN ('whatsapp.enabled', 'whatsapp.userid', 'whatsapp.password', 'whatsapp.wabaNumber')
     `.catch(() => [])
 

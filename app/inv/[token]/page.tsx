@@ -13,8 +13,8 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
   if (!res.success || !res.invoice) return notFound()
 
   const inv = res.invoice
-  const bizProfile = res.businessSettings?.profile || {}
-  const bizOps = res.businessSettings?.business || {}
+  const bizProfile: Record<string, any> = res.businessSettings?.profile || {}
+  const bizOps: Record<string, any> = res.businessSettings?.business || {}
   
   // Flatten all item types into a single array
   const items = [
@@ -26,8 +26,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     quantity: Number(item.quantity || 1),
     rate: Number(item.price || item.rate || 0),
     amount: Number(item.price || item.rate || 0) * Number(item.quantity || 1),
-    staffName: item.staff_name || item.staffName,
-    staffName: item.staff_name,
+    staffName: item.staff_name || item.staffName || "",
   }))
 
 
@@ -46,7 +45,8 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
         const match = part.match(/Coupon: (.*) \(-\d+(\.\d+)?\)/);
         if (match) {
           couponCode = match[1];
-          couponDiscount = parseFloat(part.match(/\(-(\d+(\.\d+)?)\)/)[1] || '0');
+          const numMatch = part.match(/\(-(\d+(\.\d+)?)\)/);
+          couponDiscount = numMatch ? parseFloat(numMatch[1] || '0') : 0;
         } else {
           couponCode = part.replace('Coupon: ', '');
         }
@@ -102,8 +102,8 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
       <div className="max-w-4xl mx-auto px-4 print:px-0 print:max-w-none" id="invoice-template-wrapper">
         <InvoiceTemplate data={data} className="bg-white shadow-xl mx-auto print:shadow-none" />
         <ReviewWidget 
-          tenantId={inv.tenant_id} 
-          bookingId={inv.booking_id} 
+          tenantId={String(inv.tenant_id)} 
+          bookingId={inv.booking_id ? Number(inv.booking_id) : null} 
           gmbUrl={bizProfile.googleMyBusinessUrl}
           businessName={bizProfile.salonName || "our salon"}
         />

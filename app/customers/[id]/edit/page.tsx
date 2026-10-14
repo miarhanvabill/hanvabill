@@ -26,7 +26,7 @@ async function updateCustomerWithRevalidation(id: string, formData: FormData) {
     instagram_handle: (formData.get("instagram_handle") as string) || undefined,
     lead_source: (formData.get("lead_source") as string) || undefined,
     notes: (formData.get("notes") as string) || undefined,
-    tags: formData.get("tags") ? (formData.get("tags") as string).split(",").map(t => t.trim()).filter(Boolean) : undefined,
+    tags: formData.get("tags") !== null && formData.get("tags") !== undefined ? (formData.get("tags") as string).split(",").map(t => t.trim()).filter(Boolean) : undefined,
     preferred_staff_id: formData.get("preferred_staff_id") && formData.get("preferred_staff_id") !== "none" ? Number(formData.get("preferred_staff_id")) : null,
   }
 
@@ -186,6 +186,33 @@ export default async function EditCustomerPage({ params }: { params: Promise<{ i
                   <option value="event">Event</option>
                   <option value="other">Other</option>
                 </select>
+              </div>
+
+              <div>
+                <Label htmlFor="preferred_staff_id">Preferred Stylist</Label>
+                <select
+                  id="preferred_staff_id"
+                  name="preferred_staff_id"
+                  defaultValue={customer.preferred_staff_id ? String(customer.preferred_staff_id) : "none"}
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                >
+                  <option value="none">No preferred stylist</option>
+                  {staffList.map((staff) => (
+                    <option key={staff.id} value={String(staff.id)}>
+                      {staff.name} {staff.role ? `(${staff.role})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <Label htmlFor="tags">Tags (comma separated)</Label>
+                <Input
+                  id="tags"
+                  name="tags"
+                  defaultValue={Array.isArray(customer.tags) ? customer.tags.join(", ") : ""}
+                  placeholder="VIP, Regular, Bride, etc."
+                />
               </div>
             </div>
 

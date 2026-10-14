@@ -4,24 +4,12 @@ import { useState, useEffect } from "react"
 import { CustomerSelectionModal } from "@/components/customer-selection-modal"
 import { ServiceSelectionScreen } from "@/components/service-selection-screen"
 import { CheckoutScreen } from "@/components/checkout-screen"
-import { InvoiceScreen } from "@/components/invoice-screen"
+import { InvoiceScreen, type Invoice, type Customer } from "@/components/invoice-screen"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ArrowLeft, User, ShoppingCart, CreditCard, FileText } from "lucide-react"
 
-interface Customer {
-  id: number
-  full_name: string
-  phone_number: string
-  email?: string | null
-  address?: string | null
-  gender?: string | null
-  date_of_birth?: string | null
-  created_at: string
-  updated_at: string
-  total_bookings?: number
-  total_spent?: number
-}
+import type { Customer as DbCustomer } from "@/app/actions/customers"
 
 interface CartItem {
   id: number
@@ -32,19 +20,6 @@ interface CartItem {
   staff_id?: number
   staff_name?: string
   staff_members?: Array<{ id: number; name: string; split_percentage: number }>
-}
-
-interface Invoice {
-  id: number
-  customer: Customer
-  items: CartItem[]
-  subtotal: number
-  discount: number
-  gst: number
-  total: number
-  payment_method: string
-  notes?: string
-  created_at: string
 }
 
 type SaleStep = "customer" | "services" | "checkout" | "invoice"
@@ -66,9 +41,9 @@ export default function NewSalePage() {
   }
 
   // Handle customer selection
-  const handleCustomerSelect = (customer: Customer) => {
+  const handleCustomerSelect = (customer: DbCustomer) => {
     console.log("Customer selected in NewSalePage:", customer)
-    const mappedCustomer = {
+    const mappedCustomer: Customer = {
       id: customer.id,
       name: customer.full_name,
       email: customer.email || "",

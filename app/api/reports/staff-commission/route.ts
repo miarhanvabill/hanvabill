@@ -65,7 +65,7 @@ export async function GET(request: Request) {
       let totalRevenue = 0
       let totalCommission = 0
 
-      const staffCommissions = data.map(staff => {
+      const staffCommissions = data.map((staff: any) => {
         const revenue = parseFloat(staff.total_revenue) || 0
         const baseRate = parseFloat(staff.base_rate) || 0
         let commission = 0

@@ -68,18 +68,58 @@ export async function validateCoupon(code: string, orderAmount: number) {
       FROM coupons
       WHERE tenant_id = ${tenantId}
         AND UPPER(code) = UPPER(${code})
-        AND is_active = true
-        AND valid_from <= CURRENT_DATE
-        AND valid_until >= CURRENT_DATE
-        AND min_order_amount <= ${orderAmount}
-        AND (usage_limit IS NULL OR used_count < usage_limit)
       LIMIT 1
     `
     if (rows.length === 0) {
-      return { success: false, message: "Invalid coupon code or not applicable for this order amount" }
+      return { success: false, message: "Coupon code not found" }
     }
+
     const coupon = mapRow(rows[0])
-    return { success: true, message: "Coupon applied successfully", coupon }
+
+    if (!coupon.is_active) {
+      return { success: false, message: "This coupon is currently inactive" }
+    }
+
+    const todayStr = new Date().toISOString().split("T")[0]
+    if (coupon.valid_from && String(coupon.valid_from).split("T")[0] > todayStr) {
+      return { success: false, message: `This coupon is not valid until ${String(coupon.valid_from).split("T")[0]}` }
+    }
+
+    if (coupon.valid_until && String(coupon.valid_until).split("T")[0] < todayStr) {
+      return { success: false, message: "This coupon has expired" }
+    }
+
+    if (coupon.usage_limit != null && coupon.used_count >= coupon.usage_limit) {
+      return { success: false, message: "Coupon usage limit has been reached" }
+    }
+
+    if (coupon.min_order_amount && orderAmount < coupon.min_order_amount) {
+      return {
+        success: false,
+        message: `Minimum order amount of ₹${coupon.min_order_amount} required to apply this coupon`,
+      }
+    }
+
+    let discountAmount = 0
+    if (coupon.discount_type === "percentage") {
+      discountAmount = (orderAmount * coupon.discount_value) / 100
+      if (coupon.max_discount && discountAmount > coupon.max_discount) {
+        discountAmount = coupon.max_discount
+      }
+    } else {
+      discountAmount = coupon.discount_value
+    }
+    discountAmount = Math.min(discountAmount, orderAmount)
+
+    return {
+      success: true,
+      message: "Coupon applied successfully",
+      coupon: {
+        ...coupon,
+        discount_amount: Math.round(discountAmount * 100) / 100,
+        final_amount: Math.round((orderAmount - discountAmount) * 100) / 100,
+      },
+    }
   })
 }
 

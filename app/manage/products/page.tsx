@@ -91,14 +91,15 @@ export default function ProductsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      const parsedCatId = formData.category_id ? Number.parseInt(formData.category_id) : null
       if (editingProduct) {
         await updateProduct(editingProduct.id, {
           ...formData,
-          price: Number.parseFloat(formData.price),
-          cost: Number.parseFloat(formData.cost),
-          stock_quantity: Number.parseInt(formData.stock_quantity),
-          min_stock_level: Number.parseInt(formData.min_stock_level),
-          category_id: Number.parseInt(formData.category_id),
+          price: Number.parseFloat(formData.price) || 0,
+          cost: Number.parseFloat(formData.cost) || 0,
+          stock_quantity: Number.parseInt(formData.stock_quantity) || 0,
+          min_stock_level: Number.parseInt(formData.min_stock_level) || 5,
+          category_id: parsedCatId,
         })
         toast({
           title: "Success",
@@ -107,11 +108,11 @@ export default function ProductsPage() {
       } else {
         await createProduct({
           ...formData,
-          price: Number.parseFloat(formData.price),
-          cost: Number.parseFloat(formData.cost),
-          stock_quantity: Number.parseInt(formData.stock_quantity),
-          min_stock_level: Number.parseInt(formData.min_stock_level),
-          category_id: Number.parseInt(formData.category_id),
+          price: Number.parseFloat(formData.price) || 0,
+          cost: Number.parseFloat(formData.cost) || 0,
+          stock_quantity: Number.parseInt(formData.stock_quantity) || 0,
+          min_stock_level: Number.parseInt(formData.min_stock_level) || 5,
+          category_id: parsedCatId,
         })
         toast({
           title: "Success",
@@ -121,10 +122,10 @@ export default function ProductsPage() {
       setIsDialogOpen(false)
       resetForm()
       loadData()
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to save product",
+        description: error?.message || "Failed to save product",
         variant: "destructive",
       })
     }
@@ -134,15 +135,15 @@ export default function ProductsPage() {
     setEditingProduct(product)
     setFormData({
       name: product.name,
-      description: product.description,
-      category_id: product.category_id.toString(),
-      price: product.price.toString(),
-      cost: product.cost.toString(),
-      stock_quantity: product.stock_quantity.toString(),
-      min_stock_level: product.min_stock_level.toString(),
+      description: product.description || "",
+      category_id: product.category_id != null ? product.category_id.toString() : "",
+      price: (product.price ?? 0).toString(),
+      cost: (product.cost ?? 0).toString(),
+      stock_quantity: (product.stock_quantity ?? 0).toString(),
+      min_stock_level: (product.min_stock_level ?? 5).toString(),
       barcode: product.barcode || "",
       image_url: product.image_url || "",
-      is_active: product.is_active,
+      is_active: product.is_active ?? true,
     })
     setIsDialogOpen(true)
   }
@@ -170,6 +171,7 @@ export default function ProductsPage() {
     setFormData({
       name: "",
       description: "",
+      image_url: "",
       category_id: "",
       price: "",
       cost: "",
@@ -183,8 +185,12 @@ export default function ProductsPage() {
 
   const filteredProducts = products.filter((product) => {
     const matchesSearch =
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) || product.barcode.includes(searchTerm)
-    const matchesCategory = selectedCategory === "all" || product.category_id.toString() === selectedCategory
+      (product.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (product.barcode ? product.barcode.includes(searchTerm) : false) ||
+      (product.description || "").toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesCategory =
+      selectedCategory === "all" ||
+      (product.category_id != null && product.category_id.toString() === selectedCategory)
     return matchesSearch && matchesCategory
   })
 
@@ -427,7 +433,7 @@ export default function ProductsPage() {
                     </div>
                   </TableCell>
                   <TableCell>{product.category_name}</TableCell>
-                  <TableCell>₹{product.price}</TableCell>
+                  <TableCell>{formatCurrency(Number(product.price) || 0)}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span>{product.stock_quantity}</span>

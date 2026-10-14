@@ -48,7 +48,9 @@ export async function downloadInvoicePDF(invoiceData: any) {
 
     console.log("[v0] Starting PDF generation with HTML string...")
     // Dynamically import html2pdf to prevent SSR ReferenceError
-    const html2pdf = (await import("html2pdf.js")).default
+    // @ts-ignore
+    const html2pdfModule = await import("html2pdf.js")
+    const html2pdf = html2pdfModule.default || html2pdfModule
     await html2pdf().from(htmlContent).set(opt).save()
     console.log("[v0] PDF generated successfully")
   } catch (error) {
@@ -58,7 +60,7 @@ export async function downloadInvoicePDF(invoiceData: any) {
 }
 
 // Print invoice
-export function useInvoicePrint(ref: RefObject<HTMLDivElement>) {
+export function useInvoicePrint(ref: RefObject<HTMLDivElement | null>) {
   return useReactToPrint({
     content: () => ref.current,
     documentTitle: "Invoice",

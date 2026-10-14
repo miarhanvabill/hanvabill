@@ -4,18 +4,19 @@ import { withTenantAuth } from "@/lib/withTenantAuth"
 import { revalidatePath } from "next/cache"
 import { CSVParser, bookingValidationRules, type CSVParseResult } from "@/lib/csv-parser"
 import { cacheFetch, cacheDel } from "@/lib/cache"
+import { getAvailableSlots } from "./availability"
 
 export interface Booking {
   id: number
   booking_number: string
   customer_id: number
-  staff_id: number
+  staff_id: number | null
   service_name: string // Aggregated from booking_services and services
   service_names?: string
   staff_name: string // Derived from staff table
   staff_names?: string
   customer_name: string // Derived from customers table
-  customer_phone?: string
+  customer_phone?: string | null
   booking_date: string
   booking_time: string
   total_amount: number
@@ -55,24 +56,25 @@ function mapBookingResult(booking: any): Booking {
     ...booking,
     id: Number(booking.id),
     customer_id: Number(booking.customer_id),
-    staff_id: Number(booking.staff_id),
+    staff_id: booking.staff_id !== null && booking.staff_id !== undefined ? Number(booking.staff_id) : null,
     total_amount: Number(booking.total_amount),
     rating: booking.rating ? Number(booking.rating) : null,
+    customer_phone: booking.customer_phone || null,
   } as Booking
 }
 
-async function invalidateBookingCache(bookingId?: number, customerId?: number, staffId?: number) {
+async function invalidateBookingCache(tenantId: string | number, bookingId?: number, customerId?: number, staffId?: number) {
   try {
-    await cacheDel("bookings:all")
-    await cacheDel("bookings:stats")
+    await cacheDel(`tenant:${tenantId}:bookings:all`)
+    await cacheDel(`tenant:${tenantId}:bookings:stats`)
     if (bookingId) {
-      await cacheDel(`booking:${bookingId}`)
+      await cacheDel(`tenant:${tenantId}:booking:${bookingId}`)
     }
     if (customerId) {
-      await cacheDel(`bookings:customer:${customerId}`)
+      await cacheDel(`tenant:${tenantId}:bookings:customer:${customerId}`)
     }
     if (staffId) {
-      await cacheDel(`bookings:staff:${staffId}`)
+      await cacheDel(`tenant:${tenantId}:bookings:staff:${staffId}`)
     }
   } catch (error) {
     console.error("Error invalidating booking cache:", error)
@@ -87,7 +89,7 @@ export async function getBookings(startDate?: string, endDate?: string, status?:
       const searchStr = typeof search === 'string' ? search : '';
       const statusStr = typeof status === 'string' ? status : '';
 
-      const cacheKey = `bookings:${startStr || "all"}:${endStr || "all"}:${statusStr || "all"}:${searchStr || "none"}`
+      const cacheKey = `tenant:${tenantId}:bookings:${startStr || "all"}:${endStr || "all"}:${statusStr || "all"}:${searchStr || "none"}`
 
       return await cacheFetch(
         cacheKey,
@@ -103,9 +105,10 @@ export async function getBookings(startDate?: string, endDate?: string, status?:
               b.booking_number,
               b.customer_id,
               b.staff_id,
-              STRING_AGG(s.name, ', ') AS service_name,
+              COALESCE(NULLIF(STRING_AGG(s.name, ', '), ''), 'Appointment') AS service_name,
               st.name AS staff_name,
               c.full_name AS customer_name,
+              c.phone_number AS customer_phone,
               b.booking_date,
               b.booking_time,
               b.status,
@@ -114,8 +117,8 @@ export async function getBookings(startDate?: string, endDate?: string, status?:
               b.created_at,
               r.rating
             FROM bookings b
-            JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
-            JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
+            LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+            LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
             LEFT JOIN staff st ON b.staff_id = st.id AND st.tenant_id = ${tenantId}
             LEFT JOIN reviews r ON b.id = r.booking_id AND r.tenant_id = ${tenantId}
             LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
@@ -124,7 +127,7 @@ export async function getBookings(startDate?: string, endDate?: string, status?:
               AND b.booking_date <= ${dateFilterEnd}
               AND (${statusFilter}::text IS NULL OR b.status = ${statusFilter})
               AND (${searchPattern}::text IS NULL OR c.full_name ILIKE ${searchPattern} OR c.phone_number ILIKE ${searchPattern} OR s.name ILIKE ${searchPattern})
-            GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, st.name, c.full_name, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, b.created_at, r.rating
+            GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, st.name, c.full_name, c.phone_number, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, b.created_at, r.rating
             ORDER BY b.booking_date DESC, b.booking_time DESC
             LIMIT ${limit} OFFSET ${offset}
           `
@@ -149,11 +152,11 @@ export async function getBookingServices(bookingId: string) {
           bs.price,
           bs.quantity
         FROM booking_services bs
-        JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
-        WHERE bs.booking_id = ${bookingId} AND bs.tenant_id = ${tenantId}
+        JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
+        WHERE bs.booking_id = ${bookingId} AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
       `
 
-      return services.map((service) => ({
+      return services.map((service: any) => ({
         service_id: Number(service.service_id),
         service_name: service.service_name,
         price: Number(service.price),
@@ -170,7 +173,7 @@ export async function getBookingStats(startDate?: string, endDate?: string): Pro
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       return await cacheFetch(
-        `bookings:stats:${startDate || "all"}:${endDate || "all"}`, 
+        `tenant:${tenantId}:bookings:stats:${startDate || "all"}:${endDate || "all"}`, 
         async () => {
           const today = new Date().toISOString().split("T")[0]
           const [statsRow] = await sql`
@@ -216,7 +219,7 @@ export async function getBookingById(id: string): Promise<Booking | null> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       return await cacheFetch(
-        `booking:${id}`,
+        `tenant:${tenantId}:booking:${id}`,
         async () => {
           const [booking] = await sql`
             SELECT
@@ -224,24 +227,25 @@ export async function getBookingById(id: string): Promise<Booking | null> {
               b.booking_number,
               b.customer_id,
               b.staff_id,
-              STRING_AGG(s.name, ', ') AS service_name, -- Aggregate service names
-              st.name AS staff_name, -- Get staff name
-              c.full_name AS customer_name, -- Added customer name
+              COALESCE(NULLIF(STRING_AGG(s.name, ', '), ''), 'Appointment') AS service_name,
+              st.name AS staff_name,
+              c.full_name AS customer_name,
+              c.phone_number AS customer_phone,
               b.booking_date,
               b.booking_time,
               b.total_amount,
               b.status,
-              r.rating, -- Join to get rating from reviews
+              r.rating,
               b.notes,
               b.created_at
             FROM bookings b
-            JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
-            JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
+            LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+            LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
             LEFT JOIN staff st ON b.staff_id = st.id AND st.tenant_id = ${tenantId}
             LEFT JOIN reviews r ON b.id = r.booking_id AND r.tenant_id = ${tenantId}
             LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
             WHERE b.id = ${id} AND b.tenant_id = ${tenantId}
-            GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, st.name, c.full_name, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, b.created_at, r.rating
+            GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, st.name, c.full_name, c.phone_number, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, b.created_at, r.rating
           `
           if (!booking) return null
           return mapBookingResult(booking)
@@ -367,7 +371,7 @@ export async function createBooking(formData: FormData) {
 
             return {
               success: false,
-              message: `Service "${serviceNames.toString()}" not found. Available services: ${allServices.map((s) => s.name).join(", ")}`,
+              message: `Service "${serviceNames.toString()}" not found. Available services: ${allServices.map((s: any) => s.name).join(", ")}`,
             }
           }
 
@@ -524,7 +528,7 @@ export async function createBooking(formData: FormData) {
         console.error("Error preparing WhatsApp booking automation:", waErr)
       }
 
-      await invalidateBookingCache(bookingId, finalCustomerId, finalStaffId)
+      await invalidateBookingCache(tenantId, bookingId, finalCustomerId, finalStaffId || undefined)
 
       revalidatePath("/")
       revalidatePath("/bookings")
@@ -573,11 +577,11 @@ export async function bulkUploadBookings(
         booking_number: row.booking_number?.trim() || "",
         booking_date: row.booking_date?.trim() || "",
         booking_time: row.booking_time?.trim() || "",
-        customer_phone: row.customer_phone?.trim() || null,
-        staff_name: row.staff_name?.trim() || null,
+        customer_phone: row.customer_phone?.trim() || undefined,
+        staff_name: row.staff_name?.trim() || undefined,
         status: row.status?.toLowerCase().trim() || "pending",
-        total_amount: row.total_amount ? Number.parseFloat(row.total_amount.trim()) : null,
-        notes: row.notes?.trim() || null,
+        total_amount: row.total_amount ? Number.parseFloat(row.total_amount.trim()) : undefined,
+        notes: row.notes?.trim() || undefined,
       }))
 
       if (!parseResult.success) {
@@ -730,7 +734,46 @@ export async function updateBookingStatus(bookingId: number, status: string) {
       }
 
       const booking = result[0]
-      await invalidateBookingCache(bookingId, Number(booking.customer_id), Number(booking.staff_id))
+      await invalidateBookingCache(tenantId, bookingId, Number(booking.customer_id), booking.staff_id ? Number(booking.staff_id) : undefined)
+
+      // Deduct package sessions upon booking completion if customer has active package covering booked services
+      if (status === "completed" && booking.customer_id) {
+        import("@/app/actions/customer-packages")
+          .then(({ deductBookingPackageSessions }) => {
+            deductBookingPackageSessions(bookingId, Number(booking.customer_id)).catch((err) =>
+              console.error("Failed to auto-deduct package sessions on booking completion:", err)
+            )
+          })
+          .catch((err) => console.error("Error importing customer-packages:", err))
+      }
+
+      // Trigger auto-consumption engine for salon services upon completion
+      if (status === "completed") {
+        import("@/app/actions/auto-consumption")
+          .then(({ processServiceAutoConsumption }) => {
+            sql`
+              SELECT bs.service_id, COALESCE(s.name, 'Service') as service_name, b.staff_id, st.name as staff_name
+              FROM booking_services bs
+              JOIN bookings b ON bs.booking_id = b.id
+              LEFT JOIN services s ON bs.service_id = s.id
+              LEFT JOIN staff st ON b.staff_id = st.id
+              WHERE bs.booking_id = ${bookingId} AND b.tenant_id = ${tenantId}
+            `.then(async (bookedServices: any[]) => {
+              for (const srv of bookedServices) {
+                await processServiceAutoConsumption({
+                  tenantId,
+                  sql,
+                  serviceId: srv.service_id,
+                  serviceName: srv.service_name,
+                  bookingId,
+                  staffId: srv.staff_id,
+                  staffName: srv.staff_name,
+                }).catch(() => {})
+              }
+            }).catch(() => {})
+          })
+          .catch((err) => console.error("Error importing auto-consumption:", err))
+      }
 
       // Trigger review_request WhatsApp automation when appointment is completed
       if (status === "completed" && booking.customer_id) {
@@ -739,39 +782,21 @@ export async function updateBookingStatus(bookingId: number, status: string) {
         `.then(async (custRows: any) => {
           if (custRows.length > 0 && custRows[0].phone_number) {
             const customerName = custRows[0].full_name || "Valued Customer";
-            const messageText = `Thank you for visiting, ${customerName}! Please leave us a review: [Link]`;
-            
             try {
-              const tenantRes = await sql`SELECT tenant_key FROM tenants WHERE id = ${tenantId} LIMIT 1`;
-              const tenantKey = tenantRes.length > 0 ? tenantRes[0].tenant_key : null;
-
-              await sql`
-                INSERT INTO whatsapp_messages (
-                  tenant_id,
-                  tenant_key,
-                  customer_id,
-                  phone_number,
-                  message_content,
-                  direction,
-                  status,
-                  message_type,
-                  trigger_type,
-                  created_at
-                ) VALUES (
-                  ${tenantId},
-                  ${tenantKey},
-                  ${booking.customer_id},
-                  ${custRows[0].phone_number},
-                  ${messageText},
-                  'outbound',
-                  'pending',
-                  'review_request',
-                  'booking_completed',
-                  NOW()
-                )
-              `;
+              const { triggerWhatsAppAutomation } = await import("@/lib/whatsapp-automations")
+              await triggerWhatsAppAutomation({
+                tenantId: tenantId.toString(),
+                eventType: "review_request",
+                recipientPhone: custRows[0].phone_number,
+                customerId: Number(booking.customer_id),
+                referenceId: `booking:${bookingId}:review`,
+                variables: {
+                  customer_name: customerName,
+                },
+                sql,
+              })
             } catch (err) {
-              console.error("Error inserting review request into whatsapp_messages:", err);
+              console.error("Error triggering review request automation:", err);
             }
           }
         }).catch((err: any) => console.error("Error fetching customer for review request:", err))
@@ -802,7 +827,7 @@ export async function deleteBooking(bookingId: number) {
       const bookingDetails = await sql`SELECT customer_id, staff_id FROM bookings WHERE id = ${bookingId} AND tenant_id = ${tenantId}`
 
       // First delete related booking_services records
-      await sql`DELETE FROM booking_services WHERE booking_id = ${bookingId} AND tenant_id = ${tenantId}`
+      await sql`DELETE FROM booking_services WHERE booking_id = ${bookingId} AND (tenant_id = ${tenantId} OR tenant_id IS NULL)`
 
       // Then delete the booking
       const result = await sql`DELETE FROM bookings WHERE id = ${bookingId} AND tenant_id = ${tenantId} RETURNING id`
@@ -813,7 +838,7 @@ export async function deleteBooking(bookingId: number) {
 
       if (bookingDetails.length > 0) {
         const booking = bookingDetails[0]
-        await invalidateBookingCache(bookingId, Number(booking.customer_id), Number(booking.staff_id))
+        await invalidateBookingCache(tenantId, bookingId, Number(booking.customer_id), booking.staff_id ? Number(booking.staff_id) : undefined)
       }
 
       revalidatePath("/")
@@ -834,7 +859,7 @@ export async function getBookingsByCustomerId(customerId: string): Promise<Booki
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       return await cacheFetch(
-        `bookings:customer:${customerId}`,
+        `tenant:${tenantId}:bookings:customer:${customerId}`,
         async () => {
           const bookings = await sql`
             SELECT
@@ -842,24 +867,25 @@ export async function getBookingsByCustomerId(customerId: string): Promise<Booki
               b.booking_number,
               b.customer_id,
               b.staff_id,
-              STRING_AGG(s.name, ', ') AS service_name, -- Aggregate service names
-              st.name AS staff_name, -- Get staff name
-              c.full_name AS customer_name, -- Added customer name
+              COALESCE(NULLIF(STRING_AGG(s.name, ', '), ''), 'Appointment') AS service_name,
+              st.name AS staff_name,
+              c.full_name AS customer_name,
+              c.phone_number AS customer_phone,
               b.booking_date,
               b.booking_time,
               b.total_amount,
               b.status,
-              r.rating, -- Join to get rating from reviews
+              r.rating,
               b.notes,
               b.created_at
             FROM bookings b
-            JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
-            JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
+            LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+            LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
             LEFT JOIN staff st ON b.staff_id = st.id AND st.tenant_id = ${tenantId}
             LEFT JOIN reviews r ON b.id = r.booking_id AND r.tenant_id = ${tenantId}
             LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
             WHERE b.customer_id = ${customerId} AND b.tenant_id = ${tenantId}
-            GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, st.name, c.full_name, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, b.created_at, r.rating
+            GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, st.name, c.full_name, c.phone_number, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, b.created_at, r.rating
             ORDER BY b.booking_date DESC, b.booking_time DESC
           `
           return bookings.map(mapBookingResult)
@@ -892,7 +918,7 @@ export async function getInvoicesByCustomerId(customerId: string): Promise<Invoi
         WHERE i.customer_id = ${customerId} AND i.tenant_id = ${tenantId}
         ORDER BY i.invoice_date DESC, i.created_at DESC
       `
-      return invoices.map((invoice) => ({
+      return invoices.map((invoice: any) => ({
         ...invoice,
         id: Number(invoice.id),
         booking_id: Number(invoice.booking_id),
@@ -910,7 +936,7 @@ export async function getBookingsByStaffId(staffId: string): Promise<Booking[]> 
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       return await cacheFetch(
-        `bookings:staff:${staffId}`,
+        `tenant:${tenantId}:bookings:staff:${staffId}`,
         async () => {
           const bookings = await sql`
             SELECT
@@ -918,24 +944,25 @@ export async function getBookingsByStaffId(staffId: string): Promise<Booking[]> 
               b.booking_number,
               b.customer_id,
               b.staff_id,
-              STRING_AGG(s.name, ', ') AS service_name, -- Aggregate service names
-              st.name AS staff_name, -- Get staff name
-              c.full_name AS customer_name, -- Added customer name
+              COALESCE(NULLIF(STRING_AGG(s.name, ', '), ''), 'Appointment') AS service_name,
+              st.name AS staff_name,
+              c.full_name AS customer_name,
+              c.phone_number AS customer_phone,
               b.booking_date,
               b.booking_time,
               b.total_amount,
               b.status,
-              r.rating, -- Join to get rating from reviews
+              r.rating,
               b.notes,
               b.created_at
             FROM bookings b
-            JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
-            JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
+            LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+            LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
             LEFT JOIN staff st ON b.staff_id = st.id AND st.tenant_id = ${tenantId}
             LEFT JOIN reviews r ON b.id = r.booking_id AND r.tenant_id = ${tenantId}
             LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
             WHERE b.staff_id = ${staffId} AND b.tenant_id = ${tenantId}
-            GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, st.name, c.full_name, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, b.created_at, r.rating
+            GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, st.name, c.full_name, c.phone_number, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, b.created_at, r.rating
             ORDER BY b.booking_date DESC, b.booking_time DESC
           `
           return bookings.map(mapBookingResult)
@@ -951,7 +978,8 @@ export async function getBookingsByStaffId(staffId: string): Promise<Booking[]> 
 
 
 
-export interface CalendarBooking extends Omit<Booking, 'rating'> {
+export interface CalendarBooking extends Omit<Booking, 'rating' | 'staff_id'> {
+  staff_id: number | null
   duration_minutes: number
   resource_id?: number | null
   customer_phone?: string | null
@@ -972,9 +1000,9 @@ export async function getCalendarBookings(date: string): Promise<CalendarBooking
         FROM bookings b
         LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
         LEFT JOIN staff st ON b.staff_id = st.id AND st.tenant_id = ${tenantId}
-        LEFT JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
-        LEFT JOIN services sv ON bs.service_id = sv.id AND sv.tenant_id = ${tenantId}
-        LEFT JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
+        LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+        LEFT JOIN services sv ON bs.service_id = sv.id AND (sv.tenant_id = ${tenantId} OR sv.tenant_id IS NULL)
+        LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
         WHERE b.booking_date = ${date} AND b.tenant_id = ${tenantId}
         GROUP BY b.id, b.booking_number, b.customer_id, b.staff_id, b.resource_id, b.booking_date, b.booking_time, b.total_amount, b.status, b.notes, b.created_at, c.full_name, c.phone_number, st.name
         ORDER BY b.booking_time ASC
@@ -1020,7 +1048,7 @@ export async function updateBookingTime(
       }
 
       // Validate that rescheduled date/time is not in the past
-      const todayStr = new Date().toISOString().split("T")[0]
+      const todayStr = new Date().toLocaleDateString("en-CA")
       if (newDate < todayStr) {
         return { success: false, message: "Cannot reschedule appointments to a past date." }
       }
@@ -1047,15 +1075,80 @@ export async function updateBookingTime(
           AND status != 'cancelled'
         `
         if (conflicting.length > 0) {
-          throw new Error("Resource is already booked for this time.")
+          return { success: false, message: "Resource is already booked for this time." }
         }
       }
 
       // Determine fields to update
-      let staffUpdate = newStaffId !== undefined ? newStaffId : Number(currentBooking.staff_id)
+      let staffUpdate = newStaffId !== undefined ? newStaffId : (currentBooking.staff_id ? Number(currentBooking.staff_id) : null)
+
+      // Check staff availability and conflicts if assigned
+      if (staffUpdate) {
+        const [durationRow] = await sql`
+          SELECT COALESCE(NULLIF(SUM(s.duration_minutes), 0), 30)::int as duration
+          FROM booking_services bs
+          JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
+          WHERE bs.booking_id = ${bookingId} AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+        `
+        const targetDuration = Number(durationRow?.duration) || 30
+        const [targetH, targetM] = newTime.split(":").map(Number)
+        const targetStartMins = (targetH || 0) * 60 + (targetM || 0)
+        const targetEndMins = targetStartMins + targetDuration
+
+        // Check staff schedule / day off / break
+        const [y, m, d] = newDate.split("-").map(Number)
+        const targetDayOfWeek = new Date(y, m - 1, d).getDay()
+        const [avail] = await sql`
+          SELECT start_time::text, end_time::text, is_available, break_start::text, break_end::text
+          FROM staff_availability
+          WHERE staff_id = ${staffUpdate}
+            AND day_of_week = ${targetDayOfWeek}
+            AND (tenant_id = ${tenantId} OR tenant_id IS NULL)
+          LIMIT 1
+        `
+        if (avail && avail.is_available === false) {
+          return { success: false, message: "Staff member is marked as off duty on this day." }
+        }
+        if (avail && avail.break_start && avail.break_end) {
+          const [bsH, bsM] = avail.break_start.split(":").map(Number)
+          const [beH, beM] = avail.break_end.split(":").map(Number)
+          const bStart = (bsH || 0) * 60 + (bsM || 0)
+          const bEnd = (beH || 0) * 60 + (beM || 0)
+          if (targetStartMins < bEnd && targetEndMins > bStart) {
+            return {
+              success: false,
+              message: `Staff member is on break during this time (${avail.break_start.slice(0, 5)} - ${avail.break_end.slice(0, 5)}).`,
+            }
+          }
+        }
+
+        // Check overlapping bookings for staff
+        const staffConflicts = await sql`
+          SELECT b.id, b.booking_time::text, COALESCE(NULLIF(SUM(s.duration_minutes), 0), 30)::int as duration
+          FROM bookings b
+          LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+          LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
+          WHERE b.staff_id = ${staffUpdate}
+            AND b.booking_date = ${newDate}
+            AND b.tenant_id = ${tenantId}
+            AND b.id != ${bookingId}
+            AND b.status != 'cancelled'
+          GROUP BY b.id, b.booking_time
+        `
+        for (const c of staffConflicts) {
+          const [cH, cM] = String(c.booking_time).split(":").map(Number)
+          const cStart = (cH || 0) * 60 + (cM || 0)
+          const cEnd = cStart + (Number(c.duration) || 30)
+          if (targetStartMins < cEnd && targetEndMins > cStart) {
+            return {
+              success: false,
+              message: `Staff member has a conflicting booking starting at ${String(c.booking_time).slice(0, 5)}.`,
+            }
+          }
+        }
+      }
       
       if (newResourceId !== undefined) {
-        // Also update resource_id if provided
         await sql`
           UPDATE bookings
           SET 
@@ -1078,16 +1171,17 @@ export async function updateBookingTime(
         `
       }
 
-      await invalidateBookingCache(bookingId, Number(currentBooking.customer_id), Number(currentBooking.staff_id))
+      await invalidateBookingCache(tenantId, bookingId, Number(currentBooking.customer_id), currentBooking.staff_id ? Number(currentBooking.staff_id) : undefined)
       
       if (staffUpdate && staffUpdate !== Number(currentBooking.staff_id)) {
-        await invalidateBookingCache(undefined, undefined, staffUpdate)
+        await invalidateBookingCache(tenantId, undefined, undefined, staffUpdate)
       }
 
       revalidatePath("/")
       revalidatePath("/bookings")
       revalidatePath("/appointments")
       revalidatePath("/bookings/calendar")
+      revalidatePath(`/bookings/details/${bookingId}`)
       
       return { success: true, message: "Booking rescheduled successfully!" }
     } catch (error) {
@@ -1100,34 +1194,174 @@ export async function updateBookingTime(
   })
 }
 
-export async function getBookedSlotsForDate(date: string, staffId?: number): Promise<string[]> {
+export interface UpdateBookingData {
+  bookingId: number
+  customerId?: number
+  staffId?: number | null
+  resourceId?: number | null
+  bookingDate?: string
+  bookingTime?: string
+  serviceIds?: number[]
+  totalAmount?: number
+  status?: "pending" | "confirmed" | "completed" | "cancelled"
+  notes?: string
+}
+
+export async function updateBooking(data: UpdateBookingData): Promise<{
+  success: boolean
+  message: string
+}> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const records = staffId
-        ? await sql`
-            SELECT booking_time 
-            FROM bookings 
-            WHERE booking_date = ${date} 
-              AND staff_id = ${staffId}
-              AND tenant_id = ${tenantId}
-              AND status != 'cancelled'
-          `
-        : await sql`
-            SELECT booking_time 
-            FROM bookings 
-            WHERE booking_date = ${date} 
-              AND tenant_id = ${tenantId}
-              AND status != 'cancelled'
-          `
+      const { bookingId, customerId, staffId, resourceId, bookingDate, bookingTime, serviceIds, totalAmount, status, notes } = data
 
-      return records.map((r: any) => {
-        const timeStr = String(r.booking_time || "")
-        return timeStr.length >= 5 ? timeStr.slice(0, 5) : timeStr
-      })
-    } catch (err) {
-      console.error("Error fetching booked slots:", err)
-      return []
+      if (!bookingId || isNaN(bookingId)) {
+        return { success: false, message: "Invalid booking ID" }
+      }
+
+      const existing = await sql`
+        SELECT id, customer_id, staff_id, resource_id, booking_date, booking_time, status, total_amount, notes
+        FROM bookings
+        WHERE id = ${bookingId} AND tenant_id = ${tenantId}
+      `
+      if (existing.length === 0) {
+        return { success: false, message: "Booking not found" }
+      }
+
+      const current = existing[0]
+
+      const finalDate = bookingDate || current.booking_date
+      const finalTime = bookingTime || current.booking_time
+      const finalStaffId = staffId !== undefined ? staffId : (current.staff_id ? Number(current.staff_id) : null)
+      const finalCustomerId = customerId || Number(current.customer_id)
+      const finalStatus = status || current.status
+      const finalAmount = totalAmount !== undefined ? totalAmount : Number(current.total_amount)
+      const finalNotes = notes !== undefined ? notes : current.notes
+      const finalResourceId = resourceId !== undefined ? resourceId : (current.resource_id ? Number(current.resource_id) : null)
+
+      // Past date check
+      if (finalStatus !== "completed" && (bookingDate || bookingTime)) {
+        const todayStr = new Date().toLocaleDateString("en-CA")
+        if (finalDate < todayStr) {
+          return { success: false, message: "Cannot set appointment date in the past." }
+        }
+        if (finalDate === todayStr) {
+          const now = new Date()
+          const currentMins = now.getHours() * 60 + now.getMinutes()
+          const [bH, bM] = String(finalTime).split(":").map(Number)
+          const bMins = (bH || 0) * 60 + (bM || 0)
+          if (bMins < currentMins - 10) {
+            return { success: false, message: "Cannot set appointment time slot in the past." }
+          }
+        }
+      }
+
+      // Conflict check for staff
+      if (finalStaffId && (bookingDate || bookingTime || staffId !== undefined)) {
+        const [targetDurationRow] = await sql`
+          SELECT COALESCE(NULLIF(SUM(s.duration_minutes), 0), 30)::int as duration
+          FROM booking_services bs
+          JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
+          WHERE bs.booking_id = ${bookingId} AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+        `
+        const targetDuration = Number(targetDurationRow?.duration) || 30
+        const [tH, tM] = String(finalTime).split(":").map(Number)
+        const tStart = (tH || 0) * 60 + (tM || 0)
+        const tEnd = tStart + targetDuration
+
+        const staffConflicts = await sql`
+          SELECT b.id, b.booking_time::text, COALESCE(NULLIF(SUM(s.duration_minutes), 0), 30)::int as duration
+          FROM bookings b
+          LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+          LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
+          WHERE b.staff_id = ${finalStaffId}
+            AND b.booking_date = ${finalDate}
+            AND b.tenant_id = ${tenantId}
+            AND b.id != ${bookingId}
+            AND b.status != 'cancelled'
+          GROUP BY b.id, b.booking_time
+        `
+        for (const c of staffConflicts) {
+          const [cH, cM] = String(c.booking_time).split(":").map(Number)
+          const cStart = (cH || 0) * 60 + (cM || 0)
+          const cEnd = cStart + (Number(c.duration) || 30)
+          if (tStart < cEnd && tEnd > cStart) {
+            return {
+              success: false,
+              message: `Staff member has a conflicting booking starting at ${String(c.booking_time).slice(0, 5)}.`,
+            }
+          }
+        }
+      }
+
+      // Update bookings table
+      await sql`
+        UPDATE bookings
+        SET
+          customer_id = ${finalCustomerId},
+          staff_id = ${finalStaffId},
+          resource_id = ${finalResourceId},
+          booking_date = ${finalDate},
+          booking_time = ${finalTime},
+          total_amount = ${finalAmount},
+          status = ${finalStatus},
+          notes = ${finalNotes},
+          updated_at = NOW()
+        WHERE id = ${bookingId} AND tenant_id = ${tenantId}
+      `
+
+      // If services provided, update booking_services
+      if (serviceIds && Array.isArray(serviceIds) && serviceIds.length > 0) {
+        await sql`DELETE FROM booking_services WHERE booking_id = ${bookingId} AND (tenant_id = ${tenantId} OR tenant_id IS NULL)`
+        for (const sId of serviceIds) {
+          const sRow = await sql`SELECT price FROM services WHERE id = ${sId} AND (tenant_id = ${tenantId} OR tenant_id IS NULL) LIMIT 1`
+          const price = sRow[0] ? Number(sRow[0].price) : 0
+          await sql`
+            INSERT INTO booking_services (tenant_id, booking_id, service_id, quantity, price)
+            VALUES (${tenantId}, ${bookingId}, ${sId}, 1, ${price})
+          `
+        }
+      }
+
+      await invalidateBookingCache(tenantId, bookingId, finalCustomerId, finalStaffId || undefined)
+      if (current.staff_id && Number(current.staff_id) !== finalStaffId) {
+        await invalidateBookingCache(tenantId, undefined, undefined, Number(current.staff_id))
+      }
+
+      revalidatePath("/")
+      revalidatePath("/bookings")
+      revalidatePath("/appointments")
+      revalidatePath("/bookings/calendar")
+      revalidatePath(`/bookings/details/${bookingId}`)
+
+      return { success: true, message: "Booking updated successfully!" }
+    } catch (error) {
+      console.error("Error updating booking:", error)
+      return {
+        success: false,
+        message: `Failed to update booking: ${error instanceof Error ? error.message : "Unknown error"}`,
+      }
     }
   })
 }
+
+export async function getBookedSlotsForDate(
+  date: string, 
+  staffId?: number | null,
+  serviceDurationMinutes: number = 30
+): Promise<string[]> {
+  try {
+    const result = await getAvailableSlots({
+      date,
+      staffId: staffId || undefined,
+      serviceDurationMinutes,
+    })
+    if (!result.success) return []
+    return result.slots.filter((s) => !s.available).map((s) => s.time)
+  } catch (err) {
+    console.error("Error calculating booked slots:", err)
+    return []
+  }
+}
+
 

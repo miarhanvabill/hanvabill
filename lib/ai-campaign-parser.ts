@@ -173,19 +173,23 @@ export function parseCampaignPromptDeterministic(promptText: string): SmartCampa
   let trigger_type: CampaignTriggerType = "days_after_service";
   let trigger_days = 30; // default
 
-  // Extract explicit day numbers
+  // Extract explicit day, week, or month numbers
+  let hasExplicitDuration = false;
   const dayMatch = text.match(/(\d+)\s*(?:days?|din|days\s*ago|days\s*after|days\s*later)/i);
   if (dayMatch) {
     trigger_days = parseInt(dayMatch[1], 10);
+    hasExplicitDuration = true;
   } else {
     // Check for "month" or "weeks"
     const weekMatch = text.match(/(\d+)\s*(?:weeks?|hafte)/i);
     if (weekMatch) {
       trigger_days = parseInt(weekMatch[1], 10) * 7;
+      hasExplicitDuration = true;
     } else {
       const monthMatch = text.match(/(\d+)\s*(?:months?|mahine)/i);
       if (monthMatch) {
         trigger_days = parseInt(monthMatch[1], 10) * 30;
+        hasExplicitDuration = true;
       }
     }
   }
@@ -201,10 +205,10 @@ export function parseCampaignPromptDeterministic(promptText: string): SmartCampa
     lower.includes("no booking")
   ) {
     trigger_type = "days_since_last_visit";
-    if (!dayMatch) trigger_days = 45;
+    if (!hasExplicitDuration) trigger_days = 45;
   } else if (lower.includes("birthday") || lower.includes("bday") || lower.includes("janamdin")) {
     trigger_type = "days_before_birthday";
-    if (!dayMatch) trigger_days = 0; // on birthday
+    if (!hasExplicitDuration) trigger_days = 0; // on birthday
   } else if (
     lower.includes("spent over") ||
     lower.includes("spent more") ||
@@ -213,10 +217,10 @@ export function parseCampaignPromptDeterministic(promptText: string): SmartCampa
     lower.includes("bill over")
   ) {
     trigger_type = "high_spender_followup";
-    if (!dayMatch) trigger_days = 2;
-  } else if (lower.includes("membership") && (lower.includes("expire") || lower.includes("ending"))) {
+    if (!hasExplicitDuration) trigger_days = 2;
+  } else if (lower.includes("membership") && (lower.includes("expir") || lower.includes("ending") || lower.includes("renewal"))) {
     trigger_type = "membership_expiring";
-    if (!dayMatch) trigger_days = 7;
+    if (!hasExplicitDuration) trigger_days = 7;
   } else {
     // Default: days_after_service
     trigger_type = "days_after_service";

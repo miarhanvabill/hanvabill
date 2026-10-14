@@ -107,12 +107,12 @@ export async function GET(request: Request) {
         totalRevenue: Number.parseFloat(salesSummary[0]?.total_revenue || "0"),
         averageOrderValue: Number.parseFloat(salesSummary[0]?.average_order_value || "0"),
         totalCustomers: Number.parseInt(salesSummary[0]?.total_customers || "0"),
-        topServices: topServices.map((service) => ({
+        topServices: topServices.map((service: any) => ({
           name: service.service_name || "Unknown Service",
           revenue: Number.parseFloat(service.revenue || "0"),
           bookings: Number.parseInt(service.bookings || "0"),
         })),
-        recentSales: recentSales.map((sale) => ({
+        recentSales: recentSales.map((sale: any) => ({
           id: sale.id,
           customer_name: sale.customer_name || "Unknown Customer",
           product_name: sale.services ? sale.services.filter(Boolean).join(", ") : "Unknown",

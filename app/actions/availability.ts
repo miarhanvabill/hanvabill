@@ -299,3 +299,231 @@ export async function deleteStaffAvailability(
     }
   })
 }
+
+// ─── AVAILABILITY & SCHEDULING CALCULATION ENGINE ────────────────────────────
+
+export interface AvailableSlot {
+  time: string // "09:00"
+  label: string // "9:00 AM"
+  available: boolean
+  reason?: string
+  availableStaffIds?: number[]
+}
+
+export interface AvailabilityCheckParams {
+  date: string // YYYY-MM-DD
+  staffId?: number | null
+  serviceDurationMinutes?: number
+  resourceId?: number | null
+}
+
+function parseTimeToMinutes(timeStr: string | null | undefined): number {
+  if (!timeStr) return 0
+  const parts = timeStr.split(":")
+  const h = parseInt(parts[0], 10) || 0
+  const m = parseInt(parts[1], 10) || 0
+  return h * 60 + m
+}
+
+function minutesToLabel(mins: number): string {
+  const h24 = Math.floor(mins / 60)
+  const m = mins % 60
+  const period = h24 >= 12 ? "PM" : "AM"
+  const h12 = h24 % 12 || 12
+  return `${h12}:${m.toString().padStart(2, "0")} ${period}`
+}
+
+const DEFAULT_SLOTS = [
+  "09:00", "09:30", "10:00", "10:30",
+  "11:00", "11:30", "12:00", "12:30",
+  "13:00", "13:30", "14:00", "14:30",
+  "15:00", "15:30", "16:00", "16:30",
+  "17:00", "17:30", "18:00", "18:30",
+  "19:00", "19:30", "20:00",
+]
+
+export async function getAvailableSlots(params: AvailabilityCheckParams): Promise<{
+  success: boolean
+  slots: AvailableSlot[]
+  error?: string
+}> {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const { date, staffId, serviceDurationMinutes = 30, resourceId } = params
+
+      if (!date) {
+        return { success: false, slots: [], error: "Date is required" }
+      }
+
+      const todayStr = new Date().toLocaleDateString("en-CA")
+      const isPastDate = date < todayStr
+      const isToday = date === todayStr
+
+      const now = new Date()
+      const nowMinutes = now.getHours() * 60 + now.getMinutes()
+
+      const [year, month, day] = date.split("-").map(Number)
+      const targetDayOfWeek = new Date(year, month - 1, day).getDay()
+
+      // Fetch active staff members
+      const activeStaffRows = await sql`
+        SELECT id, name FROM staff 
+        WHERE tenant_id = ${tenantId} AND is_active = true
+      `
+      const activeStaff = Array.isArray(activeStaffRows) ? activeStaffRows : []
+
+      // Fetch staff availability for the target day of week
+      const availabilityRows = await sql`
+        SELECT 
+          staff_id, 
+          day_of_week, 
+          start_time::text, 
+          end_time::text, 
+          is_available, 
+          break_start::text, 
+          break_end::text
+        FROM staff_availability
+        WHERE day_of_week = ${targetDayOfWeek}
+          AND (tenant_id = ${tenantId} OR tenant_id IS NULL)
+      `
+      const availabilityMap = new Map<number, any>()
+      for (const row of availabilityRows) {
+        availabilityMap.set(Number(row.staff_id), row)
+      }
+
+      // Fetch non-cancelled bookings on the target date with their aggregated service durations
+      const bookingRows = await sql`
+        SELECT 
+          b.id,
+          b.staff_id,
+          b.resource_id,
+          b.booking_time::text,
+          COALESCE(NULLIF(SUM(s.duration_minutes), 0), 30)::int as duration_minutes
+        FROM bookings b
+        LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+        LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
+        WHERE b.booking_date = ${date}
+          AND b.tenant_id = ${tenantId}
+          AND b.status != 'cancelled'
+        GROUP BY b.id, b.staff_id, b.resource_id, b.booking_time
+      `
+
+      // Check resource bookings if resourceId provided
+      const resourceBookings = resourceId
+        ? bookingRows.filter((b: any) => Number(b.resource_id) === Number(resourceId))
+        : []
+
+      const calculatedSlots: AvailableSlot[] = DEFAULT_SLOTS.map((timeStr) => {
+        const slotStart = parseTimeToMinutes(timeStr)
+        const slotEnd = slotStart + serviceDurationMinutes
+        const label = minutesToLabel(slotStart)
+
+        if (isPastDate) {
+          return { time: timeStr, label, available: false, reason: "Past date" }
+        }
+
+        // 10-minute grace window for bookings made today
+        if (isToday && slotStart < nowMinutes - 10) {
+          return { time: timeStr, label, available: false, reason: "Past time slot" }
+        }
+
+        // Resource conflict check
+        if (resourceId) {
+          const hasResourceConflict = resourceBookings.some((b: any) => {
+            const bStart = parseTimeToMinutes(b.booking_time)
+            const bEnd = bStart + (Number(b.duration_minutes) || 30)
+            return slotStart < bEnd && slotEnd > bStart
+          })
+          if (hasResourceConflict) {
+            return { time: timeStr, label, available: false, reason: "Room / station is already booked" }
+          }
+        }
+
+        // Helper to test if a specific staff member is available for this slot
+        const isStaffAvailableForSlot = (targetStaffId: number): { available: boolean; reason?: string } => {
+          const avail = availabilityMap.get(targetStaffId)
+
+          // If availability record exists and staff is off on this day
+          if (avail && avail.is_available === false) {
+            return { available: false, reason: "Staff member is off duty today" }
+          }
+
+          const staffStart = avail ? parseTimeToMinutes(avail.start_time) : 540 // 09:00 default
+          const staffEnd = avail ? parseTimeToMinutes(avail.end_time) : 1140 // 19:00 default
+
+          if (slotStart < staffStart || slotEnd > staffEnd) {
+            return { available: false, reason: "Outside working hours" }
+          }
+
+          // Break time check
+          if (avail && avail.break_start && avail.break_end) {
+            const bStart = parseTimeToMinutes(avail.break_start)
+            const bEnd = parseTimeToMinutes(avail.break_end)
+            if (slotStart < bEnd && slotEnd > bStart) {
+              return { available: false, reason: "Staff member is on break" }
+            }
+          }
+
+          // Existing bookings check
+          const staffBookings = bookingRows.filter((b: any) => Number(b.staff_id) === targetStaffId)
+          for (const b of staffBookings) {
+            const bStart = parseTimeToMinutes(b.booking_time)
+            const bEnd = bStart + (Number(b.duration_minutes) || 30)
+            if (slotStart < bEnd && slotEnd > bStart) {
+              return { available: false, reason: "Staff member is already booked" }
+            }
+          }
+
+          return { available: true }
+        }
+
+        if (staffId) {
+          const check = isStaffAvailableForSlot(Number(staffId))
+          return {
+            time: timeStr,
+            label,
+            available: check.available,
+            reason: check.reason,
+            availableStaffIds: check.available ? [Number(staffId)] : [],
+          }
+        } else {
+          // "Any Specialist": Check all active staff members
+          const freeStaffIds: number[] = []
+          for (const st of activeStaff) {
+            const check = isStaffAvailableForSlot(Number(st.id))
+            if (check.available) {
+              freeStaffIds.push(Number(st.id))
+            }
+          }
+
+          if (freeStaffIds.length > 0) {
+            return {
+              time: timeStr,
+              label,
+              available: true,
+              availableStaffIds: freeStaffIds,
+            }
+          } else {
+            return {
+              time: timeStr,
+              label,
+              available: false,
+              reason: "All specialists are booked or off duty",
+              availableStaffIds: [],
+            }
+          }
+        }
+      })
+
+      return { success: true, slots: calculatedSlots }
+    } catch (error) {
+      console.error("[AvailabilityEngine] Error calculating slots:", error)
+      return {
+        success: false,
+        slots: [],
+        error: error instanceof Error ? error.message : "Failed to calculate slots",
+      }
+    }
+  })
+}
+

@@ -18,6 +18,10 @@ export interface Staff {
   emergency_contact?: string | null
   skills?: string | null // TEXT in DB, corresponds to 'specialties' in forms
   commission_rate?: string | null // TEXT in DB, keep as string
+  commission_profile_id?: number | null
+  department?: string | null
+  shift_start?: string | null
+  shift_end?: string | null
   avatar_url?: string | null
   created_at?: string | null // TIMESTAMP in DB, fetched as string
   updated_at?: string | null // VARCHAR in DB, fetched as string
@@ -42,7 +46,9 @@ export async function getStaff(): Promise<Staff[]> {
           SELECT 
             s.id, s.name, s.phone, s.email, s.role, s.salary, 
             TO_CHAR(s.hire_date, 'YYYY-MM-DD') as hire_date,
-            s.is_active, s.address, s.emergency_contact, s.skills, s.commission_rate, s.avatar_url,
+            s.is_active, s.address, s.emergency_contact, s.skills, s.commission_rate, 
+            s.commission_profile_id, s.department, s.shift_start::text, s.shift_end::text,
+            s.avatar_url,
             s.created_at::text,
             s.updated_at::text,
             a.status as attendance_status,
@@ -54,7 +60,6 @@ export async function getStaff(): Promise<Staff[]> {
             AND s.tenant_id = ${tenantId}
           ORDER BY s.name
         `
-
 
         const staffRows = staffResult as Staff[]
 
@@ -130,7 +135,9 @@ export async function getStaffMember(id: number) {
         SELECT 
           id, name, phone, email, role, salary, 
           TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date,
-          is_active, address, emergency_contact, skills, commission_rate, avatar_url,
+          is_active, address, emergency_contact, skills, commission_rate, 
+          commission_profile_id, department, shift_start::text, shift_end::text,
+          avatar_url,
           created_at,
           updated_at
         FROM staff WHERE id = ${id} AND tenant_id = ${tenantId}
@@ -148,6 +155,7 @@ export async function getStaffMember(id: number) {
         ...staff,
         id: Number(staff.id) || 0,
         salary: staff.salary ? Number(staff.salary) : null,
+        commission_profile_id: staff.commission_profile_id ? Number(staff.commission_profile_id) : null,
         is_active: Boolean(staff.is_active),
       } as Staff
     } catch (error) {
@@ -171,7 +179,8 @@ export async function createStaff(data: Omit<Staff, "id" | "created_at" | "updat
       const result = await sql`
         INSERT INTO staff (
           tenant_id, name, phone, email, role, salary, hire_date, 
-          is_active, address, emergency_contact, skills, commission_rate, avatar_url
+          is_active, address, emergency_contact, skills, commission_rate, 
+          commission_profile_id, department, shift_start, shift_end, avatar_url
         )
         VALUES (
           ${tenantId}, ${data.name}, ${data.phone}, ${data.email || null}, ${data.role || null}, 
@@ -179,12 +188,17 @@ export async function createStaff(data: Omit<Staff, "id" | "created_at" | "updat
           ${data.address || null}, ${data.emergency_contact || null}, 
           ${data.skills || null},
           ${data.commission_rate || null},
+          ${data.commission_profile_id || null},
+          ${data.department || null},
+          ${data.shift_start || null},
+          ${data.shift_end || null},
           ${data.avatar_url || null}
         )
         RETURNING 
           id, name, phone, email, role, salary, 
           TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date, 
-          is_active, address, emergency_contact, skills, commission_rate, avatar_url,
+          is_active, address, emergency_contact, skills, commission_rate, 
+          commission_profile_id, department, shift_start::text, shift_end::text, avatar_url,
           created_at, 
           updated_at 
       `
@@ -201,6 +215,7 @@ export async function createStaff(data: Omit<Staff, "id" | "created_at" | "updat
         ...staff,
         id: Number(staff.id) || 0,
         salary: staff.salary ? Number(staff.salary) : null,
+        commission_profile_id: staff.commission_profile_id ? Number(staff.commission_profile_id) : null,
         is_active: Boolean(staff.is_active),
       } as Staff
 
@@ -225,7 +240,9 @@ export async function updateStaff(id: number, data: Partial<Staff>) {
         return { success: false, message: "Invalid staff ID" }
       }
 
-      const profileId = (data as any).commission_profile_id ?? null
+      const hasProfileId = data.commission_profile_id !== undefined
+      const profileId = data.commission_profile_id ?? null
+
       const result = await sql`
         UPDATE staff 
         SET 
@@ -240,14 +257,18 @@ export async function updateStaff(id: number, data: Partial<Staff>) {
           emergency_contact = COALESCE(${data.emergency_contact}, emergency_contact),
           skills = COALESCE(${data.skills || null}, skills),
           commission_rate = COALESCE(${data.commission_rate}, commission_rate),
-          commission_profile_id = ${profileId},
+          commission_profile_id = CASE WHEN ${hasProfileId} THEN ${profileId} ELSE commission_profile_id END,
+          department = COALESCE(${data.department}, department),
+          shift_start = COALESCE(${data.shift_start}, shift_start),
+          shift_end = COALESCE(${data.shift_end}, shift_end),
           avatar_url = COALESCE(${data.avatar_url}, avatar_url),
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ${id} AND tenant_id = ${tenantId}
         RETURNING 
           id, name, phone, email, role, salary, 
           TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date, 
-          is_active, address, emergency_contact, skills, commission_rate, commission_profile_id, avatar_url,
+          is_active, address, emergency_contact, skills, commission_rate, 
+          commission_profile_id, department, shift_start::text, shift_end::text, avatar_url,
           created_at, 
           updated_at 
       `
@@ -264,6 +285,7 @@ export async function updateStaff(id: number, data: Partial<Staff>) {
         ...staff,
         id: Number(staff.id) || 0,
         salary: staff.salary ? Number(staff.salary) : null,
+        commission_profile_id: staff.commission_profile_id ? Number(staff.commission_profile_id) : null,
         is_active: Boolean(staff.is_active),
       } as Staff
 
@@ -438,7 +460,7 @@ export async function getStaffTodaysSchedule(staffId: number) {
           AND b.tenant_id = ${tenantId}
         ORDER BY b.booking_time ASC
       `
-      return result.map(row => ({
+      return (result as any[]).map((row: any) => ({
         id: row.id,
         start_time: row.start_time,
         service_name: row.service_name || "Service",

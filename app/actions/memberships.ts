@@ -144,20 +144,20 @@ export async function getCustomerMemberships(): Promise<CustomerMembership[]> {
           cm.customer_id,
           c.full_name as customer_name,
           c.email as customer_email,
-          cm.membership_plan_id as plan_id,
+          COALESCE(cm.membership_plan_id, cm.plan_id) as plan_id,
           mp.name as plan_name,
           cm.start_date,
           cm.end_date,
           cm.status,
           cm.bookings_used,
-          cm.max_bookings_per_month as max_bookings,
+          COALESCE(mp.max_bookings_per_month, 0) as max_bookings,
           cm.amount_paid,
           cm.frozen_until,
           cm.freeze_reason,
           cm.created_at
         FROM customer_memberships cm
         JOIN customers c ON cm.customer_id = c.id AND c.tenant_id = ${tenantId}
-        JOIN membership_plans mp ON cm.membership_plan_id = mp.id AND mp.tenant_id = ${tenantId}
+        JOIN membership_plans mp ON (cm.membership_plan_id = mp.id OR cm.plan_id = mp.id) AND mp.tenant_id = ${tenantId}
         WHERE cm.tenant_id = ${tenantId}
         ORDER BY cm.created_at DESC
       `
@@ -536,14 +536,43 @@ export async function verifyMembershipData(): Promise<{
     }
   })
 }
+export async function expireOutdatedMemberships(): Promise<{ expiredCount: number }> {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const result = await sql`
+        UPDATE customer_memberships 
+        SET status = 'expired', updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = ${tenantId} 
+          AND status = 'active' 
+          AND end_date < CURRENT_DATE
+        RETURNING id
+      `
+      return { expiredCount: (result.rows || result).length }
+    } catch (error) {
+      console.error("Error expiring outdated memberships:", error)
+      return { expiredCount: 0 }
+    }
+  })
+}
+
 export async function getActiveCustomerMembership(customerId: number): Promise<any | null> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      // Auto-expire any memberships past their end_date
+      await sql`
+        UPDATE customer_memberships 
+        SET status = 'expired', updated_at = CURRENT_TIMESTAMP
+        WHERE tenant_id = ${tenantId} 
+          AND customer_id = ${customerId}
+          AND status = 'active' 
+          AND end_date < CURRENT_DATE
+      `.catch(() => {})
+
       const result = await sql`
         SELECT 
           cm.id,
           cm.customer_id,
-          cm.membership_plan_id as plan_id,
+          COALESCE(cm.membership_plan_id, cm.plan_id) as plan_id,
           mp.name as plan_name,
           mp.discount_percentage,
           mp.benefits,
@@ -552,13 +581,17 @@ export async function getActiveCustomerMembership(customerId: number): Promise<a
           cm.status,
           cm.bookings_used,
           cm.frozen_until,
-          cm.freeze_reason
+          cm.freeze_reason,
+          CASE 
+            WHEN cm.frozen_until IS NOT NULL AND cm.frozen_until >= CURRENT_DATE THEN true
+            ELSE false 
+          END as is_frozen
         FROM customer_memberships cm
-        JOIN membership_plans mp ON cm.membership_plan_id = mp.id AND mp.tenant_id = ${tenantId}
+        JOIN membership_plans mp ON (cm.membership_plan_id = mp.id OR cm.plan_id = mp.id) AND mp.tenant_id = ${tenantId}
         WHERE cm.customer_id = ${customerId} 
         AND cm.tenant_id = ${tenantId}
         AND cm.status = 'active'
-        AND cm.end_date > CURRENT_DATE
+        AND cm.end_date >= CURRENT_DATE
         ORDER BY cm.created_at DESC
         LIMIT 1
       `
@@ -566,11 +599,17 @@ export async function getActiveCustomerMembership(customerId: number): Promise<a
       if (!rows || rows.length === 0) return null
       
       const row = rows[0]
+      const isFrozen = Boolean(
+        row.is_frozen || 
+        (row.frozen_until && new Date(row.frozen_until).getTime() >= new Date(new Date().toDateString()).getTime())
+      )
+
       return {
         ...row,
-        discount_percentage: Number(row.discount_percentage) || 0,
+        is_frozen: isFrozen,
+        discount_percentage: isFrozen ? 0 : (Number(row.discount_percentage) || 0),
         benefits: typeof row.benefits === 'string' ? JSON.parse(row.benefits) : row.benefits,
-        frozen_until: row.frozen_until ? row.frozen_until.toISOString().split("T")[0] : null,
+        frozen_until: row.frozen_until ? (row.frozen_until instanceof Date ? row.frozen_until.toISOString().split("T")[0] : String(row.frozen_until).split("T")[0]) : null,
       }
     } catch (error) {
       console.error("Error fetching active customer membership:", error)
@@ -582,18 +621,32 @@ export async function getActiveCustomerMembership(customerId: number): Promise<a
 export async function freezeMembership(
   membershipId: string,
   frozenUntil: string,
-  reason: string
+  reason: string,
+  extendEndDateDays?: number
 ): Promise<{ success: boolean; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      await sql`
-        UPDATE customer_memberships
-        SET 
-          frozen_until = ${frozenUntil},
-          freeze_reason = ${reason},
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ${membershipId} AND tenant_id = ${tenantId}
-      `
+      if (extendEndDateDays && extendEndDateDays > 0) {
+        await sql`
+          UPDATE customer_memberships
+          SET 
+            frozen_until = ${frozenUntil},
+            freeze_reason = ${reason},
+            end_date = end_date + (${extendEndDateDays}::text || ' days')::interval,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${membershipId} AND tenant_id = ${tenantId}
+        `
+      } else {
+        await sql`
+          UPDATE customer_memberships
+          SET 
+            frozen_until = ${frozenUntil},
+            freeze_reason = ${reason},
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${membershipId} AND tenant_id = ${tenantId}
+        `
+      }
+
       revalidatePath("/manage/memberships")
       revalidatePath("/customers/[id]", "page")
       return { success: true }

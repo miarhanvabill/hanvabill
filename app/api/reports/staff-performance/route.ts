@@ -55,7 +55,7 @@ export async function GET(request: Request) {
         ORDER BY total_revenue DESC
       `
 
-      const formattedData = staffPerformance.map((staff) => ({
+      const formattedData = staffPerformance.map((staff: any) => ({
         ...staff,
         bookings_count: Number(staff.bookings_count) || 0,
         total_revenue: Number(staff.total_revenue) || 0,

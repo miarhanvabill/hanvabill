@@ -27,7 +27,7 @@ export function StoreSettingsClient({ initialSettings }: { initialSettings: any 
   const [profile, setProfile] = useState(initialSettings?.profile || {})
   const [business, setBusiness] = useState(initialSettings?.business || {})
 
-  const handleProfileChange = (field: string, value: string) => {
+  const handleProfileChange = (field: string, value: any) => {
     setProfile((prev: any) => ({ ...prev, [field]: value }))
   }
 

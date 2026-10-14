@@ -35,16 +35,19 @@ import {
   Star,
   Clock,
   CheckCircle,
+  Snowflake,
 } from "lucide-react"
 
 import { useRealTimeSync } from "@/lib/websocket"
 import { RealTimeIndicator } from "@/components/real-time-indicator"
 import { formatCurrency } from "@/lib/currency"
+import { freezeMembership, unfreezeMembership } from "@/app/actions/memberships"
 
 interface MembershipPlan {
   id: string
   name: string
   description: string
+  image_url?: string
   price: number
   duration_months: number
   benefits: string[]
@@ -72,6 +75,8 @@ interface CustomerMembership {
   amount_paid: number
   created_at: string
   usage_percentage?: number
+  frozen_until?: string | null
+  freeze_reason?: string | null
 }
 
 export default function MembershipsPage() {
@@ -94,6 +99,11 @@ export default function MembershipsPage() {
     status: "active",
     end_date: "",
   })
+
+  const [isFreezeDialogOpen, setIsFreezeDialogOpen] = useState(false)
+  const [freezingMember, setFreezingMember] = useState<CustomerMembership | null>(null)
+  const [freezeUntilDate, setFreezeUntilDate] = useState("")
+  const [freezeReasonText, setFreezeReasonText] = useState("")
 
   const [lastUpdated, setLastUpdated] = useState(new Date())
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true)
@@ -339,6 +349,7 @@ export default function MembershipsPage() {
     setPlanFormData({
       name: plan.name,
       description: plan.description,
+      image_url: plan.image_url || "",
       price: plan.price,
       duration_months: plan.duration_months,
       benefits: [...plan.benefits, ""], // Add empty string for new benefit input
@@ -359,6 +370,68 @@ export default function MembershipsPage() {
       end_date: new Date(member.end_date).toISOString().split("T")[0],
     })
     setIsEditMemberDialogOpen(true)
+  }
+
+  const handleOpenFreeze = (member: CustomerMembership) => {
+    setFreezingMember(member)
+    const nextMonth = new Date()
+    nextMonth.setMonth(nextMonth.getMonth() + 1)
+    setFreezeUntilDate(nextMonth.toISOString().split("T")[0])
+    setFreezeReasonText("Customer temporary freeze request")
+    setIsFreezeDialogOpen(true)
+  }
+
+  const handleConfirmFreeze = async () => {
+    if (!freezingMember || !freezeUntilDate) return
+    try {
+      const res = await freezeMembership(freezingMember.id, freezeUntilDate, freezeReasonText)
+      if (res.success) {
+        toast({
+          title: "Success",
+          description: "Membership frozen successfully",
+        })
+        setIsFreezeDialogOpen(false)
+        setFreezingMember(null)
+        await loadData()
+      } else {
+        toast({
+          title: "Error",
+          description: res.error || "Failed to freeze membership",
+          variant: "destructive",
+        })
+      }
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to freeze membership",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleUnfreezeAction = async (memberId: string) => {
+    try {
+      const res = await unfreezeMembership(memberId)
+      if (res.success) {
+        toast({
+          title: "Success",
+          description: "Membership unfreezed successfully",
+        })
+        await loadData()
+      } else {
+        toast({
+          title: "Error",
+          description: res.error || "Failed to unfreeze membership",
+          variant: "destructive",
+        })
+      }
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to unfreeze membership",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleUpdateMember = async () => {
@@ -407,6 +480,7 @@ export default function MembershipsPage() {
     setPlanFormData({
       name: "",
       description: "",
+      image_url: "",
       price: 0,
       duration_months: 12,
       benefits: [""],
@@ -903,7 +977,7 @@ export default function MembershipsPage() {
                         const usageStatus =
                           membership.max_bookings > 0
                             ? `${membership.bookings_used} / ${membership.max_bookings} (${usagePercentage.toFixed(0)}%)`
-                            : membership.usage_percentage > 0
+                            : (membership.usage_percentage ?? 0) > 0
                               ? `${membership.bookings_used} used (${usagePercentage.toFixed(0)}%)`
                               : `${membership.bookings_used} used`
 
@@ -937,7 +1011,7 @@ export default function MembershipsPage() {
                                 <div className="flex justify-between text-sm">
                                   <span>{usageStatus}</span>
                                 </div>
-                                {(membership.max_bookings > 0 || membership.usage_percentage > 0) && (
+                                {(membership.max_bookings > 0 || (membership.usage_percentage ?? 0) > 0) && (
                                   <Progress value={usagePercentage} className="h-2" />
                                 )}
                               </div>
@@ -946,29 +1020,59 @@ export default function MembershipsPage() {
                               <span className="font-medium">{formatCurrency(membership.amount_paid)}</span>
                             </TableCell>
                             <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Badge
-                                  variant={
-                                    membership.status === "active"
-                                      ? "default"
-                                      : membership.status === "expired"
-                                        ? "destructive"
-                                        : "secondary"
-                                  }
-                                  className="relative"
-                                >
-                                  {membership.status === "active" && (
-                                    <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                                  )}
-                                  {membership.status}
-                                </Badge>
+                              <div className="flex flex-col gap-1 items-start">
+                                <div className="flex items-center gap-2">
+                                  <Badge
+                                    variant={
+                                      membership.status === "active"
+                                        ? "default"
+                                        : membership.status === "expired"
+                                          ? "destructive"
+                                          : "secondary"
+                                    }
+                                    className="relative"
+                                  >
+                                    {membership.status === "active" && (
+                                      <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                                    )}
+                                    {membership.status}
+                                  </Badge>
+                                </div>
+                                {membership.frozen_until && new Date(membership.frozen_until).getTime() >= new Date(new Date().toDateString()).getTime() && (
+                                  <Badge variant="outline" className="text-xs text-blue-700 bg-blue-50 border-blue-200">
+                                    <Snowflake className="w-3 h-3 mr-1 inline text-blue-500" />
+                                    Frozen to {new Date(membership.frozen_until).toLocaleDateString()}
+                                  </Badge>
+                                )}
                               </div>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
-                                <Button variant="outline" size="sm" onClick={() => handleEditMember(membership)}>
+                                <Button variant="outline" size="sm" onClick={() => handleEditMember(membership)} title="Edit Member">
                                   <Edit className="w-4 h-4" />
                                 </Button>
+                                {membership.frozen_until && new Date(membership.frozen_until).getTime() >= new Date(new Date().toDateString()).getTime() ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleUnfreezeAction(membership.id)}
+                                    className="text-blue-600 hover:bg-blue-50"
+                                    title="Unfreeze Membership"
+                                  >
+                                    <Snowflake className="w-4 h-4" />
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleOpenFreeze(membership)}
+                                    disabled={membership.status !== "active"}
+                                    className="text-cyan-600 hover:bg-cyan-50"
+                                    title="Freeze Membership"
+                                  >
+                                    <Snowflake className="w-4 h-4" />
+                                  </Button>
+                                )}
                                 <Button
                                   variant="outline"
                                   size="sm"
@@ -976,6 +1080,7 @@ export default function MembershipsPage() {
                                     const newStatus = membership.status === "active" ? "cancelled" : "active"
                                     updateMembershipStatus(membership.id, newStatus)
                                   }}
+                                  title="Toggle Active/Cancelled"
                                 >
                                   <Clock className="w-4 h-4" />
                                 </Button>
@@ -1209,6 +1314,50 @@ export default function MembershipsPage() {
                 Cancel
               </Button>
               <Button onClick={handleUpdateMember}>Update Member</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Freeze Member Dialog */}
+      <Dialog open={isFreezeDialogOpen} onOpenChange={setIsFreezeDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Snowflake className="w-5 h-5 text-blue-500" />
+              Freeze Membership
+            </DialogTitle>
+            <DialogDescription>
+              Temporarily freeze benefits and discounts for {freezingMember?.customer_name}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="freeze_until">Freeze Until (Date) *</Label>
+              <Input
+                id="freeze_until"
+                type="date"
+                value={freezeUntilDate}
+                onChange={(e) => setFreezeUntilDate(e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <Label htmlFor="freeze_reason">Freeze Reason</Label>
+              <Input
+                id="freeze_reason"
+                value={freezeReasonText}
+                onChange={(e) => setFreezeReasonText(e.target.value)}
+                placeholder="e.g., Vacation / Travel / Medical"
+              />
+            </div>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" onClick={() => setIsFreezeDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleConfirmFreeze} className="bg-blue-600 hover:bg-blue-700">
+                Confirm Freeze
+              </Button>
             </div>
           </div>
         </DialogContent>

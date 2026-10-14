@@ -33,6 +33,7 @@ export interface Customer {
   tags?: string[] | null
   preferred_staff_id?: number | null
   referred_by_customer_id?: number | null
+  wallet_balance?: number
   created_at: string
   updated_at: string
   total_bookings?: number
@@ -76,7 +77,8 @@ export async function getCustomers(search?: string, offset: number = 0, limit: n
             c.notes,
             c.tags,
             c.preferred_staff_id,
-        referred_by_customer_id,
+            c.referred_by_customer_id,
+            c.wallet_balance,
             c.created_at,
             c.updated_at,
             COUNT(b.id) as total_bookings,
@@ -86,7 +88,7 @@ export async function getCustomers(search?: string, offset: number = 0, limit: n
           WHERE c.tenant_id = ${tenantId}
           ${search ? sql`AND (c.full_name ILIKE ${'%' + search + '%'} OR c.phone_number ILIKE ${'%' + search + '%'} OR c.email ILIKE ${'%' + search + '%'})` : sql``}
           GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.tags, c.preferred_staff_id,
-        referred_by_customer_id, c.created_at, c.updated_at
+            c.referred_by_customer_id, c.wallet_balance, c.created_at, c.updated_at
           ORDER BY c.created_at DESC
           LIMIT ${limit} OFFSET ${offset}
         `
@@ -96,8 +98,10 @@ export async function getCustomers(search?: string, offset: number = 0, limit: n
           id: Number(customer.id) || 0,
           total_bookings: Number(customer.total_bookings) || 0,
           total_spent: Number(customer.total_spent) || 0,
+          wallet_balance: Number(customer.wallet_balance) || 0,
           tags: typeof customer.tags === "string" ? JSON.parse(customer.tags) : (customer.tags || []),
           preferred_staff_id: customer.preferred_staff_id ? Number(customer.preferred_staff_id) : null,
+          referred_by_customer_id: customer.referred_by_customer_id ? Number(customer.referred_by_customer_id) : null,
         })) as Customer[]
       },
       300,
@@ -132,7 +136,8 @@ export async function getCustomer(id: string): Promise<Customer | null> {
             c.notes,
             c.tags,
             c.preferred_staff_id,
-        referred_by_customer_id,
+            c.referred_by_customer_id,
+            c.wallet_balance,
             c.created_at,
             c.updated_at,
             COUNT(b.id) as total_bookings,
@@ -141,7 +146,7 @@ export async function getCustomer(id: string): Promise<Customer | null> {
           LEFT JOIN bookings b ON c.id = b.customer_id
           WHERE c.id = ${id} AND c.tenant_id = ${tenantId}
           GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.tags, c.preferred_staff_id,
-        referred_by_customer_id, c.created_at, c.updated_at
+            c.referred_by_customer_id, c.wallet_balance, c.created_at, c.updated_at
         `
 
         if (customers.length === 0) return null
@@ -152,8 +157,10 @@ export async function getCustomer(id: string): Promise<Customer | null> {
           id: Number(customer.id) || 0,
           total_bookings: Number(customer.total_bookings) || 0,
           total_spent: Number(customer.total_spent) || 0,
+          wallet_balance: Number(customer.wallet_balance) || 0,
           tags: typeof customer.tags === "string" ? JSON.parse(customer.tags) : (customer.tags || []),
           preferred_staff_id: customer.preferred_staff_id ? Number(customer.preferred_staff_id) : null,
+          referred_by_customer_id: customer.referred_by_customer_id ? Number(customer.referred_by_customer_id) : null,
         } as Customer
       },
       600,
@@ -188,7 +195,8 @@ export async function searchCustomers(query: string): Promise<Customer[]> {
             c.notes,
             c.tags,
             c.preferred_staff_id,
-        referred_by_customer_id,
+            c.referred_by_customer_id,
+            c.wallet_balance,
             c.created_at,
             c.updated_at,
             COUNT(b.id) as total_bookings,
@@ -200,7 +208,7 @@ export async function searchCustomers(query: string): Promise<Customer[]> {
                  OR c.phone_number ILIKE ${`%${searchQuery}%`}
                  OR c.email ILIKE ${`%${searchQuery}%`})
           GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.tags, c.preferred_staff_id,
-        referred_by_customer_id, c.created_at, c.updated_at
+            c.referred_by_customer_id, c.wallet_balance, c.created_at, c.updated_at
           ORDER BY c.full_name
           LIMIT 20
         `
@@ -210,8 +218,10 @@ export async function searchCustomers(query: string): Promise<Customer[]> {
           id: Number(customer.id) || 0,
           total_bookings: Number(customer.total_bookings) || 0,
           total_spent: Number(customer.total_spent) || 0,
+          wallet_balance: Number(customer.wallet_balance) || 0,
           tags: typeof customer.tags === "string" ? JSON.parse(customer.tags) : (customer.tags || []),
           preferred_staff_id: customer.preferred_staff_id ? Number(customer.preferred_staff_id) : null,
+          referred_by_customer_id: customer.referred_by_customer_id ? Number(customer.referred_by_customer_id) : null,
         })) as Customer[]
       },
       180,
@@ -226,12 +236,13 @@ async function invalidateCustomerCache(tenantId: string, customerId?: string) {
     await cacheDel(`${baseKey}:all`)
     await cacheDel(`${baseKey}:stats`)
     if (customerId) {
+      await cacheDel(`customer:${tenantId}:${customerId}`)
       await cacheDel(`${baseKey}:customer:${customerId}`)
     }
     // Invalidate search cache patterns
     const keys = await cacheFetch('keys', async () => []);
     for (const key of keys) {
-      if (key.startsWith(`${baseKey}:search:`)) {
+      if (key.startsWith(`${baseKey}:search:`) || key.startsWith(`customers:all:${tenantId}`) || key.startsWith(`customers:paginated:${tenantId}`)) {
         await cacheDel(key);
       }
     }
@@ -240,26 +251,41 @@ async function invalidateCustomerCache(tenantId: string, customerId?: string) {
   }
 }
 
-// ✅ Updated createCustomer with proper tenant context
+// ✅ Updated createCustomer with proper tenant context and automated loyalty onboarding
 export async function createCustomer(formData: FormData) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
-    const phoneNumber = formData.get("phoneNumber") as string
-    const fullName = formData.get("fullName") as string
-    const email = formData.get("email") as string
-    const gender = formData.get("gender") as string
-    const smsNumber = formData.get("smsNumber") as string
-    const code = formData.get("code") as string
-    const instagramHandle = formData.get("instagramHandle") as string
-    const leadSource = formData.get("leadSource") as string
-    const dateOfBirth = formData.get("dateOfBirth") as string
-    const dateOfAnniversary = formData.get("dateOfAnniversary") as string
-    const notes = formData.get("notes") as string
-    const tagsStr = formData.get("tags") as string
+    const phoneNumber = (
+      (formData.get("phoneNumber") || formData.get("phone_number")) as string
+    )?.trim() || ""
+    const fullName = (
+      (formData.get("fullName") || formData.get("full_name")) as string
+    )?.trim() || ""
+    const email = ((formData.get("email")) as string)?.trim() || null
+    const address = ((formData.get("address")) as string)?.trim() || null
+    const gender = ((formData.get("gender")) as string)?.trim() || null
+    const smsNumber = (
+      (formData.get("smsNumber") || formData.get("sms_number")) as string
+    )?.trim() || null
+    const code = ((formData.get("code")) as string)?.trim() || null
+    const instagramHandle = (
+      (formData.get("instagramHandle") || formData.get("instagram_handle")) as string
+    )?.trim() || null
+    const leadSource = (
+      (formData.get("leadSource") || formData.get("lead_source")) as string
+    )?.trim() || null
+    const dateOfBirth = (
+      (formData.get("dateOfBirth") || formData.get("date_of_birth")) as string
+    )?.trim() || null
+    const dateOfAnniversary = (
+      (formData.get("dateOfAnniversary") || formData.get("date_of_anniversary")) as string
+    )?.trim() || null
+    const notes = ((formData.get("notes")) as string)?.trim() || null
+    const tagsStr = ((formData.get("tags")) as string)?.trim() || ""
     const tags = tagsStr ? tagsStr.split(",").map(t => t.trim()).filter(Boolean) : []
     const preferredStaffIdStr = formData.get("preferred_staff_id") as string
-    const preferredStaffId = preferredStaffIdStr ? Number(preferredStaffIdStr) : null
+    const preferredStaffId = preferredStaffIdStr && preferredStaffIdStr !== "none" ? Number(preferredStaffIdStr) : null
     const referredByStr = formData.get("referred_by_customer_id") as string
-    const referredByCustomerId = referredByStr ? Number(referredByStr) : null
+    const referredByCustomerId = referredByStr && referredByStr !== "none" ? Number(referredByStr) : null
 
     if (!phoneNumber || !fullName) {
       return {
@@ -271,7 +297,7 @@ export async function createCustomer(formData: FormData) {
     if (phoneNumber.length < 10) {
       return {
         success: false,
-        message: "Please enter a valid phone number",
+        message: "Please enter a valid phone number (at least 10 digits)",
       }
     }
 
@@ -292,6 +318,7 @@ export async function createCustomer(formData: FormData) {
         full_name,
         phone_number,
         email,
+        address,
         gender,
         sms_number,
         code,
@@ -303,7 +330,6 @@ export async function createCustomer(formData: FormData) {
         tags,
         preferred_staff_id,
         referred_by_customer_id,
-        referred_by_customer_id,
         tenant_id,
         created_at,
         updated_at
@@ -312,6 +338,7 @@ export async function createCustomer(formData: FormData) {
         ${fullName},
         ${phoneNumber},
         ${email || null},
+        ${address || null},
         ${gender || null},
         ${smsNumber || null},
         ${code || null},
@@ -332,6 +359,48 @@ export async function createCustomer(formData: FormData) {
 
     const customer = result[0]
 
+    // Automated loyalty onboarding for newly created customer
+    try {
+      const loyaltySettingsRows = await sql`
+        SELECT is_active, welcome_bonus, referral_bonus, points_validity_days
+        FROM loyalty_settings
+        WHERE tenant_id = ${tenantId}
+        ORDER BY id DESC LIMIT 1
+      `.catch(() => [])
+
+      if (loyaltySettingsRows.length > 0 && loyaltySettingsRows[0].is_active) {
+        const settings = loyaltySettingsRows[0]
+        const validityDays = Number(settings.points_validity_days) || 45
+
+        // 1. Welcome Bonus Points
+        if (Number(settings.welcome_bonus) > 0) {
+          await sql`
+            INSERT INTO loyalty_transactions (
+              tenant_id, customer_id, points, transaction_type, amount, description, created_at, expires_at, type
+            ) VALUES (
+              ${tenantId}, ${customer.id}, ${Number(settings.welcome_bonus)}, 'earned', 0, 'Welcome bonus',
+              NOW(), NOW() + (${validityDays}::text || ' days')::interval, 'bonus'
+            )
+          `.catch((err: any) => console.error("Error awarding welcome bonus:", err))
+        }
+
+        // 2. Referral Bonus Points
+        if (referredByCustomerId && Number(settings.referral_bonus) > 0) {
+          await sql`
+            INSERT INTO loyalty_transactions (
+              tenant_id, customer_id, points, transaction_type, amount, description, created_at, expires_at, type
+            ) VALUES (
+              ${tenantId}, ${referredByCustomerId}, ${Number(settings.referral_bonus)}, 'earned', 0,
+              ${'Referral reward for referring ' + fullName},
+              NOW(), NOW() + (${validityDays}::text || ' days')::interval, 'bonus'
+            )
+          `.catch((err: any) => console.error("Error awarding referral bonus:", err))
+        }
+      }
+    } catch (loyaltyErr) {
+      console.error("Non-fatal error in loyalty enrollment on customer create:", loyaltyErr)
+    }
+
     await invalidateCustomerCache(tenantId)
     revalidatePath("/")
     revalidatePath("/customers")
@@ -345,6 +414,7 @@ export async function createCustomer(formData: FormData) {
         id: Number(customer.id) || 0,
         total_bookings: 0,
         total_spent: 0,
+        wallet_balance: Number(customer.wallet_balance) || 0,
       },
     }
   })
@@ -418,6 +488,46 @@ export async function createCustomerData(customerData: {
 
     const customer = result[0]
 
+    // Automated welcome & referral bonus
+    try {
+      const loyaltySettingsRows = await sql`
+        SELECT is_active, welcome_bonus, referral_bonus, points_validity_days
+        FROM loyalty_settings
+        WHERE tenant_id = ${tenantId}
+        ORDER BY id DESC LIMIT 1
+      `.catch(() => [])
+
+      if (loyaltySettingsRows.length > 0 && loyaltySettingsRows[0].is_active) {
+        const settings = loyaltySettingsRows[0]
+        const validityDays = Number(settings.points_validity_days) || 45
+
+        if (Number(settings.welcome_bonus) > 0) {
+          await sql`
+            INSERT INTO loyalty_transactions (
+              tenant_id, customer_id, points, transaction_type, amount, description, created_at, expires_at, type
+            ) VALUES (
+              ${tenantId}, ${customer.id}, ${Number(settings.welcome_bonus)}, 'earned', 0, 'Welcome bonus',
+              NOW(), NOW() + (${validityDays}::text || ' days')::interval, 'bonus'
+            )
+          `.catch(() => {})
+        }
+
+        if (customerData.referred_by_customer_id && Number(settings.referral_bonus) > 0) {
+          await sql`
+            INSERT INTO loyalty_transactions (
+              tenant_id, customer_id, points, transaction_type, amount, description, created_at, expires_at, type
+            ) VALUES (
+              ${tenantId}, ${customerData.referred_by_customer_id}, ${Number(settings.referral_bonus)}, 'earned', 0,
+              ${'Referral reward for referring ' + customerData.full_name},
+              NOW(), NOW() + (${validityDays}::text || ' days')::interval, 'bonus'
+            )
+          `.catch(() => {})
+        }
+      }
+    } catch {
+      // non-fatal
+    }
+
     await invalidateCustomerCache(tenantId)
     revalidatePath("/")
     revalidatePath("/customers")
@@ -428,6 +538,7 @@ export async function createCustomerData(customerData: {
       id: Number(customer.id) || 0,
       total_bookings: 0,
       total_spent: 0,
+      wallet_balance: Number(customer.wallet_balance) || 0,
     } as Customer
   })
 }
@@ -449,7 +560,7 @@ export async function updateCustomer(
     notes?: string
     tags?: string[]
     preferred_staff_id?: number | null
-  referred_by_customer_id?: number | null
+    referred_by_customer_id?: number | null
   },
 ): Promise<UpdateCustomerState> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
@@ -475,9 +586,9 @@ export async function updateCustomer(
         instagram_handle = COALESCE(${customerData.instagram_handle}, instagram_handle),
         lead_source = COALESCE(${customerData.lead_source}, lead_source),
         notes = COALESCE(${customerData.notes}, notes),
-        tags = COALESCE(${customerData.tags ? JSON.stringify(customerData.tags) : null}::jsonb, tags),
-        preferred_staff_id = COALESCE(${customerData.preferred_staff_id}, preferred_staff_id),
-        referred_by_customer_id = COALESCE(${customerData.referred_by_customer_id}, referred_by_customer_id),
+        tags = COALESCE(${customerData.tags !== undefined ? JSON.stringify(customerData.tags) : null}::jsonb, tags),
+        preferred_staff_id = ${customerData.preferred_staff_id !== undefined ? customerData.preferred_staff_id : sql`preferred_staff_id`},
+        referred_by_customer_id = ${customerData.referred_by_customer_id !== undefined ? customerData.referred_by_customer_id : sql`referred_by_customer_id`},
         updated_at = NOW()
       WHERE id = ${id} AND tenant_id = ${tenantId}
       RETURNING *
@@ -496,6 +607,7 @@ export async function updateCustomer(
     revalidatePath("/")
     revalidatePath("/customers")
     revalidatePath("/new-sale")
+    revalidatePath(`/customers/${id}`)
 
     return {
       success: true,
@@ -505,6 +617,7 @@ export async function updateCustomer(
         id: Number(customer.id) || 0,
         total_bookings: 0,
         total_spent: 0,
+        wallet_balance: Number(customer.wallet_balance) || 0,
       },
     }
   })

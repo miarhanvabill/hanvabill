@@ -56,6 +56,7 @@ export interface CustomerChatSidebarInfo {
     amount: number
     invoice_date: string
     share_token?: string
+    coupon_code?: string
   }[]
 }
 
@@ -239,7 +240,7 @@ export async function testWhatsAppConnection(creds?: {
 }) {
   return await withTenantAuth(async ({ tenantId }) => {
     try {
-      const settings = await getBusinessSettings(tenantId)
+      const settings = await getBusinessSettings()
       const testCreds = creds || settings?.whatsapp
 
       if (!testCreds?.userid || !testCreds?.password || !testCreds?.wabaNumber) {
@@ -439,7 +440,7 @@ export async function sendCustomerQuickAction(data: {
         }
       } else if (data.actionType === "booking") {
         // We don't have a specific eventType for 'send booking link', so we send a direct message
-        const settings = await getBusinessSettings(tenantId)
+        const settings = await getBusinessSettings()
         const salonName = settings?.profile?.salonName || "Hanva Luxury Salon"
         
         const tenantInfo = await sql`SELECT slug FROM tenants WHERE id = ${tenantId} LIMIT 1`

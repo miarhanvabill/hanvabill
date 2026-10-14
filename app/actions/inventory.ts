@@ -361,6 +361,22 @@ export async function createInventoryItem(data: {
       if (quantity === 0) status = "out_of_stock"
       else if (quantity <= reorderLevel) status = "low_stock"
 
+      // Check SKU uniqueness per tenant
+      if (data.sku?.trim()) {
+        const trimmedSku = data.sku.trim()
+        const existingSku = await sql`
+          SELECT id, name FROM inventory 
+          WHERE tenant_id = ${tenantId} AND (UPPER(sku) = UPPER(${trimmedSku}) OR UPPER(barcode) = UPPER(${trimmedSku}))
+          LIMIT 1
+        `
+        if (existingSku.length > 0) {
+          return {
+            success: false,
+            message: `SKU "${trimmedSku}" is already in use by "${existingSku[0].name}". Please enter a unique SKU.`,
+          }
+        }
+      }
+
       const result = await sql`
         INSERT INTO inventory (
           tenant_id, name, item_name, category, brand, sku, barcode, quantity, unit,
@@ -449,6 +465,24 @@ export async function updateInventoryItem(
       let status = "active"
       if (quantity === 0) status = "out_of_stock"
       else if (quantity <= reorderLevel) status = "low_stock"
+
+      // Check SKU uniqueness per tenant (excluding self)
+      if (data.sku?.trim()) {
+        const trimmedSku = data.sku.trim()
+        const existingSku = await sql`
+          SELECT id, name FROM inventory 
+          WHERE tenant_id = ${tenantId} 
+            AND id != ${id}
+            AND (UPPER(sku) = UPPER(${trimmedSku}) OR UPPER(barcode) = UPPER(${trimmedSku}))
+          LIMIT 1
+        `
+        if (existingSku.length > 0) {
+          return {
+            success: false,
+            message: `SKU "${trimmedSku}" is already in use by "${existingSku[0].name}". Please enter a unique SKU.`,
+          }
+        }
+      }
 
       const result = await sql`
         UPDATE inventory SET
@@ -658,6 +692,25 @@ export async function bulkUploadInventory(
             WHERE id = ${existingItem.id} AND tenant_id = ${tenantId}
           `
 
+          // Sync updated stock to products table
+          try {
+            await sql`
+              UPDATE products SET
+                name = ${effectiveName},
+                stock_quantity = ${newQty},
+                price = ${sellingPrice > 0 ? sellingPrice : existingItem.selling_price},
+                cost = ${costPrice > 0 ? costPrice : existingItem.cost_price},
+                min_stock_level = ${reorderLevel > 0 ? reorderLevel : existingItem.reorder_level},
+                updated_at = NOW()
+              WHERE tenant_id = ${tenantId}
+                AND (
+                  (sku IS NOT NULL AND (sku = ${rawSku} OR sku = ${existingItem.sku}))
+                  OR (barcode IS NOT NULL AND (barcode = ${rawSku} OR barcode = ${existingItem.barcode}))
+                  OR LOWER(name) = LOWER(${effectiveName})
+                )
+            `
+          } catch {}
+
           summary.updated++
           summary.details.push({
             row: rowNum,
@@ -686,6 +739,20 @@ export async function bulkUploadInventory(
               ${item.location || null}, ${item.description || null}, ${status}, NOW(), NOW()
             )
           `
+
+          // Sync new item into products table for unified catalog
+          try {
+            await sql`
+              INSERT INTO products (
+                tenant_id, name, description, price, cost, stock_quantity,
+                min_stock_level, barcode, sku, unit, is_active, created_at, updated_at
+              ) VALUES (
+                ${tenantId}, ${effectiveName}, ${item.description || null}, ${sellingPrice},
+                ${costPrice}, ${qty}, ${reorderLevel}, ${item.barcode || rawSku || null},
+                ${rawSku || null}, ${unit}, true, NOW(), NOW()
+              )
+            `
+          } catch {}
 
           summary.created++
           summary.details.push({
@@ -777,6 +844,22 @@ export async function adjustInventoryStock(data: {
         `
       } catch {}
 
+      // Sync stock to products table
+      try {
+        await sql`
+          UPDATE products SET
+            stock_quantity = ${newQty},
+            updated_at = NOW()
+          WHERE tenant_id = ${tenantId}
+            AND (
+              id = ${data.id}
+              OR (sku IS NOT NULL AND sku = ${item.sku})
+              OR (barcode IS NOT NULL AND barcode = ${item.barcode})
+              OR LOWER(name) = LOWER(${item.name})
+            )
+        `
+      } catch {}
+
       return {
         success: true,
         message: `Stock updated successfully from ${currentQty} to ${newQty}`,
@@ -849,6 +932,16 @@ export async function updateStock(id: number, newQuantity: number) {
         WHERE id = ${id} AND tenant_id = ${tenantId}
         RETURNING *
       `
+
+      // Sync stock to products table
+      try {
+        await sql`
+          UPDATE products SET 
+            stock_quantity = ${qty}, 
+            updated_at = NOW()
+          WHERE id = ${id} AND tenant_id = ${tenantId}
+        `
+      } catch {}
 
       return {
         success: true,

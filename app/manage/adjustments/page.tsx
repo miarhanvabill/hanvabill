@@ -80,12 +80,29 @@ export default function AdjustmentsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!formData.product_id) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a product to adjust.",
+        variant: "destructive",
+      })
+      return
+    }
+    const qty = Number.parseInt(formData.quantity)
+    if (isNaN(qty) || qty <= 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid positive quantity.",
+        variant: "destructive",
+      })
+      return
+    }
     try {
       await createAdjustment({
         product_id: Number.parseInt(formData.product_id),
         adjustment_type: formData.adjustment_type,
-        quantity: Number.parseInt(formData.quantity),
-        reason: formData.reason,
+        quantity: qty,
+        reason: formData.reason || "recount",
         notes: formData.notes,
       })
       toast({
@@ -95,10 +112,10 @@ export default function AdjustmentsPage() {
       setIsDialogOpen(false)
       resetForm()
       loadData()
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to create adjustment",
+        description: error?.message || "Failed to create adjustment",
         variant: "destructive",
       })
     }
@@ -109,15 +126,16 @@ export default function AdjustmentsPage() {
       product_id: "",
       adjustment_type: "increase",
       quantity: "",
-      reason: "",
+      reason: "recount",
       notes: "",
     })
   }
 
   const filteredAdjustments = adjustments.filter((adjustment) => {
     const matchesSearch =
-      adjustment.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      adjustment.reason.toLowerCase().includes(searchTerm.toLowerCase())
+      (adjustment.product_name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (adjustment.reason || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (adjustment.notes || "").toLowerCase().includes(searchTerm.toLowerCase())
     const matchesType = typeFilter === "all" || adjustment.adjustment_type === typeFilter
     return matchesSearch && matchesType
   })
@@ -204,13 +222,14 @@ export default function AdjustmentsPage() {
                     <SelectValue placeholder="Select reason" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="breakage">Breakage / Spillage</SelectItem>
+                    <SelectItem value="theft">Theft / Loss</SelectItem>
+                    <SelectItem value="recount">Stock Recount / Audit Correction</SelectItem>
                     <SelectItem value="damaged">Damaged Goods</SelectItem>
                     <SelectItem value="expired">Expired Products</SelectItem>
-                    <SelectItem value="theft">Theft/Loss</SelectItem>
-                    <SelectItem value="found">Found Stock</SelectItem>
-                    <SelectItem value="correction">Stock Count Correction</SelectItem>
-                    <SelectItem value="return">Customer Return</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
+                    <SelectItem value="found">Found / Excess Stock</SelectItem>
+                    <SelectItem value="return">Vendor / Customer Return</SelectItem>
+                    <SelectItem value="other">Other Reason</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

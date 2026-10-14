@@ -18,7 +18,8 @@ import Link from "next/link"
 
 // Define the StaffMember interface to match the Staff interface from actions
 // and add client-side specific fields if necessary (like avatar for display)
-interface StaffDisplayMember extends Staff {
+interface StaffDisplayMember extends Omit<Staff, "id"> {
+  id: string // Client-side only string key
   avatar?: string // Client-side only for display
   workingHours?: string // Client-side only for display, or fetch from DB if available
   displayStatus: "active" | "inactive" | "on-leave" // Derived from is_active
@@ -43,7 +44,20 @@ export default function StaffManagePage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingStaff, setEditingStaff] = useState<StaffDisplayMember | null>(null)
   const [isFormPending, startFormTransition] = useTransition() // Separate transition for form submission
-  const [formData, setFormData] = useState<Omit<Staff, "id" | "created_at" | "updated_at" | "specialization"> & { salary: string; status: "active" | "inactive" | "on-leave"; workingHours: string; }>({
+  const [formData, setFormData] = useState<{
+    name: string
+    email: string
+    phone: string
+    role: string
+    salary: string
+    address: string
+    workingHours: string
+    status: "active" | "inactive" | "on-leave"
+    hire_date: string
+    emergency_contact: string
+    commission_rate: string
+    skills: string
+  }>({
     name: "",
     email: "",
     phone: "",
@@ -120,25 +134,25 @@ export default function StaffManagePage() {
   }
 
   const handleSubmit = async () => {
-    if (!formData.name || !formData.email || !formData.role) {
+    if (!formData.name || !formData.phone || !formData.role) {
       toast({
         title: "Validation Error",
-        description: "Please fill in all required fields (Name, Email, Role).",
+        description: "Please fill in all required fields (Name, Phone, Role).",
         variant: "destructive",
       })
       return
     }
 
     startFormTransition(async () => {
-      const staffDataToSend: Omit<Staff, "id" | "created_at" | "updated_at" | "specialization"> = {
+      const staffDataToSend: Omit<Staff, "id" | "created_at" | "updated_at"> = {
         name: formData.name,
         email: formData.email || null,
-        phone: formData.phone || null,
+        phone: formData.phone,
         role: formData.role || null,
         salary: formData.salary ? Number.parseFloat(formData.salary) : null,
         address: formData.address || null,
-        hire_date: formData.hire_date,
-        is_active: formData.status === "active" ? true : false, // Map client status to is_active boolean
+        hire_date: formData.hire_date || null,
+        is_active: formData.status === "active", // Map client status to is_active boolean
         emergency_contact: formData.emergency_contact || null,
         commission_rate: formData.commission_rate || null, // Send as string
         skills: formData.skills || null, // Send as string

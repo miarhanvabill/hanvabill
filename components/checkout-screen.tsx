@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
-import { CreditCard, Banknote, Smartphone, Percent, Receipt, User, ShoppingCart, Tag, Star, Beaker, Plus, Trash2, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react"
+import { CreditCard, Banknote, Smartphone, Percent, Receipt, User, ShoppingCart, Tag, Star, Beaker, Plus, Trash2, CheckCircle2, ChevronDown, ChevronUp, Wallet, Split, Globe } from "lucide-react"
 
 import { CouponSelector } from "@/components/coupon-selector"
 import LoyaltyCheckout from "@/components/loyalty-checkout"
@@ -126,6 +126,12 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
   const giftCardDiscount = useMemo(() => giftCards.reduce((s, g) => s + (g.amount || 0), 0), [giftCards])
 
   const [taxRate, setTaxRate] = useState<number>(18)
+  const [taxInclusive, setTaxInclusive] = useState<boolean>(false)
+  const [discountLimit, setDiscountLimit] = useState<number>(100)
+
+  // Split payment state
+  const [splitCashAmount, setSplitCashAmount] = useState<number>(0)
+  const [splitSecondMethod, setSplitSecondMethod] = useState<string>("upi")
 
   // Salon Product Consumption / Auto-Deduction State
   const [isConsumptionOpen, setIsConsumptionOpen] = useState(false)
@@ -194,6 +200,12 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
     getBusinessSettings().then(settings => {
       if (settings?.business?.taxRate !== undefined) {
         setTaxRate(Number(settings.business.taxRate))
+      }
+      if (settings?.payments?.taxInclusive !== undefined) {
+        setTaxInclusive(Boolean(settings.payments.taxInclusive))
+      }
+      if (settings?.payments?.discountLimit !== undefined) {
+        setDiscountLimit(Number(settings.payments.discountLimit))
       }
     }).catch(console.error)
   }, [])
@@ -302,9 +314,10 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
 
   // Totals
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const effectiveDiscountPercent = Math.min(discountPercent, discountLimit)
   const manualDiscount = useMemo(
-    () => (appliedCoupon ? 0 : (subtotal * discountPercent) / 100),
-    [appliedCoupon, discountPercent, subtotal],
+    () => (appliedCoupon ? 0 : (subtotal * effectiveDiscountPercent) / 100),
+    [appliedCoupon, effectiveDiscountPercent, subtotal],
   )
   const couponDiscount = useMemo(() => {
     if (!appliedCoupon) return 0
@@ -316,9 +329,17 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
     return Math.min(capped, subtotal)
   }, [appliedCoupon, subtotal])
 
-  const discountedSubtotal = Math.max(0, subtotal - (appliedCoupon ? couponDiscount : manualDiscount))
-  const gstAmount = (discountedSubtotal * taxRate) / 100
-  const amountBeforeLoyalty = discountedSubtotal + gstAmount
+  const totalDiscount = appliedCoupon ? couponDiscount : manualDiscount
+  const discountedSubtotal = Math.max(0, subtotal - totalDiscount)
+
+  const gstAmount = taxInclusive
+    ? (taxRate > 0 ? discountedSubtotal - (discountedSubtotal / (1 + (taxRate / 100))) : 0)
+    : (discountedSubtotal * taxRate) / 100
+
+  const amountBeforeLoyalty = taxInclusive
+    ? discountedSubtotal
+    : discountedSubtotal + gstAmount
+
   const amountBeforeLoyaltyAfterGC = Math.max(0, amountBeforeLoyalty - giftCardDiscount)
 
   // Max redeemable points from settings
@@ -387,12 +408,23 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
 
       const today = new Date().toISOString().split("T")[0]
       const sourceStr = isWalkInSource ? "Walk-In" : customerSource;
-      const combinedNotes = notes ? `[Source: ${sourceStr}] ${notes}` : `[Source: ${sourceStr}]`;
+      const splitDetail = paymentMethod === "split" 
+        ? `[Split Payment: Cash ₹${splitCashAmount} + ${splitSecondMethod.toUpperCase()} ₹${Math.max(0, Math.round((total - splitCashAmount) * 100) / 100)}]`
+        : "";
+      const combinedNotes = [
+        sourceStr ? `[Source: ${sourceStr}]` : "",
+        splitDetail,
+        notes
+      ].filter(Boolean).join(" ");
+
+      const finalPaymentMethod = paymentMethod === "split"
+        ? `split (Cash: ₹${splitCashAmount}, ${splitSecondMethod.toUpperCase()}: ₹${Math.max(0, Math.round((total - splitCashAmount) * 100) / 100)})`
+        : paymentMethod;
 
       const payload = {
         customer_id: customer.id,
         items: cartItems,
-        payment_method: paymentMethod,
+        payment_method: finalPaymentMethod,
         notes: combinedNotes,
         coupon_code: appliedCoupon?.code,
         coupon_discount: appliedCoupon ? couponDiscount : 0,
@@ -779,7 +811,7 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
             )}
 
             <div className="flex justify-between">
-              <span>GST ({taxRate}%):</span>
+              <span>GST ({taxRate}%{taxInclusive ? " included" : ""}):</span>
               <span>{formatCurrency(gstAmount)}</span>
             </div>
 
@@ -837,18 +869,26 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
 
           {/* Manual discount */}
           <div className="space-y-2">
-            <Label htmlFor="discount" className="flex items-center gap-2">
-              <Percent className="w-4 h-4" />
-              Discount Percentage
+            <Label htmlFor="discount" className="flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Percent className="w-4 h-4" />
+                Discount Percentage
+              </span>
+              {discountLimit < 100 && (
+                <span className="text-xs text-muted-foreground font-normal">Cap: max {discountLimit}%</span>
+              )}
             </Label>
             <Input
               id="discount"
               type="number"
               min="0"
-              max="100"
+              max={discountLimit}
               value={discountPercent}
-              onChange={(e) => setDiscountPercent(Number(e.target.value) || 0)}
-              placeholder="Enter discount percentage"
+              onChange={(e) => {
+                const val = Number(e.target.value) || 0
+                setDiscountPercent(Math.min(val, discountLimit))
+              }}
+              placeholder={`Enter discount % (max ${discountLimit}%)`}
               disabled={!!appliedCoupon}
             />
             {appliedCoupon && (
@@ -884,30 +924,90 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
           {/* Payment Method */}
           <div className="space-y-3">
             <Label>Payment Method</Label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2.5">
               {[
                 { id: "cash", label: "Cash", icon: Banknote },
                 { id: "card", label: "Card", icon: CreditCard },
                 { id: "upi", label: "UPI", icon: Smartphone },
+                { id: "wallet", label: "Wallet", icon: Wallet },
+                { id: "split", label: "Split Pay", icon: Split },
+                { id: "stripe", label: "Stripe", icon: Globe },
               ].map((m) => {
                 const Icon = m.icon
                 return (
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => setPaymentMethod(m.id)}
-                    className={`p-4 border rounded-lg flex flex-col items-center gap-2 transition-colors ${
+                    onClick={() => {
+                      setPaymentMethod(m.id)
+                      if (m.id === "split" && splitCashAmount === 0) {
+                        setSplitCashAmount(Math.round((total / 2) * 100) / 100)
+                      }
+                    }}
+                    className={`p-3 border rounded-lg flex flex-col items-center gap-1.5 transition-colors ${
                       paymentMethod === m.id
                         ? "border-primary bg-primary/5 text-primary"
                         : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
-                    <Icon className="w-6 h-6" />
-                    <span className="text-sm font-medium">{m.label}</span>
+                    <Icon className="w-5 h-5" />
+                    <span className="text-xs font-medium">{m.label}</span>
                   </button>
                 )
               })}
             </div>
+
+            {/* Split Payment Details */}
+            {paymentMethod === "split" && (
+              <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg space-y-3 mt-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-amber-900">Split Payment Breakdown</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-xs bg-white text-amber-800 border-amber-300 hover:bg-amber-100"
+                    onClick={() => setSplitCashAmount(Math.round((total / 2) * 100) / 100)}
+                  >
+                    Split 50 / 50
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs text-amber-900">Cash Amount (₹)</Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      min="0"
+                      max={total}
+                      value={splitCashAmount || ""}
+                      onChange={(e) => setSplitCashAmount(Math.min(total, Math.max(0, Number(e.target.value) || 0)))}
+                      className="h-8 text-xs font-semibold bg-white"
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <Label className="text-xs text-amber-900">Second Method</Label>
+                      <select
+                        value={splitSecondMethod}
+                        onChange={(e) => setSplitSecondMethod(e.target.value)}
+                        className="text-[11px] bg-white border border-amber-300 rounded px-1.5 py-0.5"
+                      >
+                        <option value="upi">UPI</option>
+                        <option value="card">Card</option>
+                        <option value="stripe">Stripe</option>
+                        <option value="wallet">Wallet</option>
+                      </select>
+                    </div>
+                    <div className="h-8 px-3 rounded-md border border-amber-200 bg-white flex items-center justify-between text-xs font-semibold text-amber-900">
+                      <span>{splitSecondMethod.toUpperCase()}:</span>
+                      <span>{formatCurrency(Math.max(0, Math.round((total - splitCashAmount) * 100) / 100))}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Notes */}

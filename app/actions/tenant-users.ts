@@ -186,8 +186,12 @@ export async function createTenantUser(data: {
   permissions?: string[]
 }) {
   try {
-    return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
+    return await withTenantAuth(async ({ sql, tenantId, tenantKey, userId, isClerkAdmin }) => {
       try {
+        if (!userId) {
+          return { success: false, error: "Unauthorized: Authentication required" }
+        }
+
         const tid = String(tenantId);
         await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS department VARCHAR(100);`.catch(() => {})
         await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS employee_id VARCHAR(100);`.catch(() => {})
@@ -241,8 +245,12 @@ export async function updateTenantUser(id: string, data: {
   is_active?: boolean
 }) {
   try {
-    return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
+    return await withTenantAuth(async ({ sql, tenantId, tenantKey, userId }) => {
       try {
+        if (!userId) {
+          return { success: false, error: "Unauthorized: Authentication required" }
+        }
+
         const tid = String(tenantId);
         const userIdStr = String(id).trim();
         await sql`ALTER TABLE tenant_users ADD COLUMN IF NOT EXISTS custom_permissions JSONB DEFAULT NULL;`.catch(() => {})
@@ -302,10 +310,26 @@ export async function updateTenantUser(id: string, data: {
 
 export async function deleteTenantUser(id: string) {
   try {
-    return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
+    return await withTenantAuth(async ({ sql, tenantId, tenantKey, userId }) => {
       try {
+        if (!userId) {
+          return { success: false, error: "Unauthorized: Authentication required" }
+        }
+
         const tid = String(tenantId);
         const userIdStr = String(id).trim();
+
+        // Prevent deleting oneself
+        const targetUser = await sql`
+          SELECT clerk_user_id FROM tenant_users 
+          WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})
+          LIMIT 1
+        `.catch(() => [])
+
+        if (targetUser.length > 0 && targetUser[0].clerk_user_id === userId) {
+          return { success: false, error: "Cannot delete your own user account" }
+        }
+
         await sql`
           DELETE FROM tenant_users 
           WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})
@@ -327,10 +351,26 @@ export async function deleteTenantUser(id: string) {
 
 export async function toggleTenantUserStatus(id: string, currentStatus: boolean) {
   try {
-    return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
+    return await withTenantAuth(async ({ sql, tenantId, tenantKey, userId }) => {
       try {
+        if (!userId) {
+          return { success: false, error: "Unauthorized: Authentication required" }
+        }
+
         const tid = String(tenantId);
         const userIdStr = String(id).trim();
+
+        // Prevent deactivating own account
+        const targetUser = await sql`
+          SELECT clerk_user_id FROM tenant_users 
+          WHERE id::text = ${userIdStr} AND (tenant_id = ${tid} OR tenant_id = ${tenantKey})
+          LIMIT 1
+        `.catch(() => [])
+
+        if (targetUser.length > 0 && targetUser[0].clerk_user_id === userId && currentStatus === true) {
+          return { success: false, error: "Cannot deactivate your own user account" }
+        }
+
         await sql`
           UPDATE tenant_users 
           SET is_active = ${!currentStatus}

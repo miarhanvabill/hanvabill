@@ -123,17 +123,17 @@ export async function GET() {
         totalRevenue: Number.parseFloat(overview.current_revenue || "0"),
         monthlyGrowth: Number.parseFloat(overview.growth_percentage || "0"),
         averageDailyRevenue: Number.parseFloat(overview.avg_daily || "0"),
-        revenueByService: revenueByService.map((service) => ({
+        revenueByService: revenueByService.map((service: any) => ({
           serviceName: service.service_name || "Unknown Service",
           revenue: Number.parseFloat(service.revenue || "0"),
           percentage: Number.parseFloat(service.percentage || "0"),
         })),
-        revenueByPaymentMethod: revenueByPayment.map((payment) => ({
+        revenueByPaymentMethod: revenueByPayment.map((payment: any) => ({
           method: payment.method || "cash",
           amount: Number.parseFloat(payment.amount || "0"),
           percentage: Number.parseFloat(payment.percentage || "0"),
         })),
-        topRevenueCustomers: topCustomers.map((customer) => ({
+        topRevenueCustomers: topCustomers.map((customer: any) => ({
           name: customer.name || "Unknown Customer",
           totalSpent: Number.parseFloat(customer.total_spent || "0"),
           visits: Number.parseInt(customer.visits || "0"),

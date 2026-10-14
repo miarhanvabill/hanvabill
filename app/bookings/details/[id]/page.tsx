@@ -38,7 +38,7 @@ interface BookingDetails {
   id: number
   booking_number: string
   customer_id: number
-  staff_id: number
+  staff_id: number | null
   service_name: string
   staff_name: string
   booking_date: string
@@ -53,18 +53,21 @@ interface BookingDetails {
 interface CustomerDetails {
   id: number
   full_name: string
-  email?: string
+  email?: string | null
   phone_number: string
-  avatar?: string
+  avatar?: string | null
+  [key: string]: any
 }
 
 interface StaffDetails {
   id: number
   name: string
-  email?: string
-  phone?: string
-  specialization?: string
-  avatar?: string
+  email?: string | null
+  phone?: string | null
+  role?: string | null
+  specialization?: string | null
+  avatar?: string | null
+  [key: string]: any
 }
 
 interface BookingService {
@@ -108,7 +111,7 @@ export default function BookingDetailsPage() {
 
         const [customerData, staffData] = await Promise.all([
           getCustomerById(bookingData.customer_id.toString()),
-          bookingData.staff_id ? getStaffById(bookingData.staff_id.toString()) : null,
+          bookingData.staff_id ? getStaffById(Number(bookingData.staff_id)) : null,
         ])
 
         setCustomer(customerData)
@@ -163,7 +166,7 @@ export default function BookingDetailsPage() {
   }
 
   const handleSendMessage = () => {
-    if (!customer) return
+    if (!customer || !booking) return
     const message = `Hi ${customer.full_name}, this is regarding your booking ${booking.booking_number} scheduled for ${new Date(booking.booking_date).toLocaleDateString()} at ${booking.booking_time}.`
     const whatsappUrl = `https://wa.me/${customer.phone_number.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`
     window.open(whatsappUrl, "_blank")
@@ -177,6 +180,7 @@ export default function BookingDetailsPage() {
   }
 
   const handleReschedule = () => {
+    if (!booking) return
     router.push(`/bookings/details/${booking.id}/edit`)
     toast.info("Redirecting to edit booking...")
   }
@@ -186,6 +190,7 @@ export default function BookingDetailsPage() {
   const servicePrice = (booking?.total_amount || 0) - tax;
 
   const handleGenerateInvoice = () => {
+    if (!booking) return
     const invoiceData = {
       bookingNumber: booking.booking_number,
       customerName: customer?.full_name || "N/A",
@@ -193,8 +198,8 @@ export default function BookingDetailsPage() {
       date: new Date(booking.booking_date).toLocaleDateString(),
       time: booking.booking_time,
       amount: booking.total_amount,
-      tax: Math.round(booking.total_amount * 0.18),
-      servicePrice: booking.total_amount - Math.round(booking.total_amount * 0.18),
+      tax: tax,
+      servicePrice: servicePrice,
     }
 
     console.log("[v0] Generating invoice with data:", invoiceData)
@@ -243,8 +248,8 @@ Thank you for choosing Hanva Billing!
       price: service.price,
       quantity: service.quantity,
       type: "service" as const,
-      staff_id: booking.staff_id,
-      staff_name: booking.staff_name,
+      staff_id: booking.staff_id || undefined,
+      staff_name: booking.staff_name || undefined,
     }))
 
     return (
@@ -612,23 +617,23 @@ Thank you for choosing Hanva Billing!
                     const noteParts = booking.notes.split(' | ');
                     for (const part of noteParts) {
                       if (part.startsWith('Coupon: ')) {
-                        const match = part.match(/Coupon: (.*) \(-\d+(\.\d+)?\)/);
+                        const match = part.match(/Coupon:\s*(.*?)\s*\(-(\d+(?:\.\d+)?)\)/);
                         if (match) {
                           couponCode = match[1];
-                          couponDiscount = parseFloat(part.match(/\(-(\d+(\.\d+)?)\)/)[1] || '0');
+                          couponDiscount = parseFloat(match[2] || '0');
                         } else {
                           couponCode = part.replace('Coupon: ', '');
                         }
                       } else if (part.startsWith('Manual Discount: -')) {
-        couponDiscount += parseFloat(part.replace('Manual Discount: -', ''));
-      } else if (part.startsWith('Loyalty Redeemed: ₹')) {
-                        loyaltyDiscount = parseFloat(part.replace('Loyalty Redeemed: ₹', ''));
+                        couponDiscount += parseFloat(part.replace('Manual Discount: -', '')) || 0;
+                      } else if (part.startsWith('Loyalty Redeemed: ₹')) {
+                        loyaltyDiscount = parseFloat(part.replace('Loyalty Redeemed: ₹', '')) || 0;
                       } else if (part.startsWith('Gift Card Redeemed: ₹')) {
-                        giftCardDiscount = parseFloat(part.replace('Gift Card Redeemed: ₹', ''));
+                        giftCardDiscount = parseFloat(part.replace('Gift Card Redeemed: ₹', '')) || 0;
                       } else if (part.startsWith('Points Earned: ')) {
-                        loyaltyPointsEarned = parseInt(part.replace('Points Earned: ', ''));
+                        loyaltyPointsEarned = parseInt(part.replace('Points Earned: ', ''), 10) || undefined;
                       } else if (part.startsWith('Points Balance: ')) {
-                        loyaltyPointsAvailable = parseInt(part.replace('Points Balance: ', ''));
+                        loyaltyPointsAvailable = parseInt(part.replace('Points Balance: ', ''), 10) || undefined;
                       }
                     }
                   }

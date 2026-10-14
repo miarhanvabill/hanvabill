@@ -192,128 +192,161 @@ export async function parseCampaignPromptWithAi(promptText: string) {
 /**
  * Preview matching audience for a rule draft against real customer database
  */
+/**
+ * Internal query engine to compile and resolve audience candidates matching smart campaign rules
+ */
+export async function getAudienceCandidatesInternal(
+  sql: any,
+  tenantId: string,
+  draft: SmartCampaignRuleDraft,
+): Promise<any[]> {
+  const days = Number(draft.trigger_days || 30);
+  const serviceKeywords = Array.isArray(draft.service_names) ? draft.service_names : [];
+  const minSpend = Number(draft.min_spend || 0);
+  const cooldownDays = Number(draft.cooldown_days || 14);
+
+  let matchingRows: any[] = [];
+
+  if (draft.trigger_type === "days_after_service") {
+    // Find customers who had a booking completed exactly X days ago
+    matchingRows = await sql`
+      SELECT 
+        c.id,
+        c.full_name as name,
+        c.phone_number as phone,
+        b.booking_date,
+        COALESCE(STRING_AGG(s.name, ', '), 'Salon Service') as service_name
+      FROM bookings b
+      JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+      LEFT JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
+      LEFT JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
+      WHERE b.tenant_id = ${tenantId}
+        AND b.status = 'completed'
+        AND DATE(b.booking_date) = CURRENT_DATE - (${days}::text || ' days')::interval
+        AND c.phone_number IS NOT NULL
+      GROUP BY c.id, c.full_name, c.phone_number, b.booking_date
+    `;
+
+    // If specific service keywords were requested, filter by them
+    if (serviceKeywords.length > 0) {
+      const lowerKeywords = serviceKeywords.map((k) => k.toLowerCase());
+      matchingRows = matchingRows.filter((row) =>
+        lowerKeywords.some((k) => (row.service_name || "").toLowerCase().includes(k))
+      );
+    }
+  } else if (draft.trigger_type === "days_since_last_visit") {
+    // Inactive customers whose last completed visit was X or more days ago
+    matchingRows = await sql`
+      SELECT 
+        c.id,
+        c.full_name as name,
+        c.phone_number as phone,
+        MAX(b.booking_date) as booking_date,
+        'Previous Visit' as service_name
+      FROM customers c
+      LEFT JOIN bookings b ON c.id = b.customer_id AND b.tenant_id = ${tenantId} AND b.status = 'completed'
+      WHERE c.tenant_id = ${tenantId}
+        AND c.phone_number IS NOT NULL
+      GROUP BY c.id, c.full_name, c.phone_number
+      HAVING MAX(b.booking_date) <= CURRENT_DATE - (${days}::text || ' days')::interval
+         AND MAX(b.booking_date) >= CURRENT_DATE - ((${days} + 30)::text || ' days')::interval
+    `;
+  } else if (draft.trigger_type === "days_before_birthday") {
+    // Birthday in X days
+    matchingRows = await sql`
+      SELECT 
+        id,
+        full_name as name,
+        phone_number as phone,
+        CURRENT_DATE as booking_date,
+        'Birthday Special' as service_name
+      FROM customers
+      WHERE tenant_id = ${tenantId}
+        AND date_of_birth IS NOT NULL
+        AND phone_number IS NOT NULL
+        AND EXTRACT(MONTH FROM date_of_birth) = EXTRACT(MONTH FROM (CURRENT_DATE + (${days}::text || ' days')::interval))
+        AND EXTRACT(DAY FROM date_of_birth) = EXTRACT(DAY FROM (CURRENT_DATE + (${days}::text || ' days')::interval))
+    `;
+  } else if (draft.trigger_type === "high_spender_followup") {
+    // Bookings with total_amount >= minSpend X days ago
+    matchingRows = await sql`
+      SELECT 
+        c.id,
+        c.full_name as name,
+        c.phone_number as phone,
+        b.booking_date,
+        'VIP Experience (₹' || b.total_amount || ')' as service_name
+      FROM bookings b
+      JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+      WHERE b.tenant_id = ${tenantId}
+        AND b.status = 'completed'
+        AND b.total_amount >= ${minSpend}
+        AND DATE(b.booking_date) = CURRENT_DATE - (${days}::text || ' days')::interval
+        AND c.phone_number IS NOT NULL
+      GROUP BY c.id, c.full_name, c.phone_number, b.booking_date, b.total_amount
+    `;
+  } else if (draft.trigger_type === "membership_expiring") {
+    // Customer memberships expiring in X days
+    matchingRows = await sql`
+      SELECT 
+        c.id,
+        c.full_name as name,
+        c.phone_number as phone,
+        cm.end_date as booking_date,
+        mp.name || ' Membership Expiring' as service_name
+      FROM customer_memberships cm
+      JOIN customers c ON cm.customer_id = c.id AND c.tenant_id = ${tenantId}
+      JOIN membership_plans mp ON cm.membership_plan_id = mp.id AND mp.tenant_id = ${tenantId}
+      WHERE cm.tenant_id = ${tenantId}
+        AND cm.status = 'active'
+        AND DATE(cm.end_date) = CURRENT_DATE + (${days}::text || ' days')::interval
+        AND c.phone_number IS NOT NULL
+    `.catch(() => []);
+  }
+
+  // Filter out customers messaged within cooldown window
+  if (cooldownDays > 0 && matchingRows.length > 0) {
+    const customerIds = matchingRows.map((r) => r.id);
+    const recentLogs = await sql`
+      SELECT DISTINCT customer_id 
+      FROM smart_campaign_logs 
+      WHERE tenant_id = ${tenantId}
+        AND customer_id = ANY(${customerIds})
+        AND sent_at > NOW() - (${cooldownDays}::text || ' days')::interval
+    `.catch(() => []);
+
+    const recentSet = new Set(recentLogs.map((l: any) => l.customer_id));
+    matchingRows = matchingRows.filter((r) => !recentSet.has(r.id));
+  }
+
+  // Exclude customers with upcoming active bookings if configured
+  if (draft.exclude_active_bookings && matchingRows.length > 0) {
+    const customerIds = matchingRows.map((r) => r.id);
+    const upcomingBookings = await sql`
+      SELECT DISTINCT customer_id
+      FROM bookings
+      WHERE tenant_id = ${tenantId}
+        AND customer_id = ANY(${customerIds})
+        AND status IN ('pending', 'confirmed')
+        AND DATE(booking_date) >= CURRENT_DATE
+    `.catch(() => []);
+
+    const upcomingSet = new Set(upcomingBookings.map((b: any) => b.customer_id));
+    matchingRows = matchingRows.filter((r) => !upcomingSet.has(r.id));
+  }
+
+  return matchingRows;
+}
+
+/**
+ * Preview matching audience for a rule draft against real customer database
+ */
 export async function previewCampaignAudience(draft: SmartCampaignRuleDraft): Promise<{ success: boolean; preview?: AudiencePreviewResult; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       await ensureSmartCampaignTables(sql);
 
-      const days = Number(draft.trigger_days || 30);
-      const serviceKeywords = Array.isArray(draft.service_names) ? draft.service_names : [];
-      const minSpend = Number(draft.min_spend || 0);
-      const cooldownDays = Number(draft.cooldown_days || 14);
-
-      let matchingRows: any[] = [];
-
-      if (draft.trigger_type === "days_after_service") {
-        // Find customers who had a booking completed exactly X days ago
-        matchingRows = await sql`
-          SELECT 
-            c.id,
-            c.full_name as name,
-            c.phone_number as phone,
-            b.booking_date,
-            COALESCE(STRING_AGG(s.name, ', '), 'Salon Service') as service_name
-          FROM bookings b
-          JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
-          LEFT JOIN booking_services bs ON b.id = bs.booking_id AND bs.tenant_id = ${tenantId}
-          LEFT JOIN services s ON bs.service_id = s.id AND s.tenant_id = ${tenantId}
-          WHERE b.tenant_id = ${tenantId}
-            AND b.status = 'completed'
-            AND DATE(b.booking_date) = CURRENT_DATE - (${days}::text || ' days')::interval
-            AND c.phone_number IS NOT NULL
-          GROUP BY c.id, c.full_name, c.phone_number, b.booking_date
-        `;
-
-        // If specific service keywords were requested, filter by them
-        if (serviceKeywords.length > 0) {
-          const lowerKeywords = serviceKeywords.map((k) => k.toLowerCase());
-          matchingRows = matchingRows.filter((row) =>
-            lowerKeywords.some((k) => (row.service_name || "").toLowerCase().includes(k))
-          );
-        }
-      } else if (draft.trigger_type === "days_since_last_visit") {
-        // Inactive customers whose last completed visit was X or more days ago
-        matchingRows = await sql`
-          SELECT 
-            c.id,
-            c.full_name as name,
-            c.phone_number as phone,
-            MAX(b.booking_date) as booking_date,
-            'Previous Visit' as service_name
-          FROM customers c
-          LEFT JOIN bookings b ON c.id = b.customer_id AND b.tenant_id = ${tenantId} AND b.status = 'completed'
-          WHERE c.tenant_id = ${tenantId}
-            AND c.phone_number IS NOT NULL
-          GROUP BY c.id, c.full_name, c.phone_number
-          HAVING MAX(b.booking_date) <= CURRENT_DATE - (${days}::text || ' days')::interval
-             AND MAX(b.booking_date) >= CURRENT_DATE - ((${days} + 30)::text || ' days')::interval
-        `;
-      } else if (draft.trigger_type === "days_before_birthday") {
-        // Birthday in X days
-        matchingRows = await sql`
-          SELECT 
-            id,
-            full_name as name,
-            phone_number as phone,
-            CURRENT_DATE as booking_date,
-            'Birthday Special' as service_name
-          FROM customers
-          WHERE tenant_id = ${tenantId}
-            AND date_of_birth IS NOT NULL
-            AND phone_number IS NOT NULL
-            AND EXTRACT(MONTH FROM date_of_birth) = EXTRACT(MONTH FROM (CURRENT_DATE + (${days}::text || ' days')::interval))
-            AND EXTRACT(DAY FROM date_of_birth) = EXTRACT(DAY FROM (CURRENT_DATE + (${days}::text || ' days')::interval))
-        `;
-      } else if (draft.trigger_type === "high_spender_followup") {
-        // Bookings with total_amount >= minSpend X days ago
-        matchingRows = await sql`
-          SELECT 
-            c.id,
-            c.full_name as name,
-            c.phone_number as phone,
-            b.booking_date,
-            'VIP Experience (₹' || b.total_amount || ')' as service_name
-          FROM bookings b
-          JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
-          WHERE b.tenant_id = ${tenantId}
-            AND b.status = 'completed'
-            AND b.total_amount >= ${minSpend}
-            AND DATE(b.booking_date) = CURRENT_DATE - (${days}::text || ' days')::interval
-            AND c.phone_number IS NOT NULL
-          GROUP BY c.id, c.full_name, c.phone_number, b.booking_date, b.total_amount
-        `;
-      }
-
-      // Filter out customers messaged within cooldown window
-      if (cooldownDays > 0 && matchingRows.length > 0) {
-        const customerIds = matchingRows.map((r) => r.id);
-        const recentLogs = await sql`
-          SELECT DISTINCT customer_id 
-          FROM smart_campaign_logs 
-          WHERE tenant_id = ${tenantId}
-            AND customer_id = ANY(${customerIds})
-            AND sent_at > NOW() - (${cooldownDays}::text || ' days')::interval
-        `.catch(() => []);
-
-        const recentSet = new Set(recentLogs.map((l: any) => l.customer_id));
-        matchingRows = matchingRows.filter((r) => !recentSet.has(r.id));
-      }
-
-      // Exclude customers with upcoming active bookings if configured
-      if (draft.exclude_active_bookings && matchingRows.length > 0) {
-        const customerIds = matchingRows.map((r) => r.id);
-        const upcomingBookings = await sql`
-          SELECT DISTINCT customer_id
-          FROM bookings
-          WHERE tenant_id = ${tenantId}
-            AND customer_id = ANY(${customerIds})
-            AND status IN ('pending', 'confirmed')
-            AND DATE(booking_date) >= CURRENT_DATE
-        `.catch(() => []);
-
-        const upcomingSet = new Set(upcomingBookings.map((b: any) => b.customer_id));
-        matchingRows = matchingRows.filter((r) => !upcomingSet.has(r.id));
-      }
+      const matchingRows = await getAudienceCandidatesInternal(sql, tenantId, draft);
 
       return {
         success: true,
@@ -466,9 +499,9 @@ export async function runSmartCampaignRuleNow(ruleId: string) {
         is_enabled: true,
       };
 
-      // Preview audience
-      const previewRes = await previewCampaignAudience(draft);
-      if (!previewRes.success || !previewRes.preview || previewRes.preview.matchingCount === 0) {
+      // Fetch all matching audience candidates for full execution
+      const candidates = await getAudienceCandidatesInternal(sql, tenantId, draft);
+      if (candidates.length === 0) {
         return { success: true, sentCount: 0, message: "No matching customers found for today" };
       }
 
@@ -485,7 +518,7 @@ export async function runSmartCampaignRuleNow(ruleId: string) {
 
       let sentCount = 0;
 
-      for (const cust of previewRes.preview.sampleCustomers) {
+      for (const cust of candidates) {
         const messageContent = interpolateTemplate(rule.message_template, {
           customer_name: cust.name,
           business_name: businessName,
@@ -510,6 +543,21 @@ export async function runSmartCampaignRuleNow(ruleId: string) {
               ${messageContent}, 'sent', ${sendResult.msgId || null}, NOW()
             )
           `;
+
+          // Also insert into whatsapp_messages for unified chat inbox & analytics
+          try {
+            const tenantRows = await sql`SELECT tenant_key FROM tenants WHERE id = ${tenantId} LIMIT 1`.catch(() => []);
+            const tenantKey = tenantRows.length > 0 ? tenantRows[0].tenant_key : null;
+            await sql`
+              INSERT INTO whatsapp_messages (
+                tenant_id, tenant_key, customer_id, phone_number, message_type,
+                message_content, direction, status, msg_id, trigger_type, created_at
+              ) VALUES (
+                ${tenantId}, ${tenantKey}, ${cust.id || null}, ${sendResult.safePhone}, 'text',
+                ${messageContent}, 'outbound', 'sent', ${sendResult.msgId || null}, ${'smart_campaign:' + rule.trigger_type}, NOW()
+              )
+            `.catch(() => {});
+          } catch {}
 
           sentCount++;
         } catch (sendErr: any) {
