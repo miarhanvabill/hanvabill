@@ -165,7 +165,7 @@ export const PRESET_SALON_RECIPES: PresetSalonRecipe[] = [
 /**
  * Intelligent pattern extractor that works deterministically in milliseconds
  */
-export function parseCampaignPrompt(promptText: string): SmartCampaignRuleDraft {
+export function parseCampaignPromptDeterministic(promptText: string): SmartCampaignRuleDraft {
   const text = promptText.trim();
   const lower = text.toLowerCase();
 
@@ -322,4 +322,74 @@ export function parseCampaignPrompt(promptText: string): SmartCampaignRuleDraft 
     exclude_active_bookings: true,
     is_enabled: true,
   };
+}
+
+/**
+ * Main parser entry point:
+ * - If an OpenAI API Key is provided or present in environment, calls gpt-4o-mini
+ * - Automatically falls back to instant deterministic NLP compiler on any error or missing key
+ */
+export async function parseCampaignPrompt(promptText: string, apiKey?: string): Promise<SmartCampaignRuleDraft> {
+  const fallback = parseCampaignPromptDeterministic(promptText);
+  const key = apiKey || process.env.OPENAI_API_KEY;
+
+  if (key && key.startsWith("sk-")) {
+    try {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: `You are an expert salon marketing assistant. Parse the salon owner's campaign request into a JSON object matching this schema:
+{
+  "name": "Short campaign title",
+  "trigger_type": "days_after_service" | "days_since_last_visit" | "days_before_birthday" | "high_spender_followup",
+  "trigger_days": number,
+  "service_names": ["Service1", "Service2"],
+  "min_spend": number,
+  "coupon_code": "PROMOCODE",
+  "message_template": "WhatsApp copy using {{customer_name}}, {{business_name}}, {{service_name}}, {{booking_link}}, {{coupon_code}}"
+}
+Respond with valid JSON only.`,
+            },
+            {
+              role: "user",
+              content: promptText,
+            },
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.3,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const parsed = JSON.parse(data.choices[0].message.content);
+        return {
+          name: parsed.name || fallback.name,
+          prompt_input: promptText,
+          trigger_type: parsed.trigger_type || fallback.trigger_type,
+          trigger_days: Number(parsed.trigger_days || fallback.trigger_days),
+          service_names: Array.isArray(parsed.service_names) ? parsed.service_names : fallback.service_names,
+          min_spend: Number(parsed.min_spend || fallback.min_spend || 0),
+          message_template: parsed.message_template || fallback.message_template,
+          coupon_code: parsed.coupon_code || fallback.coupon_code,
+          send_time: "10:00",
+          cooldown_days: 14,
+          exclude_active_bookings: true,
+          is_enabled: true,
+        };
+      }
+    } catch (llmErr) {
+      console.warn("[AI Parser] LLM call error, using deterministic compiler:", llmErr);
+    }
+  }
+
+  return fallback;
 }

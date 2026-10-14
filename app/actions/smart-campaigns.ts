@@ -167,13 +167,26 @@ export async function getSmartCampaignRules() {
  * Parse a plain-language prompt into a structured rule draft
  */
 export async function parseCampaignPromptWithAi(promptText: string) {
-  try {
-    const draft = parseCampaignPrompt(promptText);
-    return { success: true, draft };
-  } catch (error: any) {
-    console.error("[Smart Campaigns] Error parsing prompt:", error);
-    return { success: false, error: error.message };
-  }
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      // Check if tenant configured an API key in store_settings or if env var exists
+      const settingsResult = await sql`
+        SELECT setting_value FROM store_settings 
+        WHERE tenant_id = ${String(tenantId)} AND setting_key = 'whatsapp.openaiApiKey'
+        LIMIT 1
+      `.catch(() => []);
+
+      const rawVal = settingsResult.length > 0 && settingsResult[0]?.setting_value ? String(settingsResult[0].setting_value).trim() : "";
+      const userApiKey = rawVal.length > 0 ? rawVal : undefined;
+      const effectiveKey = userApiKey || process.env.OPENAI_API_KEY;
+
+      const draft = await parseCampaignPrompt(promptText, effectiveKey);
+      return { success: true, draft };
+    } catch (error: any) {
+      console.error("[Smart Campaigns] Error parsing prompt:", error);
+      return { success: false, error: error.message };
+    }
+  });
 }
 
 /**

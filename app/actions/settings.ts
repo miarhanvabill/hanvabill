@@ -75,6 +75,7 @@ const DEFAULT_BUSINESS_SETTINGS: BusinessSettings = {
     phoneNumberId: "",
     autoInvoice: false,
     autoReminder: false,
+    openaiApiKey: "",
   },
   security: {
     twoFactorAuth: false,

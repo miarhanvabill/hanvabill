@@ -41,6 +41,7 @@ import {
   ExternalLink,
   RefreshCw,
   Eye,
+  EyeOff,
   CheckCheck,
   Check,
   Radio,
@@ -117,7 +118,9 @@ export default function WhatsAppConfigPage() {
     password: "",
     wabaNumber: "",
     salonName: "Hanva Salon",
+    openaiApiKey: "",
   })
+  const [showAiKey, setShowAiKey] = useState(false)
 
   // Automation Rules
   const [rules, setRules] = useState<AutomationRule[]>([])
@@ -198,6 +201,7 @@ export default function WhatsAppConfigPage() {
           password: settings.whatsapp?.password || "",
           wabaNumber: settings.whatsapp?.wabaNumber || "",
           salonName: settings.profile?.salonName || "Hanva Luxury Salon",
+          openaiApiKey: settings.whatsapp?.openaiApiKey || "",
         })
 
         if (settings.whatsapp?.userid && settings.whatsapp?.wabaNumber) {
@@ -356,6 +360,7 @@ export default function WhatsAppConfigPage() {
         userid: gatewayData.userid,
         password: gatewayData.password,
         wabaNumber: gatewayData.wabaNumber,
+        openaiApiKey: gatewayData.openaiApiKey,
       })
       
       // Also save the salonName to profile so templates pick it up
@@ -855,6 +860,44 @@ export default function WhatsAppConfigPage() {
                           Used in automated dynamic placeholders across all templates.
                         </p>
                       </div>
+                    </div>
+
+                    {/* AI Smart Campaign Engine (OpenAI) */}
+                    <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="openaiApiKey" className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                          <Bot className="w-4 h-4 text-emerald-600" />
+                          AI Smart Campaign Engine (OpenAI API Key)
+                        </Label>
+                        <Badge variant="outline" className={`text-[10px] ${gatewayData.openaiApiKey ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                          {gatewayData.openaiApiKey ? "Configured" : "Optional (Built-in NLP Active)"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">
+                        Hanva includes an instant <strong>built-in deterministic compiler ($0 cost)</strong> that parses time offsets, services, and promotions without any external AI. To optionally enable OpenAI (GPT-4o-mini) for creative auto-copywriting, paste your API key here:
+                      </p>
+                      <div className="relative">
+                        <Key className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                        <Input
+                          id="openaiApiKey"
+                          type={showAiKey ? "text" : "password"}
+                          className="pl-9 pr-10 bg-white font-mono text-xs"
+                          placeholder="sk-proj-..."
+                          value={gatewayData.openaiApiKey}
+                          onChange={(e) => setGatewayData({ ...gatewayData, openaiApiKey: e.target.value })}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowAiKey(!showAiKey)}
+                          className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 transition-colors"
+                          title={showAiKey ? "Hide API key" : "Show API key"}
+                        >
+                          {showAiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-slate-500">
+                        Encrypted and isolated per-salon. You can also configure <code className="text-slate-700 font-mono font-medium">OPENAI_API_KEY</code> in your Vercel or server environment.
+                      </p>
                     </div>
 
                     {/* Inbound Webhook Configuration */}
