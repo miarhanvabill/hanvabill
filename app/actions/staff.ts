@@ -40,8 +40,8 @@ export interface StaffStats {
 export async function getStaff(): Promise<Staff[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     return await cacheFetch(`staff:${tenantId}`, async () => {
+      // First try the full query with all columns (incl. newer ones)
       try {
-
         const staffResult = await sql`
           SELECT 
             s.id, s.name, s.phone, s.email, s.role, s.salary, 
@@ -61,29 +61,54 @@ export async function getStaff(): Promise<Staff[]> {
           ORDER BY s.name
         `
 
-        const staffRows = staffResult as Staff[]
-
-        if (!Array.isArray(staffRows)) {
-          console.error("[v0] Staff rows is not an array:", staffRows)
-          throw new Error("Invalid database response format")
-        }
-
-        if (staffRows.length === 0) {
-          console.warn("[v0] No active staff found in database")
-          return []
-        }
-
-        const formattedStaff = staffRows.map((staff) => ({
+        const staffRows = Array.isArray(staffResult) ? staffResult : []
+        return staffRows.map((staff: any) => ({
           ...staff,
           id: Number(staff.id) || 0,
           salary: staff.salary ? Number(staff.salary) : null,
           is_active: Boolean(staff.is_active),
         })) as Staff[]
-
-        return formattedStaff
-      } catch (error) {
-        console.error("[v0] Error fetching staff:", error)
-        throw new Error(`Failed to fetch staff: ${error instanceof Error ? error.message : "Unknown database error"}`)
+      } catch (fullQueryError) {
+        const errMsg = fullQueryError instanceof Error ? fullQueryError.message : String(fullQueryError)
+        // If column does not exist (Postgres error code 42703), fall back to base columns only
+        if (errMsg.includes("42703") || errMsg.includes("does not exist") || errMsg.includes("column")) {
+          console.warn("[v0] Staff full-query failed (missing column), using base query:", errMsg)
+          try {
+            const basicResult = await sql`
+              SELECT 
+                s.id, s.name, s.phone, s.email, s.role, s.salary, 
+                TO_CHAR(s.hire_date, 'YYYY-MM-DD') as hire_date,
+                s.is_active, s.address, s.emergency_contact, s.skills, s.commission_rate,
+                s.created_at::text,
+                s.updated_at::text,
+                a.status as attendance_status,
+                a.check_in_time,
+                a.check_out_time
+              FROM staff s
+              LEFT JOIN attendance a ON s.id = a.staff_id AND a.date = CURRENT_DATE AND a.tenant_id = ${tenantId}
+              WHERE s.is_active = true 
+                AND s.tenant_id = ${tenantId}
+              ORDER BY s.name
+            `
+            const rows = Array.isArray(basicResult) ? basicResult : []
+            return rows.map((staff: any) => ({
+              ...staff,
+              id: Number(staff.id) || 0,
+              salary: staff.salary ? Number(staff.salary) : null,
+              is_active: Boolean(staff.is_active),
+              commission_profile_id: null,
+              department: null,
+              shift_start: null,
+              shift_end: null,
+              avatar_url: null,
+            })) as Staff[]
+          } catch (fallbackError) {
+            console.error("[v0] Fallback staff query also failed:", fallbackError)
+            return []
+          }
+        }
+        console.error("[v0] Error fetching staff:", fullQueryError)
+        return []
       }
     }, 120)
   })

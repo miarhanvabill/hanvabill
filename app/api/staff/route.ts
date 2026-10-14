@@ -34,21 +34,46 @@ export async function GET(req: Request) {
         })
       }
 
-      console.log("[v0] Fetching tenant-scoped staff list")
-
-      const staff = await sql`
-        SELECT 
-          id, name, phone, email, role, salary,
-          TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date,
-          is_active, address, emergency_contact, skills, commission_rate,
-          commission_profile_id, department, shift_start::text, shift_end::text,
-          avatar_url, created_at, updated_at
-        FROM staff 
-        WHERE tenant_id = ${tenantId}
-        ORDER BY created_at DESC
-      `
-
-      console.log("[v0] Successfully fetched", staff.length, "staff members")
+      let staff: any[]
+      try {
+        staff = await sql`
+          SELECT 
+            id, name, phone, email, role, salary,
+            TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date,
+            is_active, address, emergency_contact, skills, commission_rate,
+            commission_profile_id, department, shift_start::text, shift_end::text,
+            avatar_url, created_at, updated_at
+          FROM staff 
+          WHERE tenant_id = ${tenantId}
+          ORDER BY created_at DESC
+        `
+      } catch (colError) {
+        const errMsg = colError instanceof Error ? colError.message : String(colError)
+        if (errMsg.includes("42703") || errMsg.includes("does not exist") || errMsg.includes("column")) {
+          console.warn("[v0] Staff API: falling back to base columns due to:", errMsg)
+          staff = await sql`
+            SELECT 
+              id, name, phone, email, role, salary,
+              TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date,
+              is_active, address, emergency_contact, skills, commission_rate,
+              created_at, updated_at
+            FROM staff 
+            WHERE tenant_id = ${tenantId}
+            ORDER BY created_at DESC
+          `
+          // Inject null values for missing columns
+          staff = staff.map((s: any) => ({
+            ...s,
+            commission_profile_id: null,
+            department: null,
+            shift_start: null,
+            shift_end: null,
+            avatar_url: null,
+          }))
+        } else {
+          throw colError
+        }
+      }
 
       return NextResponse.json(
         { success: true, staff },
