@@ -34,46 +34,23 @@ export async function GET(req: Request) {
         })
       }
 
-      let staff: any[]
-      try {
-        staff = await sql`
-          SELECT 
-            id, name, phone, email, role, salary,
-            TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date,
-            is_active, address, emergency_contact, skills, commission_rate,
-            commission_profile_id, department, shift_start::text, shift_end::text,
-            avatar_url, created_at, updated_at
-          FROM staff 
-          WHERE tenant_id = ${tenantId}
-          ORDER BY created_at DESC
-        `
-      } catch (colError) {
-        const errMsg = colError instanceof Error ? colError.message : String(colError)
-        if (errMsg.includes("42703") || errMsg.includes("does not exist") || errMsg.includes("column")) {
-          console.warn("[v0] Staff API: falling back to base columns due to:", errMsg)
-          staff = await sql`
-            SELECT 
-              id, name, phone, email, role, salary,
-              TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date,
-              is_active, address, emergency_contact, skills, commission_rate,
-              created_at, updated_at
-            FROM staff 
-            WHERE tenant_id = ${tenantId}
-            ORDER BY created_at DESC
-          `
-          // Inject null values for missing columns
-          staff = staff.map((s: any) => ({
-            ...s,
-            commission_profile_id: null,
-            department: null,
-            shift_start: null,
-            shift_end: null,
-            avatar_url: null,
-          }))
-        } else {
-          throw colError
-        }
-      }
+      const staffRows = await sql`
+        SELECT 
+          id, name, phone, email, role, salary,
+          TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date,
+          is_active, address, emergency_contact, skills, commission_rate,
+          commission_profile_id, avatar_url, created_at, updated_at
+        FROM staff 
+        WHERE tenant_id = ${tenantId}
+        ORDER BY created_at DESC
+      `
+
+      const staff = (Array.isArray(staffRows) ? staffRows : []).map((s: any) => ({
+        ...s,
+        department: null,
+        shift_start: null,
+        shift_end: null,
+      }))
 
       return NextResponse.json(
         { success: true, staff },
@@ -123,9 +100,6 @@ export async function POST(req: Request) {
         salary, 
         commission_rate,
         commission_profile_id,
-        department,
-        shift_start,
-        shift_end,
         avatar_url,
         skills,
         address,
@@ -141,21 +115,20 @@ export async function POST(req: Request) {
       const [staff] = await sql`
         INSERT INTO staff (
           tenant_id, name, email, phone, role, salary, commission_rate, 
-          commission_profile_id, department, shift_start, shift_end, avatar_url, 
+          commission_profile_id, avatar_url, 
           skills, address, emergency_contact, hire_date, is_active, created_at
         )
         VALUES (
           ${tenantId}, ${name}, ${email || null}, ${phone}, ${role || null}, 
           ${salary || null}, ${commission_rate || null}, 
-          ${commission_profile_id || null}, ${department || null}, 
-          ${shift_start || null}, ${shift_end || null}, ${avatar_url || null}, 
+          ${commission_profile_id || null}, ${avatar_url || null}, 
           ${skills || null}, ${address || null}, ${emergency_contact || null},
           ${hire_date || null}, ${is_active ?? true}, NOW()
         )
         RETURNING *
       `
 
-      return NextResponse.json({ success: true, staff })
+      return NextResponse.json({ success: true, staff: { ...staff, department: null, shift_start: null, shift_end: null } })
     } catch (error) {
       console.error("[v0] POST /api/staff:", error)
 
@@ -191,12 +164,9 @@ export async function PUT(req: Request) {
             email = COALESCE(${data.email}, email),
             phone = COALESCE(${data.phone}, phone),
             role = COALESCE(${data.role}, role),
-            department = COALESCE(${data.department}, department),
             salary = COALESCE(${data.salary}, salary),
             commission_rate = COALESCE(${data.commission_rate}, commission_rate),
             commission_profile_id = COALESCE(${data.commission_profile_id}, commission_profile_id),
-            shift_start = COALESCE(${data.shift_start}, shift_start),
-            shift_end = COALESCE(${data.shift_end}, shift_end),
             avatar_url = COALESCE(${data.avatar_url}, avatar_url),
             skills = COALESCE(${data.skills}, skills),
             address = COALESCE(${data.address}, address),
@@ -211,7 +181,7 @@ export async function PUT(req: Request) {
         return NextResponse.json({ success: false, message: "Staff member not found" }, { status: 404 })
       }
 
-      return NextResponse.json({ success: true, staff })
+      return NextResponse.json({ success: true, staff: { ...staff, department: null, shift_start: null, shift_end: null } })
     } catch (error) {
       console.error("[v0] PUT /api/staff:", error)
 

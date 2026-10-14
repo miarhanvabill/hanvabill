@@ -76,10 +76,19 @@ export default function StaffManagePage() {
     setLoading(true)
     setError(null)
     try {
-      const [staffData, statsData] = await Promise.all([getStaff(), getStaffStats()])
+      const [staffData, statsData] = await Promise.all([
+        getStaff().catch((e) => {
+          console.error("Staff fetch error:", e)
+          return []
+        }),
+        getStaffStats().catch((e) => {
+          console.error("Staff stats fetch error:", e)
+          return null
+        }),
+      ])
 
       // Map database Staff to StaffDisplayMember for client-side display
-      const mappedStaff: StaffDisplayMember[] = staffData.map(s => ({
+      const mappedStaff: StaffDisplayMember[] = (Array.isArray(staffData) ? staffData : []).map(s => ({
         ...s,
         id: s.id.toString(), // Ensure ID is string for client-side keys
         avatar: s.avatar_url || `/placeholder.svg?height=40&width=40&text=${s.name.charAt(0)}`,

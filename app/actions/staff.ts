@@ -40,14 +40,13 @@ export interface StaffStats {
 export async function getStaff(): Promise<Staff[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     return await cacheFetch(`staff:${tenantId}`, async () => {
-      // First try the full query with all columns (incl. newer ones)
       try {
         const staffResult = await sql`
           SELECT 
             s.id, s.name, s.phone, s.email, s.role, s.salary, 
             TO_CHAR(s.hire_date, 'YYYY-MM-DD') as hire_date,
             s.is_active, s.address, s.emergency_contact, s.skills, s.commission_rate, 
-            s.commission_profile_id, s.department, s.shift_start::text, s.shift_end::text,
+            s.commission_profile_id,
             s.avatar_url,
             s.created_at::text,
             s.updated_at::text,
@@ -66,48 +65,14 @@ export async function getStaff(): Promise<Staff[]> {
           ...staff,
           id: Number(staff.id) || 0,
           salary: staff.salary ? Number(staff.salary) : null,
+          commission_profile_id: staff.commission_profile_id ? Number(staff.commission_profile_id) : null,
           is_active: Boolean(staff.is_active),
+          department: null,
+          shift_start: null,
+          shift_end: null,
         })) as Staff[]
-      } catch (fullQueryError) {
-        const errMsg = fullQueryError instanceof Error ? fullQueryError.message : String(fullQueryError)
-        // If column does not exist (Postgres error code 42703), fall back to base columns only
-        if (errMsg.includes("42703") || errMsg.includes("does not exist") || errMsg.includes("column")) {
-          console.warn("[v0] Staff full-query failed (missing column), using base query:", errMsg)
-          try {
-            const basicResult = await sql`
-              SELECT 
-                s.id, s.name, s.phone, s.email, s.role, s.salary, 
-                TO_CHAR(s.hire_date, 'YYYY-MM-DD') as hire_date,
-                s.is_active, s.address, s.emergency_contact, s.skills, s.commission_rate,
-                s.created_at::text,
-                s.updated_at::text,
-                a.status as attendance_status,
-                a.check_in_time,
-                a.check_out_time
-              FROM staff s
-              LEFT JOIN attendance a ON s.id = a.staff_id AND a.date = CURRENT_DATE AND a.tenant_id = ${tenantId}
-              WHERE s.is_active = true 
-                AND s.tenant_id = ${tenantId}
-              ORDER BY s.name
-            `
-            const rows = Array.isArray(basicResult) ? basicResult : []
-            return rows.map((staff: any) => ({
-              ...staff,
-              id: Number(staff.id) || 0,
-              salary: staff.salary ? Number(staff.salary) : null,
-              is_active: Boolean(staff.is_active),
-              commission_profile_id: null,
-              department: null,
-              shift_start: null,
-              shift_end: null,
-              avatar_url: null,
-            })) as Staff[]
-          } catch (fallbackError) {
-            console.error("[v0] Fallback staff query also failed:", fallbackError)
-            return []
-          }
-        }
-        console.error("[v0] Error fetching staff:", fullQueryError)
+      } catch (error) {
+        console.error("[v0] Error fetching staff:", error)
         return []
       }
     }, 120)
@@ -161,13 +126,12 @@ export async function getStaffMember(id: number) {
           id, name, phone, email, role, salary, 
           TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date,
           is_active, address, emergency_contact, skills, commission_rate, 
-          commission_profile_id, department, shift_start::text, shift_end::text,
+          commission_profile_id,
           avatar_url,
           created_at,
           updated_at
         FROM staff WHERE id = ${id} AND tenant_id = ${tenantId}
       `
-
 
       const staffRows = staffResult as Staff[]
 
@@ -182,6 +146,9 @@ export async function getStaffMember(id: number) {
         salary: staff.salary ? Number(staff.salary) : null,
         commission_profile_id: staff.commission_profile_id ? Number(staff.commission_profile_id) : null,
         is_active: Boolean(staff.is_active),
+        department: null,
+        shift_start: null,
+        shift_end: null,
       } as Staff
     } catch (error) {
       console.error("[v0] Error fetching staff member:", error)
@@ -205,7 +172,7 @@ export async function createStaff(data: Omit<Staff, "id" | "created_at" | "updat
         INSERT INTO staff (
           tenant_id, name, phone, email, role, salary, hire_date, 
           is_active, address, emergency_contact, skills, commission_rate, 
-          commission_profile_id, department, shift_start, shift_end, avatar_url
+          commission_profile_id, avatar_url
         )
         VALUES (
           ${tenantId}, ${data.name}, ${data.phone}, ${data.email || null}, ${data.role || null}, 
@@ -214,20 +181,16 @@ export async function createStaff(data: Omit<Staff, "id" | "created_at" | "updat
           ${data.skills || null},
           ${data.commission_rate || null},
           ${data.commission_profile_id || null},
-          ${data.department || null},
-          ${data.shift_start || null},
-          ${data.shift_end || null},
           ${data.avatar_url || null}
         )
         RETURNING 
           id, name, phone, email, role, salary, 
           TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date, 
           is_active, address, emergency_contact, skills, commission_rate, 
-          commission_profile_id, department, shift_start::text, shift_end::text, avatar_url,
+          commission_profile_id, avatar_url,
           created_at, 
           updated_at 
       `
-
 
       const staffRows = result as Staff[]
 
@@ -242,6 +205,9 @@ export async function createStaff(data: Omit<Staff, "id" | "created_at" | "updat
         salary: staff.salary ? Number(staff.salary) : null,
         commission_profile_id: staff.commission_profile_id ? Number(staff.commission_profile_id) : null,
         is_active: Boolean(staff.is_active),
+        department: null,
+        shift_start: null,
+        shift_end: null,
       } as Staff
 
       revalidatePath("/staff")
@@ -283,9 +249,6 @@ export async function updateStaff(id: number, data: Partial<Staff>) {
           skills = COALESCE(${data.skills || null}, skills),
           commission_rate = COALESCE(${data.commission_rate}, commission_rate),
           commission_profile_id = CASE WHEN ${hasProfileId} THEN ${profileId} ELSE commission_profile_id END,
-          department = COALESCE(${data.department}, department),
-          shift_start = COALESCE(${data.shift_start}, shift_start),
-          shift_end = COALESCE(${data.shift_end}, shift_end),
           avatar_url = COALESCE(${data.avatar_url}, avatar_url),
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ${id} AND tenant_id = ${tenantId}
@@ -293,7 +256,7 @@ export async function updateStaff(id: number, data: Partial<Staff>) {
           id, name, phone, email, role, salary, 
           TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date, 
           is_active, address, emergency_contact, skills, commission_rate, 
-          commission_profile_id, department, shift_start::text, shift_end::text, avatar_url,
+          commission_profile_id, avatar_url,
           created_at, 
           updated_at 
       `

@@ -18,11 +18,6 @@ export interface AttendanceRecord {
 export async function getAttendance(date: string) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      // Ensure updated_at column exists
-      await sql`
-        ALTER TABLE attendance ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      `.catch(() => {})
-
       const attendance = await sql`
         SELECT 
           a.*,
@@ -58,9 +53,9 @@ export async function markAttendance(data: {
 }) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      // Check if staff exists for this tenant and get shift start
+      // Check if staff exists for this tenant
       const staffCheck = await sql`
-        SELECT id, shift_start::text, shift_end::text 
+        SELECT id 
         FROM staff 
         WHERE id = ${data.staffId} AND tenant_id = ${tenantId}
       `
@@ -69,20 +64,7 @@ export async function markAttendance(data: {
         return { success: false, message: "Staff member not found for this tenant" }
       }
 
-      // Ensure updated_at column exists
-      await sql`
-        ALTER TABLE attendance ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      `.catch(() => {})
-
-      // Automatic late detection if checking in and status is 'present'
-      let finalStatus = data.status
-      if (data.checkInTime && data.status === "present" && staffCheck[0]?.shift_start) {
-        const shiftStart = staffCheck[0].shift_start.slice(0, 5) // HH:MM
-        // Grace period of 10 minutes can be applied or direct comparison
-        if (data.checkInTime > shiftStart) {
-          finalStatus = "late"
-        }
-      }
+      const finalStatus = data.status
 
       // Manually check if today's attendance exists to avoid relying on ON CONFLICT constraints
       const existing = await sql`
@@ -211,11 +193,6 @@ export async function bulkMarkAttendance(records: {
 }[]) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      // Ensure updated_at column exists
-      await sql`
-        ALTER TABLE attendance ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      `.catch(() => {})
-
       for (const record of records) {
         // Check if staff exists for this tenant
         const staffCheck = await sql`

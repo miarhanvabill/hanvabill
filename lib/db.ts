@@ -84,28 +84,7 @@ export async function getInternalTenantId(tenantKey: string, orgId?: string): Pr
       return idStr;
     }
 
-    // 5. If tenantKey is a specific salon identifier (not 'default' and not '1'),
-    // auto-provision a new tenant record to guarantee multi-tenant data isolation.
-    if (tenantKey && tenantKey !== "default" && tenantKey !== "1") {
-      // Ensure columns exist on tenants table
-      await baseSql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS slug VARCHAR(255);`.catch(() => {});
-      await baseSql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS tenant_key VARCHAR(255);`.catch(() => {});
-      await baseSql`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active';`.catch(() => {});
-
-      const createdTenant = await baseSql`
-        INSERT INTO tenants (name, slug, tenant_key, status)
-        VALUES (${tenantKey}, ${tenantKey}, ${orgId || tenantKey}, 'active')
-        RETURNING id
-      `.catch(() => []);
-
-      if (createdTenant.length > 0) {
-        const idStr = String(createdTenant[0].id);
-        tenantIdCache.set(cacheKey, idStr);
-        return idStr;
-      }
-    }
-
-    // 6. Fallback: only for 'default' or unauthenticated local dev requests, use first active tenant
+    // 5. Fallback: first active tenant in DB
     const fallbackActive = await baseSql`
       SELECT id FROM tenants WHERE LOWER(status) = 'active' ORDER BY id ASC LIMIT 1
     `.catch(() => [])

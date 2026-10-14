@@ -36,14 +36,6 @@ export interface ResourceBooking {
 
 export async function getAllResources(): Promise<Resource[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
-    // Auto-migrate missing columns so this works before migration 046 is applied
-    try {
-      await sql`ALTER TABLE business_resources ADD COLUMN IF NOT EXISTS tenant_id INTEGER DEFAULT 1`
-      await sql`UPDATE business_resources SET tenant_id = 1 WHERE tenant_id IS NULL`
-      await sql`ALTER TABLE business_resources ADD COLUMN IF NOT EXISTS location VARCHAR(255) DEFAULT 'Main Floor'`
-    } catch (migrationError) {
-    }
-
     try {
       const result = await sql`
         SELECT 

@@ -121,10 +121,19 @@ export default function BookingCalendarPage() {
     try {
       const dateStr = format(date, "yyyy-MM-dd")
       const [bookingsData, staffData, resourcesData, servicesData] = await Promise.all([
-        getCalendarBookings(dateStr),
-        getStaff(),
-        getAllResources(),
-        getServices().catch(() => fetch("/api/services").then((r) => r.json())),
+        getCalendarBookings(dateStr).catch((e) => {
+          console.error("Calendar bookings fetch error:", e)
+          return []
+        }),
+        getStaff().catch((e) => {
+          console.error("Calendar staff fetch error:", e)
+          return []
+        }),
+        getAllResources().catch((e) => {
+          console.error("Calendar resources fetch error:", e)
+          return []
+        }),
+        getServices().catch(() => fetch("/api/services").then((r) => r.json()).catch(() => [])),
       ])
 
       setBookings(bookingsData || [])

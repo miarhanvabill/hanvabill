@@ -24,15 +24,6 @@ export async function getServices(): Promise<Service[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     return await cacheFetch(`services:${tenantId}`, async () => {
       try {
-        // One-off schema change
-        await sql`ALTER TABLE services ADD COLUMN IF NOT EXISTS image_url TEXT;`
-        await sql`ALTER TABLE inventory ADD COLUMN IF NOT EXISTS image_url TEXT;`
-        try {
-          await sql`ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS image_url TEXT;`
-        } catch (e) {
-          // Ignore if inventory_items doesn't exist
-        }
-
         const result = await sql`
           SELECT 
             s.id,
