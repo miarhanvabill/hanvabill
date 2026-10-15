@@ -359,28 +359,29 @@
     visibility: visible !important;
   }
 
-  body * {
-    visibility: hidden;
+  /* Hide page header, sidebar, navigation, and print:hidden elements */
+  nav,
+  aside,
+  header,
+  .print\:hidden {
+    display: none !important;
   }
-  
-  #invoice-template-wrapper, 
-  #invoice-template-wrapper *,
-  #invoice-template-wrapper-booking,
-  #invoice-template-wrapper-booking * {
-    visibility: visible !important;
+
+  /* When printing from a dialog modal, hide the main page background */
+  body:has([data-slot="dialog-content"]) main {
+    display: none !important;
   }
-  
+
   #invoice-template-wrapper,
   #invoice-template-wrapper-booking {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
     width: 100% !important;
-    margin: 0 !important;
+    max-width: 800px !important;
+    margin: 0 auto !important;
     padding: 0 !important;
     box-shadow: none !important;
     border: none !important;
     background: #ffffff !important;
+    display: block !important;
   }
   
   /* Ensure page breaks happen reasonably */

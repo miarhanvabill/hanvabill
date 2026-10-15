@@ -90,8 +90,21 @@ export async function downloadInvoicePDF(invoiceData: any) {
 export function printElement(element: HTMLElement, title = "Invoice") {
   if (typeof window === "undefined" || !element) return
 
+  // Clean up any existing print iframe
+  const existingIframe = document.getElementById("__invoice_print_iframe__")
+  if (existingIframe && existingIframe.parentNode) {
+    existingIframe.parentNode.removeChild(existingIframe)
+  }
+
   const iframe = document.createElement("iframe")
-  iframe.setAttribute("style", "position:fixed;right:0;bottom:0;width:0;height:0;border:none;visibility:hidden;")
+  iframe.id = "__invoice_print_iframe__"
+  iframe.style.position = "fixed"
+  iframe.style.left = "-9999px"
+  iframe.style.top = "0"
+  iframe.style.width = "850px"
+  iframe.style.height = "1100px"
+  iframe.style.border = "none"
+  iframe.style.zIndex = "-1000"
   document.body.appendChild(iframe)
 
   const doc = iframe.contentWindow?.document
@@ -105,56 +118,66 @@ export function printElement(element: HTMLElement, title = "Invoice") {
     styles += node.outerHTML
   })
 
+  const contentHtml = element.outerHTML || element.innerHTML
+
   doc.open()
   doc.write(`
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
       <head>
         <title>${title}</title>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         ${styles}
         <style>
-          @page {
-            margin: 10mm;
-            size: auto;
-          }
           *, *::before, *::after {
-            box-sizing: border-box;
+            box-sizing: border-box !important;
+            visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           html, body {
+            visibility: visible !important;
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
             color: #0f172a !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
           }
-          #print-root {
+          @page {
+            margin: 10mm;
+            size: A4 portrait;
+          }
+          #print-container {
             width: 100% !important;
-            max-width: 100% !important;
-            margin: 0 !important;
+            max-width: 800px !important;
+            margin: 0 auto !important;
             padding: 0 !important;
             background: #ffffff !important;
           }
           .shadow-xl, .shadow-lg, .shadow-md, .shadow-sm, .shadow {
             box-shadow: none !important;
           }
-          .border-slate-100 {
-            border-color: #e2e8f0 !important;
+          table {
+            width: 100% !important;
+            page-break-inside: auto;
+          }
+          tr {
+            page-break-inside: avoid;
+            page-break-after: auto;
           }
         </style>
       </head>
       <body>
-        <div id="print-root">
-          ${element.innerHTML}
+        <div id="print-container">
+          ${contentHtml}
         </div>
       </body>
     </html>
   `)
   doc.close()
 
-  setTimeout(() => {
+  const doPrint = () => {
     try {
       iframe.contentWindow?.focus()
       iframe.contentWindow?.print()
@@ -163,12 +186,14 @@ export function printElement(element: HTMLElement, title = "Invoice") {
       window.print()
     } finally {
       setTimeout(() => {
-        if (document.body.contains(iframe)) {
-          document.body.removeChild(iframe)
+        if (iframe && iframe.parentNode) {
+          iframe.parentNode.removeChild(iframe)
         }
-      }, 1500)
+      }, 3000)
     }
-  }, 250)
+  }
+
+  setTimeout(doPrint, 350)
 }
 
 export function printInvoice(elementId: string = "invoice-template-wrapper-booking", title = "Invoice") {
