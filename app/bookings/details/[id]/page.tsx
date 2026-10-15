@@ -14,6 +14,7 @@ import { CheckoutScreen } from "@/components/checkout-screen"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { InvoiceTemplate } from "@/components/invoice-template"
 import { getBusinessSettings } from "@/app/actions/settings"
+import { generateAndDownloadInvoicePDF } from "@/lib/invoice-pdf"
 import { Printer as Print, Download } from "lucide-react"
 import {
   ArrowLeft,
@@ -109,13 +110,17 @@ export default function BookingDetailsPage() {
         const services = await getBookingServices(bookingId)
         setBookingServices(services)
 
-        const [customerData, staffData] = await Promise.all([
+        const [customerData, staffData, settingsData] = await Promise.all([
           getCustomerById(bookingData.customer_id.toString()),
           bookingData.staff_id ? getStaffById(Number(bookingData.staff_id)) : null,
+          getBusinessSettings().catch(() => null),
         ])
 
         setCustomer(customerData)
         setStaff(staffData)
+        if (settingsData) {
+          setBizSettings(settingsData)
+        }
       } catch (error) {
         console.error("[v0] Error fetching booking data:", error)
         toast.error("Failed to load booking details")
@@ -189,48 +194,96 @@ export default function BookingDetailsPage() {
   const tax = Math.round((booking?.total_amount || 0) * (taxRate / 100));
   const servicePrice = (booking?.total_amount || 0) - tax;
 
-  const handleGenerateInvoice = () => {
+  const handleGenerateInvoice = async () => {
     if (!booking) return
-    const invoiceData = {
-      bookingNumber: booking.booking_number,
-      customerName: customer?.full_name || "N/A",
-      serviceName: booking.service_name,
-      date: new Date(booking.booking_date).toLocaleDateString(),
-      time: booking.booking_time,
-      amount: booking.total_amount,
-      tax: tax,
-      servicePrice: servicePrice,
+
+    // Parse notes to extract discount breakdown if present
+    let couponCode: string | undefined = undefined;
+    let couponDiscount = 0;
+    let loyaltyDiscount = 0;
+    let giftCardDiscount = 0;
+
+    if (booking.notes) {
+      const noteParts = booking.notes.split(' | ');
+      for (const part of noteParts) {
+        if (part.startsWith('Coupon: ')) {
+          const match = part.match(/Coupon:\s*(.*?)\s*\(-(\d+(?:\.\d+)?)\)/);
+          if (match) {
+            couponCode = match[1];
+            couponDiscount = parseFloat(match[2] || '0');
+          } else {
+            couponCode = part.replace('Coupon: ', '');
+          }
+        } else if (part.startsWith('Manual Discount: -')) {
+          couponDiscount += parseFloat(part.replace('Manual Discount: -', '')) || 0;
+        } else if (part.startsWith('Loyalty Redeemed: ₹')) {
+          loyaltyDiscount = parseFloat(part.replace('Loyalty Redeemed: ₹', '')) || 0;
+        } else if (part.startsWith('Gift Card Redeemed: ₹')) {
+          giftCardDiscount = parseFloat(part.replace('Gift Card Redeemed: ₹', '')) || 0;
+        }
+      }
     }
 
-    console.log("[v0] Generating invoice with data:", invoiceData)
-    toast.success("Invoice generated successfully!")
+    // Build items list from bookingServices or fallback to booking service_name
+    const items = (bookingServices && bookingServices.length > 0)
+      ? bookingServices.map((bs, i) => ({
+          id: i + 1,
+          description: bs.service_name,
+          quantity: Number(bs.quantity) || 1,
+          rate: Number(bs.price) || 0,
+          amount: (Number(bs.price) || 0) * (Number(bs.quantity) || 1),
+          staffName: staff?.name,
+        }))
+      : [
+          {
+            id: 1,
+            description: booking.service_name || "Salon Service",
+            quantity: 1,
+            rate: servicePrice,
+            amount: servicePrice,
+            staffName: staff?.name || booking.staff_name,
+          }
+        ];
 
-    const invoiceContent = `
-HANVA BILLING INVOICE
-=====================
+    const subtotal = items.reduce((acc, curr) => acc + curr.amount, 0);
+    const totalDiscount = couponDiscount + loyaltyDiscount + giftCardDiscount;
+    const computedGst = Math.round((subtotal - totalDiscount) * (taxRate / 100));
+    const grandTotal = Number(booking.total_amount) || (subtotal - totalDiscount + computedGst);
 
-Booking Number: ${invoiceData.bookingNumber}
-Customer: ${invoiceData.customerName}
-Service: ${invoiceData.serviceName}
-Date: ${invoiceData.date}
-Time: ${invoiceData.time}
-
-Service Price: ${formatCurrency(invoiceData.servicePrice)}
-Tax (${taxRate}%): ${formatCurrency(invoiceData.tax)}
-Total Amount: ${formatCurrency(invoiceData.amount)}
-
-Thank you for choosing Hanva Billing!
-    `
-
-    const blob = new Blob([invoiceContent], { type: "text/plain" })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `invoice-${invoiceData.bookingNumber}.txt`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    window.URL.revokeObjectURL(url)
+    try {
+      toast.loading("Generating PDF invoice...", { id: "invoice-pdf" })
+      await generateAndDownloadInvoicePDF({
+        invoiceNumber: booking.booking_number,
+        bookingNumber: booking.booking_number,
+        date: new Date(booking.booking_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
+        time: booking.booking_time,
+        customerName: customer?.full_name || "Walk-in Customer",
+        customerPhone: customer?.phone_number || "",
+        customerEmail: customer?.email || "",
+        items: items,
+        subtotal: subtotal,
+        discount: totalDiscount,
+        couponCode: couponCode,
+        couponDiscount: couponDiscount,
+        loyaltyDiscount: loyaltyDiscount,
+        giftCardDiscount: giftCardDiscount,
+        gstRate: taxRate,
+        gstAmount: computedGst,
+        totalAmount: grandTotal,
+        paymentMethod: (booking as any).payment_method || "Cash",
+        staffName: staff?.name || booking.staff_name,
+        notes: booking.notes || undefined,
+        businessName: bizSettings?.profile?.salonName || "Hanva Salon",
+        businessAddress: bizSettings?.profile?.address || "",
+        businessPhone: bizSettings?.profile?.phone || "",
+        businessEmail: bizSettings?.profile?.email || "",
+        businessGSTIN: bizSettings?.profile?.gstNumber || bizSettings?.profile?.gstin || "",
+      })
+      toast.success("Invoice PDF downloaded successfully!", { id: "invoice-pdf" })
+    } catch (error) {
+      console.error("Failed to generate PDF invoice:", error)
+      toast.error("Failed to generate PDF invoice. Please try again.", { id: "invoice-pdf" })
+    }
   }
 
   if (showCheckout && booking && customer && bookingServices.length > 0) {
@@ -569,7 +622,11 @@ Thank you for choosing Hanva Billing!
                 </Button>
                 <Button variant="outline" onClick={handleGenerateInvoice}>
                   <FileText className="h-4 w-4 mr-2" />
-                  Generate Invoice
+                  Download PDF Invoice
+                </Button>
+                <Button variant="outline" onClick={() => setShowInvoiceModal(true)}>
+                  <Download className="h-4 w-4 mr-2" />
+                  View Invoice
                 </Button>
                 {booking.status === "confirmed" && (
                   <Button onClick={() => handleStatusUpdate("completed")} disabled={updating}>
@@ -592,9 +649,7 @@ Thank you for choosing Hanva Billing!
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-6 md:p-8 print:w-full print:max-w-none print:m-0 print:p-0 print:border-none print:shadow-none bg-slate-50">
           <div className="flex justify-end mb-4 print:hidden gap-2">
             <Button variant="outline" onClick={() => setShowInvoiceModal(false)}>Cancel</Button>
-            <Button onClick={async () => {
-              window.print();
-            }} className="gap-2">
+            <Button onClick={handleGenerateInvoice} className="gap-2">
               <Download className="w-4 h-4" />
               Download PDF
             </Button>
@@ -603,7 +658,7 @@ Thank you for choosing Hanva Billing!
               Print
             </Button>
           </div>
-          {booking && customer && bizSettings && (() => {
+          {booking && customer && (() => {
             
                   // Parse notes to extract discount breakdown
                   let couponCode = undefined;
@@ -650,15 +705,24 @@ Thank you for choosing Hanva Billing!
                   customerName: customer.full_name || "Walk-in Customer",
                   customerPhone: customer.phone_number || "",
                   customerEmail: customer.email || "",
-                  items: bookingServices.map((bs, i) => ({
+                  items: bookingServices.length > 0 ? bookingServices.map((bs, i) => ({
                     id: i + 1,
                     description: bs.service_name,
-                    quantity: Number(bs.quantity),
-                    rate: Number(bs.price),
-                    amount: Number(bs.price) * Number(bs.quantity),
-                    staffName: staff?.name
-                  })),
-                  subtotal: bookingServices.reduce((acc, curr) => acc + (Number(curr.price) * Number(curr.quantity)), 0),
+                    quantity: Number(bs.quantity) || 1,
+                    rate: Number(bs.price) || 0,
+                    amount: (Number(bs.price) || 0) * (Number(bs.quantity) || 1),
+                    staffName: staff?.name || booking.staff_name,
+                  })) : [{
+                    id: 1,
+                    description: booking.service_name || "Salon Service",
+                    quantity: 1,
+                    rate: servicePrice,
+                    amount: servicePrice,
+                    staffName: staff?.name || booking.staff_name,
+                  }],
+                  subtotal: bookingServices.length > 0
+                    ? bookingServices.reduce((acc, curr) => acc + (Number(curr.price) * Number(curr.quantity)), 0)
+                    : servicePrice,
                   discount: genericDiscount,
                   couponCode,
                   couponDiscount,
@@ -669,12 +733,12 @@ Thank you for choosing Hanva Billing!
                   gstRate: taxRate,
                   isInterState: false,
                   placeOfSupply: "Karnataka",
-                  businessLogo: bizSettings.profile?.logo || "",
-                  businessName: bizSettings.profile?.salonName || "Hanva Salon",
-                  businessAddress: bizSettings.profile?.address || "",
-                  businessPhone: bizSettings.profile?.phone || "",
-                  businessEmail: bizSettings.profile?.email || "",
-                  businessGSTIN: bizSettings.profile?.gstNumber || "",
+                  businessLogo: bizSettings?.profile?.logo || "",
+                  businessName: bizSettings?.profile?.salonName || "Hanva Salon",
+                  businessAddress: bizSettings?.profile?.address || "",
+                  businessPhone: bizSettings?.profile?.phone || "",
+                  businessEmail: bizSettings?.profile?.email || "",
+                  businessGSTIN: bizSettings?.profile?.gstNumber || bizSettings?.profile?.gstin || "",
                   businessPAN: "",
                   sacCode: "999599"
                 }}
