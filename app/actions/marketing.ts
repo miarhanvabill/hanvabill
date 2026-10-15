@@ -54,42 +54,137 @@ export interface MarketingStats {
 }
 
 function getSegmentFilterSql(criteria: string, sql: any, tenantId: string) {
-  switch (criteria) {
-    case "all":
-      return sql`1=1`
-    case "spend > 3000":
-      return sql`c.id IN (
-        SELECT customer_id FROM bookings 
-        WHERE tenant_id = ${tenantId} AND status IN ('completed', 'confirmed') 
-        GROUP BY customer_id HAVING SUM(total_amount) >= 3000
-      )`
-    case "spend > 5000":
-      return sql`c.id IN (
-        SELECT customer_id FROM bookings 
-        WHERE tenant_id = ${tenantId} AND status IN ('completed', 'confirmed') 
-        GROUP BY customer_id HAVING SUM(total_amount) >= 5000
-      )`
-    case "inactive > 45d":
-      return sql`c.id NOT IN (
-        SELECT DISTINCT customer_id FROM bookings 
-        WHERE tenant_id = ${tenantId} AND booking_date >= CURRENT_DATE - INTERVAL '45 days' AND customer_id IS NOT NULL
-      )`
-    case "inactive > 90d":
-      return sql`c.id NOT IN (
-        SELECT DISTINCT customer_id FROM bookings 
-        WHERE tenant_id = ${tenantId} AND booking_date >= CURRENT_DATE - INTERVAL '90 days' AND customer_id IS NOT NULL
-      )`
-    case "created < 30d":
-      return sql`c.created_at >= CURRENT_DATE - INTERVAL '30 days'`
-    case "visits >= 3":
-      return sql`c.id IN (
-        SELECT customer_id FROM bookings 
-        WHERE tenant_id = ${tenantId} 
-        GROUP BY customer_id HAVING COUNT(*) >= 3
-      )`
-    default:
-      return sql`1=1`
+  if (!criteria || criteria === "all") {
+    return sql`1=1`
   }
+
+  // 1. By Service (e.g. "service:15" or "service:15:Hair Spa")
+  if (criteria.startsWith("service:")) {
+    const parts = criteria.split(":")
+    const serviceId = Number(parts[1])
+    const serviceName = parts[2] ? parts[2].trim() : ""
+    if (serviceId && !isNaN(serviceId)) {
+      return sql`c.id IN (
+        SELECT DISTINCT b.customer_id FROM bookings b
+        LEFT JOIN booking_services bs ON b.id = bs.booking_id
+        WHERE b.tenant_id = ${tenantId} 
+          AND (
+            bs.service_id = ${serviceId} 
+            OR b.service_ids LIKE ${'%' + serviceId + '%'}
+            ${serviceName ? sql`OR b.service_names ILIKE ${'%' + serviceName + '%'}` : sql``}
+          )
+          AND b.customer_id IS NOT NULL
+      )`
+    }
+  }
+
+  // 2. By Days preference (e.g. "days:weekend" or "days:weekday")
+  if (criteria === "days:weekend") {
+    return sql`c.id IN (
+      SELECT DISTINCT customer_id FROM bookings 
+      WHERE tenant_id = ${tenantId} 
+        AND EXTRACT(DOW FROM booking_date) IN (0, 6)
+        AND customer_id IS NOT NULL
+    )`
+  }
+  if (criteria === "days:weekday") {
+    return sql`c.id IN (
+      SELECT DISTINCT customer_id FROM bookings 
+      WHERE tenant_id = ${tenantId} 
+        AND EXTRACT(DOW FROM booking_date) BETWEEN 1 AND 5
+        AND customer_id IS NOT NULL
+    )`
+  }
+
+  // 3. By Inactivity (e.g. "inactive > 45d", "inactive > 30d", "inactive > 90d", etc.)
+  const inactiveMatch = criteria.match(/^inactive\s*>\s*(\d+)d$/)
+  if (inactiveMatch) {
+    const days = Number(inactiveMatch[1])
+    return sql`c.id NOT IN (
+      SELECT DISTINCT customer_id FROM bookings 
+      WHERE tenant_id = ${tenantId} 
+        AND booking_date >= CURRENT_DATE - ${days}::integer 
+        AND customer_id IS NOT NULL
+    )`
+  }
+
+  // 4. By Recent Visit (e.g. "visited < 14d", "visited < 30d")
+  const visitedMatch = criteria.match(/^visited\s*<\s*(\d+)d$/)
+  if (visitedMatch) {
+    const days = Number(visitedMatch[1])
+    return sql`c.id IN (
+      SELECT DISTINCT customer_id FROM bookings 
+      WHERE tenant_id = ${tenantId} 
+        AND booking_date >= CURRENT_DATE - ${days}::integer 
+        AND customer_id IS NOT NULL
+    )`
+  }
+
+  // 5. By Account Created / Joined (e.g. "created < 30d", "created < 14d")
+  const createdMatch = criteria.match(/^created\s*<\s*(\d+)d$/)
+  if (createdMatch) {
+    const days = Number(createdMatch[1])
+    return sql`c.created_at >= CURRENT_DATE - ${days}::integer`
+  }
+
+  // 6. By Spend / Total Billing (e.g. "spend > 3000", "spend > 5000", "spend > 1000")
+  const spendGreaterMatch = criteria.match(/^spend\s*>\s*(\d+)$/)
+  if (spendGreaterMatch) {
+    const minAmount = Number(spendGreaterMatch[1])
+    return sql`c.id IN (
+      SELECT customer_id FROM bookings 
+      WHERE tenant_id = ${tenantId} AND status IN ('completed', 'confirmed') 
+      GROUP BY customer_id HAVING SUM(total_amount) >= ${minAmount}
+    )`
+  }
+  const spendLesserMatch = criteria.match(/^spend\s*<\s*(\d+)$/)
+  if (spendLesserMatch) {
+    const maxAmount = Number(spendLesserMatch[1])
+    return sql`c.id IN (
+      SELECT customer_id FROM bookings 
+      WHERE tenant_id = ${tenantId} AND status IN ('completed', 'confirmed') 
+      GROUP BY customer_id HAVING SUM(total_amount) < ${maxAmount}
+    )`
+  }
+
+  // 7. By Visits Count (e.g. "visits = 1", "visits >= 3", "visits >= 5")
+  if (criteria === "visits = 1") {
+    return sql`c.id IN (
+      SELECT customer_id FROM bookings 
+      WHERE tenant_id = ${tenantId} AND customer_id IS NOT NULL
+      GROUP BY customer_id HAVING COUNT(*) = 1
+    )`
+  }
+  const visitsMatch = criteria.match(/^visits\s*>=\s*(\d+)$/)
+  if (visitsMatch) {
+    const minVisits = Number(visitsMatch[1])
+    return sql`c.id IN (
+      SELECT customer_id FROM bookings 
+      WHERE tenant_id = ${tenantId} AND customer_id IS NOT NULL
+      GROUP BY customer_id HAVING COUNT(*) >= ${minVisits}
+    )`
+  }
+
+  // 8. By Gender (e.g. "gender:female", "gender:male")
+  if (criteria === "gender:female") {
+    return sql`LOWER(COALESCE(c.gender, '')) IN ('female', 'f', 'woman', 'women')`
+  }
+  if (criteria === "gender:male") {
+    return sql`LOWER(COALESCE(c.gender, '')) IN ('male', 'm', 'man', 'men')`
+  }
+
+  // 9. By Stylist / Staff (e.g. "staff:5" or "staff:5:Pooja")
+  if (criteria.startsWith("staff:")) {
+    const staffId = Number(criteria.split(":")[1])
+    if (staffId && !isNaN(staffId)) {
+      return sql`c.id IN (
+        SELECT DISTINCT customer_id FROM bookings 
+        WHERE tenant_id = ${tenantId} AND staff_id = ${staffId} AND customer_id IS NOT NULL
+      )`
+    }
+  }
+
+  return sql`1=1`
 }
 
 async function ensureMarketingTables(sql: any, tenantId: string) {
@@ -482,3 +577,25 @@ export async function deleteCustomerSegment(id: number) {
     }
   })
 }
+
+export async function getSegmentBuilderOptions(): Promise<{
+  services: { id: number; name: string; category?: string }[];
+  staff: { id: number; name: string }[];
+}> {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const [servicesRes, staffRes] = await Promise.all([
+        sql`SELECT id, name, category FROM services WHERE tenant_id = ${tenantId} AND is_active = true ORDER BY name ASC`,
+        sql`SELECT id, name FROM staff WHERE tenant_id = ${tenantId} AND is_active = true ORDER BY name ASC`,
+      ])
+      return {
+        services: (servicesRes as any[]).map((s: any) => ({ id: Number(s.id), name: s.name, category: s.category || "General" })),
+        staff: (staffRes as any[]).map((st: any) => ({ id: Number(st.id), name: st.name })),
+      }
+    } catch (e) {
+      console.error("Error fetching segment builder options:", e)
+      return { services: [], staff: [] }
+    }
+  })
+}
+

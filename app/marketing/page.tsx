@@ -28,7 +28,6 @@ import {
   RefreshCw,
   Phone,
   Trash2,
-  ExternalLink,
   CheckCircle2,
   AlertCircle,
   IndianRupee,
@@ -37,6 +36,11 @@ import {
   ArrowRight,
   ShieldCheck,
   Zap,
+  Scissors,
+  UserCheck,
+  Crown,
+  Heart,
+  SlidersHorizontal,
 } from "lucide-react"
 import {
   getMarketingCampaigns,
@@ -48,6 +52,7 @@ import {
   createCustomerSegment,
   deleteCustomerSegment,
   getMarketingStats,
+  getSegmentBuilderOptions,
   type Campaign,
   type CustomerSegment,
   type SegmentCustomer,
@@ -95,6 +100,11 @@ export default function MarketingPage() {
     totalRevenue: 0,
   })
 
+  const [builderOptions, setBuilderOptions] = useState<{
+    services: { id: number; name: string; category?: string }[]
+    staff: { id: number; name: string }[]
+  }>({ services: [], staff: [] })
+
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [showCampaignModal, setShowCampaignModal] = useState(false)
@@ -125,9 +135,17 @@ export default function MarketingPage() {
     sendImmediately: true,
   })
 
-  // New Segment form
-  const [newSegmentName, setNewSegmentName] = useState("")
-  const [newSegmentCriteria, setNewSegmentCriteria] = useState("spend > 3000")
+  // Advanced Custom Segment Builder State
+  const [segmentCategory, setSegmentCategory] = useState<"service" | "days" | "spend" | "visits" | "gender" | "staff">("service")
+  const [selectedServiceId, setSelectedServiceId] = useState<string>("")
+  const [daysMode, setDaysMode] = useState<"inactive" | "visited" | "weekend" | "weekday">("inactive")
+  const [customDays, setCustomDays] = useState<number>(45)
+  const [spendMode, setSpendMode] = useState<"min" | "max">("min")
+  const [customSpend, setCustomSpend] = useState<number>(3000)
+  const [visitsMode, setVisitsMode] = useState<"first" | "repeat" | "frequent" | "vip">("repeat")
+  const [selectedGender, setSelectedGender] = useState<"female" | "male">("female")
+  const [selectedStaffId, setSelectedStaffId] = useState<string>("")
+  const [customSegmentName, setCustomSegmentName] = useState("")
   const [creatingSegment, setCreatingSegment] = useState(false)
 
   // View campaign modal
@@ -140,14 +158,23 @@ export default function MarketingPage() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const [campaignsData, segmentsData, statsData] = await Promise.all([
+      const [campaignsData, segmentsData, statsData, builderOpts] = await Promise.all([
         getMarketingCampaigns(),
         getCustomerSegments(),
         getMarketingStats(),
+        getSegmentBuilderOptions(),
       ])
       setCampaigns(campaignsData)
       setSegments(segmentsData)
       setStats(statsData)
+      setBuilderOptions(builderOpts)
+
+      if (builderOpts.services.length > 0 && !selectedServiceId) {
+        setSelectedServiceId(builderOpts.services[0].id.toString())
+      }
+      if (builderOpts.staff.length > 0 && !selectedStaffId) {
+        setSelectedStaffId(builderOpts.staff[0].id.toString())
+      }
     } catch (error) {
       console.error("Error loading marketing data:", error)
       toast.error("Failed to load marketing data")
@@ -160,7 +187,136 @@ export default function MarketingPage() {
   const handleRefresh = async () => {
     setRefreshing(true)
     await loadData()
-    toast.success("Marketing data and audience counts updated!")
+    toast.success("Audience numbers updated in real-time!")
+  }
+
+  // Calculate constructed criteria string and suggested name for custom segment builder
+  const getConstructedCriteriaAndName = () => {
+    switch (segmentCategory) {
+      case "service": {
+        const serv = builderOptions.services.find((s) => s.id.toString() === selectedServiceId)
+        const name = serv ? serv.name : "Selected Service"
+        return {
+          criteria: `service:${selectedServiceId}:${name}`,
+          suggestedName: `Clients who booked ${name}`,
+          badgeText: `💇 Service: ${name}`,
+        }
+      }
+      case "days": {
+        if (daysMode === "weekend") {
+          return {
+            criteria: "days:weekend",
+            suggestedName: "Weekend Visitors (Sat-Sun)",
+            badgeText: "📅 Weekend Bookings (Sat-Sun)",
+          }
+        }
+        if (daysMode === "weekday") {
+          return {
+            criteria: "days:weekday",
+            suggestedName: "Weekday Visitors (Mon-Fri)",
+            badgeText: "💼 Weekday Bookings (Mon-Fri)",
+          }
+        }
+        if (daysMode === "visited") {
+          return {
+            criteria: `visited < ${customDays}d`,
+            suggestedName: `Recent Clients (Visited within ${customDays} days)`,
+            badgeText: `✨ Visited in last ${customDays} days`,
+          }
+        }
+        return {
+          criteria: `inactive > ${customDays}d`,
+          suggestedName: `Lapse Clients (No visits in ${customDays}+ days)`,
+          badgeText: `⏳ Inactive ${customDays}+ days`,
+        }
+      }
+      case "spend": {
+        if (spendMode === "max") {
+          return {
+            criteria: `spend < ${customSpend}`,
+            suggestedName: `Budget Clients (Under ₹${customSpend})`,
+            badgeText: `🏷️ Spend < ₹${customSpend}`,
+          }
+        }
+        return {
+          criteria: `spend > ${customSpend}`,
+          suggestedName: `VIP Spenders (Total billing ₹${customSpend}+)`,
+          badgeText: `💎 Spent ₹${customSpend.toLocaleString("en-IN")}+`,
+        }
+      }
+      case "visits": {
+        if (visitsMode === "first") {
+          return {
+            criteria: "visits = 1",
+            suggestedName: "First-Time Clients (1 Visit)",
+            badgeText: "👋 First-Time Client",
+          }
+        }
+        if (visitsMode === "repeat") {
+          return {
+            criteria: "visits >= 2",
+            suggestedName: "Returning Clients (2+ Visits)",
+            badgeText: "🔁 Returning (2+ Visits)",
+          }
+        }
+        if (visitsMode === "frequent") {
+          return {
+            criteria: "visits >= 3",
+            suggestedName: "Frequent Regulars (3+ Visits)",
+            badgeText: "⭐ Frequent (3+ Visits)",
+          }
+        }
+        return {
+          criteria: "visits >= 5",
+          suggestedName: "Top Loyalists (5+ Visits)",
+          badgeText: "👑 Top VIPs (5+ Visits)",
+        }
+      }
+      case "gender": {
+        return {
+          criteria: `gender:${selectedGender}`,
+          suggestedName: selectedGender === "female" ? "Female Clients" : "Male Clients",
+          badgeText: selectedGender === "female" ? "👩 Female Clients" : "👨 Male Clients",
+        }
+      }
+      case "staff": {
+        const st = builderOptions.staff.find((s) => s.id.toString() === selectedStaffId)
+        const name = st ? st.name : "Stylist"
+        return {
+          criteria: `staff:${selectedStaffId}:${name}`,
+          suggestedName: `Clients of Stylist ${name}`,
+          badgeText: `✂️ Stylist: ${name}`,
+        }
+      }
+      default:
+        return {
+          criteria: "all",
+          suggestedName: "All Customers",
+          badgeText: "👥 All Clients",
+        }
+    }
+  }
+
+  const handleCreateCustomSegment = async () => {
+    const { criteria, suggestedName } = getConstructedCriteriaAndName()
+    const nameToUse = customSegmentName.trim() || suggestedName
+
+    setCreatingSegment(true)
+    try {
+      const res = await createCustomerSegment(nameToUse, criteria)
+      if (res.success) {
+        toast.success(`Segment "${nameToUse}" created!`)
+        setShowCreateSegmentModal(false)
+        setCustomSegmentName("")
+        loadData()
+      } else {
+        toast.error(res.message || "Failed to create segment")
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Failed to create segment")
+    } finally {
+      setCreatingSegment(false)
+    }
   }
 
   const handleCreateCampaign = async () => {
@@ -254,29 +410,6 @@ export default function MarketingPage() {
     }
   }
 
-  const handleCreateSegment = async () => {
-    if (!newSegmentName.trim()) {
-      toast.error("Please enter a segment name")
-      return
-    }
-    setCreatingSegment(true)
-    try {
-      const res = await createCustomerSegment(newSegmentName.trim(), newSegmentCriteria)
-      if (res.success) {
-        toast.success("New customer segment created!")
-        setShowCreateSegmentModal(false)
-        setNewSegmentName("")
-        loadData()
-      } else {
-        toast.error(res.message || "Failed to create segment")
-      }
-    } catch (e: any) {
-      toast.error(e.message || "Failed to create segment")
-    } finally {
-      setCreatingSegment(false)
-    }
-  }
-
   const handleDeleteSegment = async (id: number) => {
     if (!confirm("Delete this custom segment?")) return
     try {
@@ -306,6 +439,48 @@ export default function MarketingPage() {
       ...prev,
       message: `${prev.message} ${variable}`,
     }))
+  }
+
+  const formatCriteriaBadge = (criteria: string) => {
+    if (!criteria || criteria === "all") return "👥 All Clients"
+    if (criteria.startsWith("service:")) {
+      const parts = criteria.split(":")
+      return `💇 Service: ${parts[2] || parts[1]}`
+    }
+    if (criteria === "days:weekend") return "📅 Weekend (Sat-Sun)"
+    if (criteria === "days:weekday") return "💼 Weekday (Mon-Fri)"
+    if (criteria.startsWith("inactive >")) {
+      const days = criteria.replace("inactive >", "").trim()
+      return `⏳ Inactive ${days}+`
+    }
+    if (criteria.startsWith("visited <")) {
+      const days = criteria.replace("visited <", "").trim()
+      return `✨ Visited within ${days}`
+    }
+    if (criteria.startsWith("spend >")) {
+      const amt = criteria.replace("spend >", "").trim()
+      return `💎 Spent ₹${amt}+`
+    }
+    if (criteria.startsWith("spend <")) {
+      const amt = criteria.replace("spend <", "").trim()
+      return `🏷️ Spent < ₹${amt}`
+    }
+    if (criteria === "visits = 1") return "👋 First-Time Client"
+    if (criteria.startsWith("visits >=")) {
+      const count = criteria.replace("visits >=", "").trim()
+      return `⭐ ${count}+ Visits`
+    }
+    if (criteria === "gender:female") return "👩 Female Clients"
+    if (criteria === "gender:male") return "👨 Male Clients"
+    if (criteria.startsWith("staff:")) {
+      const parts = criteria.split(":")
+      return `✂️ Stylist: ${parts[2] || parts[1]}`
+    }
+    if (criteria.startsWith("created <")) {
+      const days = criteria.replace("created <", "").trim()
+      return `🌱 Joined within ${days}`
+    }
+    return criteria
   }
 
   const getStatusColor = (status: string) => {
@@ -360,6 +535,8 @@ export default function MarketingPage() {
     )
   }
 
+  const { criteria: previewCriteria, suggestedName: previewSuggestedName } = getConstructedCriteriaAndName()
+
   return (
     <div className="flex-1 flex flex-col min-h-screen bg-slate-50/50">
       <PageHeader
@@ -406,16 +583,17 @@ export default function MarketingPage() {
                 </p>
               </div>
 
+              {/* Action Buttons: High contrast and visible */}
               <div className="flex flex-wrap items-center gap-3">
                 <Link href="/manage/whatsapp-config?tab=smart-campaigns">
-                  <Button variant="secondary" className="gap-2 bg-white text-slate-900 hover:bg-slate-100 font-medium">
+                  <Button className="gap-2 bg-white text-slate-900 hover:bg-slate-100 font-semibold shadow-md border-0">
                     <Zap className="w-4 h-4 text-emerald-600" />
                     Configure Automations
                   </Button>
                 </Link>
                 <Link href="/whatsapp">
-                  <Button variant="outline" className="border-emerald-400/30 text-white hover:bg-white/10 gap-2">
-                    <MessageSquare className="w-4 h-4" />
+                  <Button className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-md border border-emerald-400/40 gap-2">
+                    <MessageSquare className="w-4 h-4 text-white" />
                     Live WhatsApp Inbox
                   </Button>
                 </Link>
@@ -515,15 +693,14 @@ export default function MarketingPage() {
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Dynamic Audience Segments</h2>
                   <p className="text-sm text-slate-500">
-                    Live customer counts calculated directly from appointments, repeat visits, and billing totals.
+                    Live client counts calculated dynamically by service, preferred days, visits, and spend.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
-                    variant="outline"
                     size="sm"
                     onClick={() => setShowCreateSegmentModal(true)}
-                    className="gap-2"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-medium"
                   >
                     <Plus className="w-4 h-4" />
                     Create Custom Segment
@@ -533,11 +710,11 @@ export default function MarketingPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 {segments.map((segment) => {
-                  const isAll = segment.criteria === "all"
                   const isVIP = segment.criteria.includes("spend")
                   const isInactive = segment.criteria.includes("inactive")
-                  const isNew = segment.criteria.includes("created")
                   const isFrequent = segment.criteria.includes("visits")
+                  const isService = segment.criteria.startsWith("service:")
+                  const isDays = segment.criteria.startsWith("days:")
 
                   return (
                     <Card
@@ -549,25 +726,35 @@ export default function MarketingPage() {
                           <div className="flex items-center gap-3">
                             <div
                               className={`w-10 h-10 rounded-xl flex items-center justify-center font-semibold text-sm ${
-                                isVIP
+                                isService
+                                  ? "bg-teal-100 text-teal-800"
+                                  : isDays
+                                  ? "bg-sky-100 text-sky-800"
+                                  : isVIP
                                   ? "bg-amber-100 text-amber-800"
                                   : isInactive
                                   ? "bg-rose-100 text-rose-800"
                                   : isFrequent
                                   ? "bg-purple-100 text-purple-800"
-                                  : isNew
-                                  ? "bg-blue-100 text-blue-800"
                                   : "bg-emerald-100 text-emerald-800"
                               }`}
                             >
-                              <Target className="w-5 h-5" />
+                              {isService ? (
+                                <Scissors className="w-5 h-5" />
+                              ) : isDays ? (
+                                <Calendar className="w-5 h-5" />
+                              ) : isVIP ? (
+                                <Crown className="w-5 h-5" />
+                              ) : (
+                                <Target className="w-5 h-5" />
+                              )}
                             </div>
                             <div>
                               <CardTitle className="text-base font-bold text-slate-900">
                                 {segment.name}
                               </CardTitle>
-                              <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                                {segment.criteria}
+                              <span className="inline-block mt-0.5 text-[11px] font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/60">
+                                {formatCriteriaBadge(segment.criteria)}
                               </span>
                             </div>
                           </div>
@@ -626,7 +813,6 @@ export default function MarketingPage() {
 
             {/* TAB: CAMPAIGNS */}
             <TabsContent value="campaigns" className="space-y-6">
-              {/* Campaign Controls */}
               <Card className="border border-slate-200/80">
                 <CardContent className="p-4">
                   <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
@@ -664,7 +850,6 @@ export default function MarketingPage() {
                 </CardContent>
               </Card>
 
-              {/* Campaigns Grid */}
               {filteredCampaigns.length === 0 ? (
                 <div className="text-center py-12 bg-white rounded-xl border border-dashed border-slate-200">
                   <Megaphone className="w-12 h-12 text-slate-300 mx-auto mb-3" />
@@ -883,6 +1068,409 @@ export default function MarketingPage() {
           </Tabs>
         </div>
       </main>
+
+      {/* MODAL: ADVANCED CUSTOM SEGMENT BUILDER */}
+      <Dialog open={showCreateSegmentModal} onOpenChange={setShowCreateSegmentModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold flex items-center gap-2">
+              <SlidersHorizontal className="w-5 h-5 text-emerald-600" />
+              Advanced Custom Segment Builder
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Create targeted groups based on services booked, preferred visit days, recency, spending habits, or preferred stylists.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5 py-2">
+            {/* 1. Condition Category Selection */}
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                1. Select Targeting Condition Category
+              </Label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <Button
+                  type="button"
+                  variant={segmentCategory === "service" ? "default" : "outline"}
+                  className={`justify-start text-xs h-11 gap-2 ${
+                    segmentCategory === "service" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""
+                  }`}
+                  onClick={() => setSegmentCategory("service")}
+                >
+                  <Scissors className="w-4 h-4" />
+                  By Service Taken
+                </Button>
+
+                <Button
+                  type="button"
+                  variant={segmentCategory === "days" ? "default" : "outline"}
+                  className={`justify-start text-xs h-11 gap-2 ${
+                    segmentCategory === "days" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""
+                  }`}
+                  onClick={() => setSegmentCategory("days")}
+                >
+                  <Calendar className="w-4 h-4" />
+                  By Days & Recency
+                </Button>
+
+                <Button
+                  type="button"
+                  variant={segmentCategory === "spend" ? "default" : "outline"}
+                  className={`justify-start text-xs h-11 gap-2 ${
+                    segmentCategory === "spend" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""
+                  }`}
+                  onClick={() => setSegmentCategory("spend")}
+                >
+                  <IndianRupee className="w-4 h-4" />
+                  By Spend / Billing
+                </Button>
+
+                <Button
+                  type="button"
+                  variant={segmentCategory === "visits" ? "default" : "outline"}
+                  className={`justify-start text-xs h-11 gap-2 ${
+                    segmentCategory === "visits" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""
+                  }`}
+                  onClick={() => setSegmentCategory("visits")}
+                >
+                  <UserCheck className="w-4 h-4" />
+                  By Visit Frequency
+                </Button>
+
+                <Button
+                  type="button"
+                  variant={segmentCategory === "gender" ? "default" : "outline"}
+                  className={`justify-start text-xs h-11 gap-2 ${
+                    segmentCategory === "gender" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""
+                  }`}
+                  onClick={() => setSegmentCategory("gender")}
+                >
+                  <Users className="w-4 h-4" />
+                  By Gender
+                </Button>
+
+                <Button
+                  type="button"
+                  variant={segmentCategory === "staff" ? "default" : "outline"}
+                  className={`justify-start text-xs h-11 gap-2 ${
+                    segmentCategory === "staff" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""
+                  }`}
+                  onClick={() => setSegmentCategory("staff")}
+                >
+                  <Heart className="w-4 h-4" />
+                  By Stylist / Staff
+                </Button>
+              </div>
+            </div>
+
+            {/* 2. Condition Parameters based on selected category */}
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-4">
+              <Label className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                2. Configure Condition Rules
+              </Label>
+
+              {/* A. BY SERVICE */}
+              {segmentCategory === "service" && (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-600">
+                    Filter clients who have booked a specific service at least once.
+                  </p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Select Salon Service</Label>
+                    <Select value={selectedServiceId} onValueChange={setSelectedServiceId}>
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Choose a service..." />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        {builderOptions.services.map((serv) => (
+                          <SelectItem key={serv.id} value={serv.id.toString()}>
+                            {serv.name} {serv.category ? `(${serv.category})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              {/* B. BY DAYS & RECENCY */}
+              {segmentCategory === "days" && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant={daysMode === "inactive" ? "default" : "outline"}
+                      className={`text-xs h-9 ${daysMode === "inactive" ? "bg-slate-900 text-white" : "bg-white"}`}
+                      onClick={() => setDaysMode("inactive")}
+                    >
+                      ⏳ Inactive (No visits in X days)
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={daysMode === "visited" ? "default" : "outline"}
+                      className={`text-xs h-9 ${daysMode === "visited" ? "bg-slate-900 text-white" : "bg-white"}`}
+                      onClick={() => setDaysMode("visited")}
+                    >
+                      ✨ Recent (Visited in last X days)
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={daysMode === "weekend" ? "default" : "outline"}
+                      className={`text-xs h-9 ${daysMode === "weekend" ? "bg-slate-900 text-white" : "bg-white"}`}
+                      onClick={() => setDaysMode("weekend")}
+                    >
+                      📅 Weekend Clients (Sat - Sun)
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={daysMode === "weekday" ? "default" : "outline"}
+                      className={`text-xs h-9 ${daysMode === "weekday" ? "bg-slate-900 text-white" : "bg-white"}`}
+                      onClick={() => setDaysMode("weekday")}
+                    >
+                      💼 Weekday Clients (Mon - Fri)
+                    </Button>
+                  </div>
+
+                  {(daysMode === "inactive" || daysMode === "visited") && (
+                    <div className="space-y-2 pt-2">
+                      <Label className="text-xs font-semibold">Number of Days</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={customDays}
+                          onChange={(e) => setCustomDays(Number(e.target.value) || 30)}
+                          className="bg-white w-32"
+                        />
+                        <div className="flex items-center gap-1.5">
+                          {[15, 30, 45, 60, 90, 180].map((d) => (
+                            <Button
+                              key={d}
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className={`h-8 px-2 text-xs bg-white ${customDays === d ? "border-emerald-600 text-emerald-600 font-bold" : ""}`}
+                              onClick={() => setCustomDays(d)}
+                            >
+                              {d}d
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* C. BY SPEND */}
+              {segmentCategory === "spend" && (
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={spendMode === "min" ? "default" : "outline"}
+                      className={`text-xs h-9 ${spendMode === "min" ? "bg-slate-900 text-white" : "bg-white"}`}
+                      onClick={() => setSpendMode("min")}
+                    >
+                      💎 Total Lifetime Spend At Least (₹)
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={spendMode === "max" ? "default" : "outline"}
+                      className={`text-xs h-9 ${spendMode === "max" ? "bg-slate-900 text-white" : "bg-white"}`}
+                      onClick={() => setSpendMode("max")}
+                    >
+                      🏷️ Total Lifetime Spend Under (₹)
+                    </Button>
+                  </div>
+
+                  <div className="space-y-2 pt-1">
+                    <Label className="text-xs font-semibold">Billing Threshold Amount (₹)</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={100}
+                        step={500}
+                        value={customSpend}
+                        onChange={(e) => setCustomSpend(Number(e.target.value) || 1000)}
+                        className="bg-white w-40"
+                      />
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {[1000, 2500, 3000, 5000, 10000].map((amt) => (
+                          <Button
+                            key={amt}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className={`h-8 px-2 text-xs bg-white ${customSpend === amt ? "border-emerald-600 text-emerald-600 font-bold" : ""}`}
+                            onClick={() => setCustomSpend(amt)}
+                          >
+                            ₹{amt.toLocaleString("en-IN")}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* D. BY VISITS FREQUENCY */}
+              {segmentCategory === "visits" && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">Visit Frequency Tier</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant={visitsMode === "first" ? "default" : "outline"}
+                      className={`text-xs h-10 ${visitsMode === "first" ? "bg-slate-900 text-white" : "bg-white"}`}
+                      onClick={() => setVisitsMode("first")}
+                    >
+                      👋 First-Time Clients (Only 1 visit)
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={visitsMode === "repeat" ? "default" : "outline"}
+                      className={`text-xs h-10 ${visitsMode === "repeat" ? "bg-slate-900 text-white" : "bg-white"}`}
+                      onClick={() => setVisitsMode("repeat")}
+                    >
+                      🔁 Returning Clients (2+ visits)
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={visitsMode === "frequent" ? "default" : "outline"}
+                      className={`text-xs h-10 ${visitsMode === "frequent" ? "bg-slate-900 text-white" : "bg-white"}`}
+                      onClick={() => setVisitsMode("frequent")}
+                    >
+                      ⭐ Frequent Regulars (3+ visits)
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={visitsMode === "vip" ? "default" : "outline"}
+                      className={`text-xs h-10 ${visitsMode === "vip" ? "bg-slate-900 text-white" : "bg-white"}`}
+                      onClick={() => setVisitsMode("vip")}
+                    >
+                      👑 Top VIP Loyalists (5+ visits)
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* E. BY GENDER */}
+              {segmentCategory === "gender" && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold">Client Gender</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button
+                      type="button"
+                      variant={selectedGender === "female" ? "default" : "outline"}
+                      className={`text-xs h-10 gap-2 ${selectedGender === "female" ? "bg-pink-600 hover:bg-pink-700 text-white" : "bg-white"}`}
+                      onClick={() => setSelectedGender("female")}
+                    >
+                      👩 Female Clients (Hair, Skin, Spa, Bridal)
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={selectedGender === "male" ? "default" : "outline"}
+                      className={`text-xs h-10 gap-2 ${selectedGender === "male" ? "bg-blue-600 hover:bg-blue-700 text-white" : "bg-white"}`}
+                      onClick={() => setSelectedGender("male")}
+                    >
+                      👨 Male Clients (Grooming, Styling, Beard)
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* F. BY STAFF / STYLIST */}
+              {segmentCategory === "staff" && (
+                <div className="space-y-3">
+                  <p className="text-xs text-slate-600">
+                    Filter clients who have had appointments with a specific stylist.
+                  </p>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Select Stylist / Staff Member</Label>
+                    <Select value={selectedStaffId} onValueChange={setSelectedStaffId}>
+                      <SelectTrigger className="bg-white">
+                        <SelectValue placeholder="Choose a stylist..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {builderOptions.staff.map((st) => (
+                          <SelectItem key={st.id} value={st.id.toString()}>
+                            {st.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 3. Live Preview & Segment Name */}
+            <div className="space-y-3 pt-1">
+              <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200/80 flex items-center justify-between">
+                <div>
+                  <span className="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider block">
+                    Live Rule Formula
+                  </span>
+                  <span className="text-xs font-mono font-bold text-emerald-900">
+                    {previewCriteria}
+                  </span>
+                </div>
+                <Badge className="bg-emerald-600 text-white border-0 text-xs">
+                  {formatCriteriaBadge(previewCriteria)}
+                </Badge>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold">Segment Name *</Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-1.5 text-[11px] text-emerald-600 hover:text-emerald-700"
+                    onClick={() => setCustomSegmentName(previewSuggestedName)}
+                  >
+                    Auto-Fill Suggested Name
+                  </Button>
+                </div>
+                <Input
+                  placeholder={previewSuggestedName}
+                  value={customSegmentName}
+                  onChange={(e) => setCustomSegmentName(e.target.value)}
+                />
+                <p className="text-[11px] text-slate-500">
+                  Default name if left blank: <span className="font-semibold text-slate-700">{previewSuggestedName}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setShowCreateSegmentModal(false)} disabled={creatingSegment}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 font-medium"
+              onClick={handleCreateCustomSegment}
+              disabled={creatingSegment}
+            >
+              {creatingSegment ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Creating Segment...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  Save Customer Segment
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* MODAL: CREATE CAMPAIGN */}
       <Dialog open={showCampaignModal} onOpenChange={setShowCampaignModal}>
@@ -1175,62 +1763,6 @@ export default function MarketingPage() {
             </span>
             <Button variant="outline" size="sm" onClick={() => setShowAudienceModal(false)}>
               Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* MODAL: CREATE CUSTOM SEGMENT */}
-      <Dialog open={showCreateSegmentModal} onOpenChange={setShowCreateSegmentModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-base font-bold flex items-center gap-2">
-              <Plus className="w-5 h-5 text-emerald-600" />
-              Create Custom Customer Segment
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Define a dynamic audience rule to automatically group clients for targeted marketing.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Segment Name *</Label>
-              <Input
-                placeholder="e.g. VIP Festival Spenders"
-                value={newSegmentName}
-                onChange={(e) => setNewSegmentName(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Targeting Criteria *</Label>
-              <Select value={newSegmentCriteria} onValueChange={setNewSegmentCriteria}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="spend > 3000">Big Spenders (Total billing ₹3,000+)</SelectItem>
-                  <SelectItem value="spend > 5000">Super VIPs (Total billing ₹5,000+)</SelectItem>
-                  <SelectItem value="inactive > 45d">Lapse / Inactive (No visits in 45 days)</SelectItem>
-                  <SelectItem value="inactive > 90d">At-Risk / Lost (No visits in 90 days)</SelectItem>
-                  <SelectItem value="created < 30d">New Clients (Joined in last 30 days)</SelectItem>
-                  <SelectItem value="visits >= 3">Frequent Loyalists (3+ Visits)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateSegmentModal(false)} disabled={creatingSegment}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              onClick={handleCreateSegment}
-              disabled={creatingSegment}
-            >
-              {creatingSegment ? "Creating..." : "Save Segment"}
             </Button>
           </DialogFooter>
         </DialogContent>
