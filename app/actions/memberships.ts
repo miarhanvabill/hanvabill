@@ -38,7 +38,6 @@ export interface CustomerMembership {
 export async function getActiveMemberships(): Promise<MembershipPlan[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      await sql`ALTER TABLE membership_plans ADD COLUMN IF NOT EXISTS image_url TEXT;`
       const result = await sql`
         SELECT 
           mp.id,
@@ -64,23 +63,40 @@ export async function getActiveMemberships(): Promise<MembershipPlan[]> {
         ORDER BY sales_count DESC, mp.created_at DESC
       `
 
-
       const rows = result.rows || result
       if (!rows || !Array.isArray(rows)) {
-        console.error("[v0] SQL result rows is not an array:", rows)
         return []
       }
 
-      return rows.map((row: any) => ({
-        ...row,
-        id: row.id.toString(),
-        benefits: typeof row.benefits === 'string' ? JSON.parse(row.benefits) : (row.benefits || []),
-        features: typeof row.benefits === 'string' ? JSON.parse(row.benefits) : (row.benefits || []),
-        price: Number.parseFloat(row.price),
-        discount_percentage: Number.parseFloat(row.discount_percentage),
-        created_at: row.created_at.toISOString(),
-        updated_at: row.updated_at.toISOString(),
-      }))
+      return rows.map((row: any) => {
+        let parsedBenefits: string[] = []
+        try {
+          if (Array.isArray(row.benefits)) {
+            parsedBenefits = row.benefits
+          } else if (typeof row.benefits === 'string' && row.benefits.trim().startsWith('[')) {
+            parsedBenefits = JSON.parse(row.benefits)
+          } else if (row.benefits) {
+            parsedBenefits = [String(row.benefits)]
+          }
+        } catch {
+          parsedBenefits = []
+        }
+
+        const durationMonths = Number(row.duration_months) || 12
+
+        return {
+          ...row,
+          id: row.id.toString(),
+          benefits: parsedBenefits,
+          features: parsedBenefits,
+          duration_months: durationMonths,
+          validityDays: durationMonths * 30,
+          price: Number.parseFloat(row.price) || 0,
+          discount_percentage: Number.parseFloat(row.discount_percentage) || 0,
+          created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+          updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : null,
+        }
+      })
     } catch (error) {
       console.error("Error fetching active memberships:", error)
       return []
@@ -91,7 +107,6 @@ export async function getActiveMemberships(): Promise<MembershipPlan[]> {
 export async function getAllMembershipPlans(): Promise<MembershipPlan[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      await sql`ALTER TABLE membership_plans ADD COLUMN IF NOT EXISTS image_url TEXT;`
       const result = await sql`
         SELECT 
           id,
@@ -111,23 +126,40 @@ export async function getAllMembershipPlans(): Promise<MembershipPlan[]> {
         ORDER BY created_at DESC
       `
 
-
       const rows = result.rows || result
-
       if (!rows || !Array.isArray(rows)) {
-        console.error("[v0] SQL result rows is not an array:", rows)
         return []
       }
 
-      return rows.map((row: any) => ({
-        ...row,
-        id: row.id.toString(),
-        benefits: row.benefits ? JSON.parse(row.benefits) : [],
-        price: Number.parseFloat(row.price),
-        discount_percentage: Number.parseFloat(row.discount_percentage),
-        created_at: row.created_at.toISOString(),
-        updated_at: row.updated_at.toISOString(),
-      }))
+      return rows.map((row: any) => {
+        let parsedBenefits: string[] = []
+        try {
+          if (Array.isArray(row.benefits)) {
+            parsedBenefits = row.benefits
+          } else if (typeof row.benefits === 'string' && row.benefits.trim().startsWith('[')) {
+            parsedBenefits = JSON.parse(row.benefits)
+          } else if (row.benefits) {
+            parsedBenefits = [String(row.benefits)]
+          }
+        } catch {
+          parsedBenefits = []
+        }
+
+        const durationMonths = Number(row.duration_months) || 12
+
+        return {
+          ...row,
+          id: row.id.toString(),
+          benefits: parsedBenefits,
+          features: parsedBenefits,
+          duration_months: durationMonths,
+          validityDays: durationMonths * 30,
+          price: Number.parseFloat(row.price) || 0,
+          discount_percentage: Number.parseFloat(row.discount_percentage) || 0,
+          created_at: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+          updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : null,
+        }
+      })
     } catch (error) {
       console.error("Error fetching membership plans:", error)
       return []

@@ -40,6 +40,9 @@ import {
   ChevronDown,
   ChevronUp,
   CheckCircle,
+  CheckCircle2,
+  Check,
+  Layers,
   Users,
   Calendar,
   Percent,
@@ -418,11 +421,32 @@ export function ServiceSelectionScreen({
       const mem = memRes.status === "fulfilled" ? memRes.value : []
       const stf = staffRes.status === "fulfilled" ? staffRes.value : []
 
-      // Items (with graceful fallbacks)
+      // Items (with graceful fallbacks and normalized fields)
       const svcs = Array.isArray(svc) && svc.length ? svc : FALLBACK_SERVICES
       const prds = Array.isArray(prod) && prod.length ? prod : FALLBACK_PRODUCTS
-      const pkgs = Array.isArray(pkg) && pkg.length ? pkg : FALLBACK_PACKAGES
-      const mems = Array.isArray(mem) && mem.length ? mem : FALLBACK_MEMBERSHIPS
+      const rawPkgs = Array.isArray(pkg) && pkg.length ? pkg : FALLBACK_PACKAGES
+      const rawMems = Array.isArray(mem) && mem.length ? mem : FALLBACK_MEMBERSHIPS
+
+      const pkgs = rawPkgs.map((p: any) => ({
+        ...p,
+        package_price: Number(p.package_price ?? p.price ?? 0),
+        original_price: Number(p.original_price ?? p.package_price ?? p.price ?? 0),
+        validityDays: p.validityDays || p.validity_days || 365,
+        features: Array.isArray(p.features) && p.features.length ? p.features : (Array.isArray(p.services) ? p.services.map((s: any) => typeof s === 'string' ? s : `Service #${s}`) : []),
+      }))
+
+      const mems = rawMems.map((m: any) => {
+        const rawPerks = (Array.isArray(m.features) && m.features.length) ? m.features : (Array.isArray(m.benefits) && m.benefits.length) ? m.benefits : []
+        const durationMonths = Number(m.duration_months) || (m.validityDays ? Math.round(m.validityDays / 30) : 12)
+        return {
+          ...m,
+          features: rawPerks,
+          benefits: rawPerks,
+          duration_months: durationMonths,
+          validityDays: m.validityDays || durationMonths * 30,
+        }
+      })
+
       setServices(svcs)
       setProducts(prds)
       setPackages(pkgs)
@@ -595,40 +619,51 @@ export function ServiceSelectionScreen({
     
     const selected = selectedStaffMembers[key] || []
     return (
-      <div className="space-y-3">
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Select Staff (Multi-select)</Label>
-          <div className="flex flex-wrap gap-2">
-            {staff.map((st) => {
-              const isSelected = selected.some(s => s.id === st.id)
-              return (
-                <Badge
-                  key={st.id}
-                  variant={isSelected ? "default" : "outline"}
-                  className="cursor-pointer py-1 px-2 text-xs transition-colors hover:bg-primary/90"
-                  onClick={() => toggleStaffMember(key, st)}
-                >
-                  <Avatar className="w-4 h-4 mr-1.5 inline-block">
-                    <AvatarFallback className="text-[8px] bg-primary-foreground text-primary">
-                      {st.name.substring(0, 2).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  {st.name}
-                  {st.attendance_status === 'present' && !st.check_out_time && (
-                    <span className="w-2 h-2 rounded-full bg-green-500 ml-1.5 inline-block" title="Checked In Today" />
-                  )}
-                </Badge>
-              )
-            })}
-          </div>
+      <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-semibold text-slate-600 dark:text-slate-300">Assign Staff</span>
+          <span className="text-[11px] text-muted-foreground">
+            {selected.length === 0 ? "Default: Any Staff" : `${selected.length} assigned`}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+          {staff.map((st) => {
+            const isSelected = selected.some((s) => s.id === st.id)
+            return (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => toggleStaffMember(key, st)}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                  isSelected
+                    ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs ring-1 ring-slate-900 dark:ring-white font-semibold"
+                    : "bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200/50 dark:border-slate-700/50"
+                }`}
+              >
+                <Avatar className="w-3.5 h-3.5 inline-block">
+                  <AvatarFallback
+                    className={`text-[8px] font-bold ${
+                      isSelected
+                        ? "bg-white/20 text-white dark:bg-slate-900/20 dark:text-slate-900"
+                        : "bg-primary/10 text-primary"
+                    }`}
+                  >
+                    {st.name.substring(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <span>{st.name}</span>
+                {st.attendance_status === "present" && !st.check_out_time && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" title="Checked In Today" />
+                )}
+              </button>
+            )
+          })}
         </div>
         
-        {selected.length === 0 ? (
-          <div className="text-xs text-muted-foreground italic">Any Staff</div>
-        ) : (
-          <div className="space-y-2 bg-muted/30 p-2 rounded-md border text-sm">
+        {selected.length > 0 && (
+          <div className="space-y-2 bg-muted/40 p-2.5 rounded-xl border text-xs mt-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">Split Setup</span>
+              <span className="text-[11px] font-semibold text-muted-foreground">Commission Split Setup</span>
               {selected.length > 1 && (
                 <Button 
                   variant="ghost" 
@@ -897,147 +932,164 @@ export function ServiceSelectionScreen({
             {/* Packages */}
             {itemType === "package" &&
               filteredPackages.map((pkg) => {
-                const { savings, percentage } = calculateSavings(pkg.original_price, pkg.package_price)
+                const pkgPrice = Number(pkg.package_price) || 0
+                const origPrice = Number(pkg.original_price) || pkgPrice
+                const { savings, percentage } = calculateSavings(origPrice, pkgPrice)
                 const isExpanded = expandedPackage === pkg.id
+                const features = Array.isArray(pkg.features) ? pkg.features : []
+                const servicesCount = pkg.servicesCount || features.length || 1
+                const validityDays = pkg.validityDays || (pkg as any).validity_days || 365
+                const durationText = pkg.duration || (pkg.duration_minutes ? `${pkg.duration_minutes}m` : null)
+                const displayFeatures = isExpanded ? features : features.slice(0, 4)
+                const hasMoreFeatures = features.length > 4
 
                 return (
                   <Card
                     key={pkg.id}
-                    className="hover:shadow-lg transition-all duration-200 border-2 hover:border-primary/20 overflow-hidden flex flex-col"
+                    className="group relative overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-card hover:border-emerald-500/50 hover:shadow-xl hover:shadow-emerald-500/5 transition-all duration-300 flex flex-col"
                   >
+                    {/* Top vibrant gradient accent bar */}
+                    <div className="h-1.5 w-full bg-gradient-to-r from-emerald-500 via-teal-400 to-indigo-500" />
+
                     {pkg.image_url && (
-                      <div className="h-40 w-full shrink-0 border-b relative bg-muted">
-                        <img src={pkg.image_url} alt={pkg.name} className="absolute inset-0 w-full h-full object-cover" />
+                      <div className="h-40 w-full shrink-0 border-b relative bg-muted overflow-hidden">
+                        <img
+                          src={pkg.image_url}
+                          alt={pkg.name}
+                          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
                       </div>
                     )}
-                    <CardContent className="p-6 space-y-4 flex-1 flex flex-col">
-                      {/* Header with icon and savings badge */}
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3 flex-1">
-                          <div className="p-2 bg-primary/10 rounded-lg">{getPackageIcon(pkg.icon || "sparkles")}</div>
-                          <div className="flex-1">
-                            <h3 className="font-bold text-lg">{pkg.name}</h3>
-                            <p className="text-sm text-muted-foreground mt-1">{pkg.description}</p>
-                          </div>
-                        </div>
-                        <div className="flex flex-col items-end gap-2">
-                          {pkg.category && <Badge variant="secondary">{pkg.category}</Badge>}
-                          <Badge variant="destructive" className="bg-green-500 hover:bg-green-600">
-                            Save {percentage}%
-                          </Badge>
-                        </div>
-                      </div>
 
-                      {/* Pricing with clear savings display */}
-                      <div className="bg-gradient-to-r from-primary/5 to-primary/10 p-4 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-2xl font-bold text-primary">
-                                {formatCurrency(Number(pkg.package_price) || 0)}
-                              </span>
-                              <span className="text-lg text-muted-foreground line-through">
-                                {formatCurrency(Number(pkg.original_price) || 0)}
-                              </span>
-                            </div>
-                            <p className="text-sm text-green-600 font-medium">You save {formatCurrency(savings)}</p>
+                    <CardContent className="p-5 space-y-4 flex-1 flex flex-col">
+                      {/* Header with icon, title, and savings pill */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/10 to-teal-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20 shadow-xs shrink-0">
+                            {getPackageIcon(pkg.icon || "gift")}
                           </div>
-                          <div className="text-right">
-                            <p className="text-sm text-muted-foreground">{pkg.servicesCount} services included</p>
-                            {pkg.duration && (
-                              <p className="text-sm text-muted-foreground flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {pkg.duration}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-lg text-slate-900 dark:text-white tracking-tight truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                              {pkg.name}
+                            </h3>
+                            {pkg.description ? (
+                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                                {pkg.description}
                               </p>
-                            )}
+                            ) : null}
                           </div>
                         </div>
-                      </div>
 
-                      {/* Quick features preview */}
-                      <div className="space-y-2">
-                        <h4 className="font-semibold text-sm flex items-center gap-2">
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                          What's Included:
-                        </h4>
-                        <div className="grid grid-cols-1 gap-1">
-                          {pkg.features?.slice(0, 2).map((feature, idx) => (
-                            <div key={idx} className="flex items-center gap-2 text-sm">
-                              <div className="w-1.5 h-1.5 bg-primary rounded-full" />
-                              {feature}
-                            </div>
-                          ))}
-                          {pkg.features && pkg.features.length > 2 && (
-                            <Collapsible
-                              open={isExpanded}
-                              onOpenChange={() => setExpandedPackage(isExpanded ? null : pkg.id)}
-                            >
-                              <CollapsibleTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-auto p-0 text-primary hover:text-primary/80"
-                                >
-                                  <span className="text-sm">
-                                    {isExpanded ? "Show less" : `+${pkg.features.length - 2} more features`}
-                                  </span>
-                                  {isExpanded ? (
-                                    <ChevronUp className="w-3 h-3 ml-1" />
-                                  ) : (
-                                    <ChevronDown className="w-3 h-3 ml-1" />
-                                  )}
-                                </Button>
-                              </CollapsibleTrigger>
-                              <CollapsibleContent className="space-y-1 mt-2">
-                                {pkg.features.slice(2).map((feature, idx) => (
-                                  <div key={idx + 2} className="flex items-center gap-2 text-sm">
-                                    <div className="w-1.5 h-1.5 bg-primary rounded-full" />
-                                    {feature}
-                                  </div>
-                                ))}
-                                {pkg.benefits && (
-                                  <div className="mt-3 pt-3 border-t">
-                                    <h5 className="font-semibold text-sm text-green-600 mb-2">Benefits:</h5>
-                                    {pkg.benefits.map((benefit, idx) => (
-                                      <div key={idx} className="flex items-center gap-2 text-sm text-green-600">
-                                        <Star className="w-3 h-3" />
-                                        {benefit}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </CollapsibleContent>
-                            </Collapsible>
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          {percentage > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500 text-white shadow-xs">
+                              Save {percentage}%
+                            </span>
+                          )}
+                          {pkg.category && (
+                            <Badge variant="outline" className="text-[11px] font-medium border-slate-200 dark:border-slate-700">
+                              {pkg.category}
+                            </Badge>
                           )}
                         </div>
                       </div>
 
-                      {/* Validity and staff selection */}
-                      <div className="flex items-center justify-between text-sm text-muted-foreground">
-                        {pkg.validityDays && (
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            Valid for {pkg.validityDays} days
-                          </span>
+                      {/* Pricing with clear savings display */}
+                      <div className="bg-gradient-to-br from-emerald-50/70 via-teal-50/40 to-slate-50/70 dark:from-emerald-950/20 dark:via-slate-900 dark:to-slate-900 border border-emerald-100 dark:border-emerald-900/40 rounded-xl p-3.5 flex items-center justify-between">
+                        <div>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                              {formatCurrency(pkgPrice)}
+                            </span>
+                            {origPrice > pkgPrice && (
+                              <span className="text-sm text-slate-400 dark:text-slate-500 line-through font-normal">
+                                {formatCurrency(origPrice)}
+                              </span>
+                            )}
+                          </div>
+                          {savings > 0 && (
+                            <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5 flex items-center gap-1">
+                              <Check className="w-3 h-3 stroke-[3]" /> You save {formatCurrency(savings)}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="text-right space-y-1">
+                          <div className="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-white/90 dark:bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-200/80 dark:border-slate-700/80 shadow-2xs">
+                            <Layers className="w-3 h-3 text-emerald-500" />
+                            {servicesCount} Services
+                          </div>
+                          {durationText && (
+                            <p className="text-[11px] text-muted-foreground flex items-center justify-end gap-1 font-medium">
+                              <Clock className="w-3 h-3 text-slate-400" />
+                              {durationText}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Included Services Section */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                            Included Services ({features.length})
+                          </h4>
+                          {validityDays && (
+                            <span className="text-[11px] text-muted-foreground flex items-center gap-1 font-medium">
+                              <Calendar className="w-3 h-3 text-slate-400" />
+                              {validityDays}d validity
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap gap-1.5">
+                          {displayFeatures.map((feature, idx) => (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 border border-emerald-200/60 dark:border-emerald-800/40 shadow-2xs"
+                            >
+                              <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0 stroke-[2.5]" />
+                              {feature}
+                            </span>
+                          ))}
+                          {hasMoreFeatures && (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedPackage(isExpanded ? null : pkg.id)}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:underline px-2 py-1 rounded-lg bg-emerald-100/60 dark:bg-emerald-900/40 transition-colors"
+                            >
+                              {isExpanded ? "Show less" : `+${features.length - 4} more`}
+                              {isExpanded ? (
+                                <ChevronUp className="w-3 h-3" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+
+                        {pkg.benefits && pkg.benefits.length > 0 && isExpanded && (
+                          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
+                            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Extra Perks</span>
+                            {pkg.benefits.map((b, idx) => (
+                              <div key={idx} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <Star className="w-3 h-3 text-amber-500 shrink-0" />
+                                {b}
+                              </div>
+                            ))}
+                          </div>
                         )}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="w-4 h-4 cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Package must be used within validity period</p>
-                          </TooltipContent>
-                        </Tooltip>
                       </div>
 
                       {renderStaffSelect("package", pkg)}
 
                       <Button
                         size="lg"
-                        className="w-full mt-auto bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
+                        className="w-full mt-auto h-11 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 text-white font-semibold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 group-hover:shadow-md"
                         onClick={() => addToCart("package", pkg)}
                       >
-                        <Gift className="w-4 h-4 mr-2" />
+                        <Gift className="w-4 h-4" />
                         Add Package to Cart
                       </Button>
                     </CardContent>
@@ -1049,109 +1101,137 @@ export function ServiceSelectionScreen({
             {itemType === "membership" &&
               filteredMemberships.map((m) => {
                 const isExpanded = expandedMembership === m.id
+                const rawFeatures = (Array.isArray(m.features) && m.features.length > 0)
+                  ? m.features
+                  : (Array.isArray(m.benefits) && m.benefits.length > 0)
+                  ? m.benefits
+                  : []
+
+                // Guarantee high-value perks even if tenant only entered a title/price
+                const perks = rawFeatures.length > 0 ? rawFeatures : [
+                  m.discount_percentage ? `Flat ${m.discount_percentage}% discount on all salon services` : "Special VIP member pricing on all services",
+                  "Priority appointment booking & zero wait time",
+                  m.is_multi_branch ? "Valid across all salon branches" : "Exclusive VIP treatment on every visit"
+                ]
+
+                const displayPerks = isExpanded ? perks : perks.slice(0, 3)
+                const hasMorePerks = perks.length > 3
+
+                const validityText = m.duration_months
+                  ? `${m.duration_months} Month${m.duration_months > 1 ? "s" : ""}`
+                  : m.validityDays
+                  ? `${m.validityDays} Days`
+                  : "1 Year"
+
+                const monthlyPrice = m.duration_months
+                  ? Math.round(m.price / m.duration_months)
+                  : Math.round((m.price / (m.validityDays || 365)) * 30)
 
                 return (
                   <Card
                     key={m.id}
-                    className="hover:shadow-lg transition-all duration-200 border-2 hover:border-primary/20 overflow-hidden flex flex-col"
+                    className="group relative overflow-hidden rounded-2xl border-2 border-amber-300/80 dark:border-amber-700/60 bg-gradient-to-b from-amber-50/40 via-card to-card dark:from-amber-950/20 dark:via-card dark:to-card hover:border-amber-400 hover:shadow-xl hover:shadow-amber-500/10 transition-all duration-300 flex flex-col"
                   >
+                    {/* Top luxury gold bar */}
+                    <div className="h-2 w-full bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-600 shadow-xs" />
+
                     {m.image_url && (
-                      <div className="h-40 w-full shrink-0 border-b relative bg-muted">
-                        <img src={m.image_url} alt={m.name} className="absolute inset-0 w-full h-full object-cover" />
+                      <div className="h-40 w-full shrink-0 border-b relative bg-muted overflow-hidden">
+                        <img
+                          src={m.image_url}
+                          alt={m.name}
+                          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
                       </div>
                     )}
-                    <CardContent className="p-6 space-y-4 flex-1 flex flex-col">
-                      {/* Header with premium styling */}
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3 flex-1">
-                          <div className="p-2 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-lg text-white">
-                            {getPackageIcon(m.icon || "star")}
+
+                    <CardContent className="p-5 space-y-4 flex-1 flex flex-col">
+                      {/* Header with Royal Crown and VIP Pass badge */}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-yellow-600 text-white flex items-center justify-center shadow-md shadow-amber-500/25 shrink-0">
+                            <Crown className="w-5 h-5 text-white" />
                           </div>
-                          <div className="flex-1">
-                            <h3 className="font-bold text-lg flex items-center gap-2">
-                              {m.name}
-                              <Crown className="w-4 h-4 text-yellow-500" />
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-bold text-xl text-slate-900 dark:text-white tracking-tight flex items-center gap-1.5 truncate">
+                              <span>{m.name}</span>
                             </h3>
-                            <p className="text-sm text-muted-foreground mt-1">{m.description}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                              {m.description || "Exclusive membership perks & priority privileges"}
+                            </p>
                           </div>
                         </div>
-                        {m.category && (
-                          <Badge variant="outline" className="border-yellow-500 text-yellow-700">
-                            {m.category}
-                          </Badge>
-                        )}
+
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700 shadow-2xs">
+                            <Sparkles className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                            VIP Pass
+                          </span>
+                          {m.category && (
+                            <Badge variant="outline" className="text-[11px] font-medium border-amber-200 text-amber-800 dark:text-amber-300">
+                              {m.category}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
 
                       {/* Pricing with membership benefits */}
-                      <div className="bg-gradient-to-r from-yellow-50 to-yellow-100 p-4 rounded-lg border border-yellow-200">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-2xl font-bold text-yellow-700">{formatCurrency(m.price)}</span>
-                            <p className="text-sm text-yellow-600">
-                              Only {formatCurrency(Math.round((m.price / (m.validityDays || 365)) * 30))} per month
+                      <div className="bg-gradient-to-r from-amber-50/90 via-yellow-50/70 to-amber-50/60 dark:from-amber-950/30 dark:via-yellow-950/20 dark:to-slate-900 border border-amber-200/90 dark:border-amber-800/50 rounded-xl p-3.5 flex items-center justify-between">
+                        <div>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-3xl font-black text-amber-900 dark:text-amber-200 tracking-tight">
+                              {formatCurrency(m.price)}
+                            </span>
+                          </div>
+                          <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mt-0.5">
+                            Just {formatCurrency(monthlyPrice)} / month
+                          </p>
+                        </div>
+
+                        <div className="text-right space-y-1">
+                          <div className="inline-flex items-center gap-1 text-xs font-bold text-amber-900 dark:text-amber-200 bg-white/90 dark:bg-slate-800/90 px-2.5 py-1 rounded-md border border-amber-200 dark:border-amber-700/60 shadow-2xs">
+                            <Calendar className="w-3 h-3 text-amber-600" />
+                            {validityText}
+                          </div>
+                          {m.discount_percentage ? (
+                            <p className="text-[11px] font-bold text-amber-700 dark:text-amber-400">
+                              ⭐ {m.discount_percentage}% OFF Services
                             </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-medium text-yellow-700">{m.validityDays} days validity</p>
-                            <p className="text-xs text-yellow-600">Premium membership</p>
-                          </div>
+                          ) : (
+                            <p className="text-[11px] font-medium text-amber-600/80">
+                              Premium Tier
+                            </p>
+                          )}
                         </div>
                       </div>
 
-                      {/* Membership features */}
+                      {/* Membership Perks Section */}
                       <div className="space-y-2">
-                        <h4 className="font-semibold text-sm flex items-center gap-2">
-                          <Users className="w-4 h-4 text-primary" />
-                          Membership Perks:
-                        </h4>
-                        <div className="grid grid-cols-1 gap-1">
-                          {m.features?.slice(0, 2).map((feature, idx) => (
-                            <div key={idx} className="flex items-center gap-2 text-sm">
-                              <Percent className="w-3 h-3 text-green-500" />
-                              {feature}
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                            Membership Perks ({perks.length})
+                          </h4>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          {displayPerks.map((perk, idx) => (
+                            <div key={idx} className="flex items-center gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                              <div className="w-4 h-4 rounded-full bg-amber-100 dark:bg-amber-900/60 flex items-center justify-center shrink-0 text-amber-700 dark:text-amber-300">
+                                <Check className="w-2.5 h-2.5 stroke-[3]" />
+                              </div>
+                              <span className="line-clamp-1">{perk}</span>
                             </div>
                           ))}
-                          {m.features && m.features.length > 2 && (
-                            <Collapsible
-                              open={isExpanded}
-                              onOpenChange={() => setExpandedMembership(isExpanded ? null : m.id)}
+                          {hasMorePerks && (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedMembership(isExpanded ? null : m.id)}
+                              className="text-xs font-semibold text-amber-700 dark:text-amber-400 hover:underline pt-0.5 inline-flex items-center gap-1"
                             >
-                              <CollapsibleTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-auto p-0 text-primary hover:text-primary/80"
-                                >
-                                  <span className="text-sm">
-                                    {isExpanded ? "Show less" : `+${m.features.length - 2} more perks`}
-                                  </span>
-                                  {isExpanded ? (
-                                    <ChevronUp className="w-3 h-3 ml-1" />
-                                  ) : (
-                                    <ChevronDown className="w-3 h-3 ml-1" />
-                                  )}
-                                </Button>
-                              </CollapsibleTrigger>
-                              <CollapsibleContent className="space-y-1 mt-2">
-                                {m.features.slice(2).map((feature, idx) => (
-                                  <div key={idx + 2} className="flex items-center gap-2 text-sm">
-                                    <Percent className="w-3 h-3 text-green-500" />
-                                    {feature}
-                                  </div>
-                                ))}
-                                {m.benefits && (
-                                  <div className="mt-3 pt-3 border-t">
-                                    <h5 className="font-semibold text-sm text-primary mb-2">Exclusive Benefits:</h5>
-                                    {m.benefits.map((benefit, idx) => (
-                                      <div key={idx} className="flex items-center gap-2 text-sm text-primary">
-                                        <Star className="w-3 h-3" />
-                                        {benefit}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </CollapsibleContent>
-                            </Collapsible>
+                              {isExpanded ? "Show less" : `+${perks.length - 3} more perks`}
+                              {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                            </button>
                           )}
                         </div>
                       </div>
@@ -1160,10 +1240,10 @@ export function ServiceSelectionScreen({
 
                       <Button
                         size="lg"
-                        className="w-full mt-auto bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 text-white"
+                        className="w-full mt-auto h-11 bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-600 hover:from-amber-600 hover:via-amber-700 hover:to-yellow-700 text-white font-bold rounded-xl shadow-md shadow-amber-500/25 transition-all flex items-center justify-center gap-2"
                         onClick={() => addToCart("membership", m)}
                       >
-                        <Crown className="w-4 h-4 mr-2" />
+                        <Crown className="w-4 h-4" />
                         Get Membership
                       </Button>
                     </CardContent>
