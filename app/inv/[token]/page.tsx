@@ -106,6 +106,8 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
           bookingId={inv.booking_id ? Number(inv.booking_id) : null} 
           gmbUrl={bizProfile.googleMyBusinessUrl}
           businessName={bizProfile.salonName || "our salon"}
+          serviceName={items[0]?.description || ""}
+          staffName={items[0]?.staffName || ""}
         />
       </div>
     </div>
