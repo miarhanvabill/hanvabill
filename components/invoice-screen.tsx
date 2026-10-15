@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { CheckCircle, Download, Printer as Print, Share, Plus, User, CreditCard } from "lucide-react"
-import { downloadInvoicePDF } from "@/lib/invoice-actions"
+import { downloadInvoicePDF, printInvoice } from "@/lib/invoice-actions"
 import { getBusinessSettings } from "@/app/actions/settings"
 import { InvoiceTemplate } from "@/components/invoice-template"
 import { useEffect } from "react"
@@ -113,11 +113,10 @@ export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
   const handlePrint = async () => {
     setPrinting(true)
     try {
-      // Simulate print preparation
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      window.print()
+      printInvoice("invoice-template-wrapper", `Invoice #${invoice.id}`)
     } catch (error) {
       console.error("Error printing invoice:", error)
+      window.print()
     } finally {
       setPrinting(false)
     }

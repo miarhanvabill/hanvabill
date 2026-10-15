@@ -15,6 +15,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { InvoiceTemplate } from "@/components/invoice-template"
 import { getBusinessSettings } from "@/app/actions/settings"
 import { generateAndDownloadInvoicePDF } from "@/lib/invoice-pdf"
+import { printInvoice } from "@/lib/invoice-actions"
 import { Printer as Print, Download } from "lucide-react"
 import {
   ArrowLeft,
@@ -653,7 +654,7 @@ export default function BookingDetailsPage() {
               <Download className="w-4 h-4" />
               Download PDF
             </Button>
-            <Button onClick={() => window.print()} className="gap-2">
+            <Button onClick={() => printInvoice("invoice-template-wrapper-booking")} className="gap-2">
               <Print className="w-4 h-4" />
               Print
             </Button>

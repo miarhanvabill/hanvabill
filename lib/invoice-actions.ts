@@ -87,12 +87,109 @@ export async function downloadInvoicePDF(invoiceData: any) {
   }
 }
 
-// Print invoice
-export function useInvoicePrint(ref: RefObject<HTMLDivElement | null>) {
-  return useReactToPrint({
-    content: () => ref.current,
-    documentTitle: "Invoice",
+export function printElement(element: HTMLElement, title = "Invoice") {
+  if (typeof window === "undefined" || !element) return
+
+  const iframe = document.createElement("iframe")
+  iframe.setAttribute("style", "position:fixed;right:0;bottom:0;width:0;height:0;border:none;visibility:hidden;")
+  document.body.appendChild(iframe)
+
+  const doc = iframe.contentWindow?.document
+  if (!doc) {
+    window.print()
+    return
+  }
+
+  let styles = ""
+  document.querySelectorAll('link[rel="stylesheet"], style').forEach((node) => {
+    styles += node.outerHTML
   })
+
+  doc.open()
+  doc.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>${title}</title>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        ${styles}
+        <style>
+          @page {
+            margin: 10mm;
+            size: auto;
+          }
+          *, *::before, *::after {
+            box-sizing: border-box;
+          }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            color: #0f172a !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          #print-root {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+          }
+          .shadow-xl, .shadow-lg, .shadow-md, .shadow-sm, .shadow {
+            box-shadow: none !important;
+          }
+          .border-slate-100 {
+            border-color: #e2e8f0 !important;
+          }
+        </style>
+      </head>
+      <body>
+        <div id="print-root">
+          ${element.innerHTML}
+        </div>
+      </body>
+    </html>
+  `)
+  doc.close()
+
+  setTimeout(() => {
+    try {
+      iframe.contentWindow?.focus()
+      iframe.contentWindow?.print()
+    } catch (e) {
+      console.error("Print error:", e)
+      window.print()
+    } finally {
+      setTimeout(() => {
+        if (document.body.contains(iframe)) {
+          document.body.removeChild(iframe)
+        }
+      }, 1500)
+    }
+  }, 250)
+}
+
+export function printInvoice(elementId: string = "invoice-template-wrapper-booking", title = "Invoice") {
+  if (typeof window === "undefined") return
+  const el = document.getElementById(elementId)
+  if (el) {
+    printElement(el, title)
+  } else {
+    window.print()
+  }
+}
+
+// Print invoice hook / handler
+export function useInvoicePrint(ref: RefObject<HTMLDivElement | null>, title = "Invoice") {
+  return () => {
+    if (ref && ref.current) {
+      printElement(ref.current, title)
+    } else {
+      printInvoice("invoice-template-wrapper-booking", title)
+    }
+  }
 }
 
 // Generate shareable link
