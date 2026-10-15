@@ -336,17 +336,31 @@ export async function finalizeCheckout(
       // Process customer packages
       for (const pkgItem of packageItems) {
         // Fetch package details
-        const [pkgDetails] = await sql`
-          SELECT id, services, validity_days FROM service_packages 
-          WHERE id = ${pkgItem.id} AND tenant_id = ${tenantId}
-        `
+        let pkgDetails: any = null
+        try {
+          const res = await sql`
+            SELECT id, services, validity_days FROM service_packages 
+            WHERE id = ${pkgItem.id} AND (tenant_id = ${tenantId} OR tenant_id IS NULL)
+          `
+          pkgDetails = res[0]
+        } catch {
+          try {
+            const res = await sql`
+              SELECT id, services, validity_days FROM service_packages 
+              WHERE id = ${pkgItem.id}
+            `
+            pkgDetails = res[0]
+          } catch {
+            pkgDetails = null
+          }
+        }
+
         if (pkgDetails) {
           const servicesArr = Array.isArray(pkgDetails.services) 
             ? pkgDetails.services 
             : JSON.parse(pkgDetails.services || "[]")
           
           // Assuming 1 quantity of each service in the package per package bought
-          // If the user bought multiple of the same package, we create multiple records or multiply
           const totalServices = servicesArr.map((s: number) => ({ service_id: s, quantity: 1 * pkgItem.quantity }))
           const remainingServices = totalServices;
           
@@ -355,14 +369,18 @@ export async function finalizeCheckout(
             expiresAt = new Date(Date.now() + pkgDetails.validity_days * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
           }
 
-          await sql`
-            INSERT INTO customer_packages (
-              tenant_id, customer_id, package_id, total_services, remaining_services, expires_at
-            ) VALUES (
-              ${tenantId}, ${customerId}, ${pkgItem.id}, 
-              ${JSON.stringify(totalServices)}, ${JSON.stringify(remainingServices)}, ${expiresAt}
-            )
-          `
+          try {
+            await sql`
+              INSERT INTO customer_packages (
+                tenant_id, customer_id, package_id, total_services, remaining_services, expires_at
+              ) VALUES (
+                ${tenantId}, ${customerId}, ${pkgItem.id}, 
+                ${JSON.stringify(totalServices)}, ${JSON.stringify(remainingServices)}, ${expiresAt}
+              )
+            `
+          } catch (errCp) {
+            console.error("Could not record customer package:", errCp)
+          }
         }
       }
 

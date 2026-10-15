@@ -49,7 +49,7 @@ export async function assignPackageToCustomer(params: {
       const [pkgDetails] = await sql`
         SELECT id, name, services, validity_days 
         FROM service_packages 
-        WHERE id = ${params.packageId} AND tenant_id = ${tenantId}
+        WHERE id = ${params.packageId} AND (tenant_id = ${tenantId} OR tenant_id IS NULL)
       `
 
       if (!pkgDetails) {

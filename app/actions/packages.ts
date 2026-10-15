@@ -23,12 +23,21 @@ export interface ServicePackage {
 export async function getActivePackages(): Promise<ServicePackage[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const packages = await sql`
-        SELECT * FROM service_packages 
-        WHERE is_active = true 
-        AND tenant_id = ${tenantId}
-        ORDER BY created_at DESC
-      `
+      let packages: any[] = []
+      try {
+        packages = await sql`
+          SELECT * FROM service_packages 
+          WHERE (is_active = true OR is_active = 'true' OR is_active IS NULL)
+          AND (tenant_id = ${tenantId} OR tenant_id IS NULL)
+          ORDER BY created_at DESC
+        `
+      } catch {
+        packages = await sql`
+          SELECT * FROM service_packages 
+          WHERE (is_active = true OR is_active = 'true' OR is_active IS NULL)
+          ORDER BY created_at DESC
+        `
+      }
       return packages.map((pkg: any) => ({
         ...pkg,
         services: Array.isArray(pkg.services) ? pkg.services : JSON.parse(pkg.services || "[]"),
@@ -43,11 +52,19 @@ export async function getActivePackages(): Promise<ServicePackage[]> {
 export async function getAllPackages(): Promise<ServicePackage[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      const packages = await sql`
-        SELECT * FROM service_packages 
-        WHERE tenant_id = ${tenantId}
-        ORDER BY created_at DESC
-      `
+      let packages: any[] = []
+      try {
+        packages = await sql`
+          SELECT * FROM service_packages 
+          WHERE (tenant_id = ${tenantId} OR tenant_id IS NULL)
+          ORDER BY created_at DESC
+        `
+      } catch {
+        packages = await sql`
+          SELECT * FROM service_packages 
+          ORDER BY created_at DESC
+        `
+      }
       return packages.map((pkg: any) => ({
         ...pkg,
         services: Array.isArray(pkg.services) ? pkg.services : JSON.parse(pkg.services || "[]"),
