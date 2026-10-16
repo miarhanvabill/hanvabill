@@ -124,12 +124,31 @@ export async function GET(req: NextRequest) {
       WHERE customer_id = ${customerId} AND tenant_id = ${tenantId}
     `.catch(() => [{ balance: 0 }])
 
-    // Referral code
+    // Referral code & stats
     const referralCode = `REF${String(customerId).padStart(4, '0')}${String(payload.phone).slice(-4)}`
-    const referralRows = await sql`
-      SELECT COUNT(*) as count FROM customers
-      WHERE referral_code = ${referralCode} AND tenant_id = ${tenantId}
-    `.catch(() => [{ count: 0 }])
+
+    // Fetch referral live stats from referral_records or referrals table
+    const refStats = await sql`
+      SELECT 
+        COUNT(*)::int as invited,
+        COUNT(CASE WHEN status = 'completed' THEN 1 END)::int as visited,
+        COALESCE(SUM(CASE WHEN status = 'completed' THEN reward_amount ELSE 0 END), 0)::numeric as earned
+      FROM referral_records
+      WHERE referrer_id = ${customerId} AND tenant_id = ${tenantId}
+    `.catch(async () => {
+      return await sql`
+        SELECT 
+          COUNT(*)::int as invited,
+          COUNT(CASE WHEN status = 'completed' THEN 1 END)::int as visited,
+          COALESCE(SUM(reward_paid), 0)::numeric as earned
+        FROM referrals
+        WHERE referrer_id = ${customerId} AND tenant_id = ${tenantId}
+      `.catch(() => [{ invited: 0, visited: 0, earned: 0 }])
+    })
+
+    const friendsInvited = Number(refStats[0]?.invited || 0)
+    const friendsVisited = Number(refStats[0]?.visited || 0)
+    const totalEarned = Number(refStats[0]?.earned || 0)
 
     return NextResponse.json({
       success: true,
@@ -144,7 +163,10 @@ export async function GET(req: NextRequest) {
       wallet_balance: Math.max(0, Number(walletRows[0]?.balance || 0)),
       referral: {
         code: referralCode,
-        referrals_count: Number(referralRows[0]?.count || 0)
+        referrals_count: friendsInvited,
+        friends_invited: friendsInvited,
+        friends_visited: friendsVisited,
+        total_earned: totalEarned
       }
     })
   } catch (error: any) {

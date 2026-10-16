@@ -35,9 +35,19 @@ import {
   FileText,
   Store,
   Globe,
+  Share2,
 } from "lucide-react"
 
-const catalogSections = [
+interface ManageSection {
+  title: string
+  description: string
+  icon: any
+  href: string
+  color: string
+  badge?: boolean
+}
+
+const catalogSections: ManageSection[] = [
   {
     title: "Services",
     description:
@@ -62,7 +72,7 @@ const catalogSections = [
   },
 ]
 
-const inventorySections = [
+const inventorySections: ManageSection[] = [
   {
     title: "Products",
     description:
@@ -112,7 +122,7 @@ const inventorySections = [
   },
 ]
 
-const staffSections = [
+const staffSections: ManageSection[] = [
   {
     title: "Staff Management",
     description:
@@ -160,7 +170,7 @@ const staffSections = [
   },
 ]
 
-const billingSections = [
+const billingSections: ManageSection[] = [
   {
     title: "Advanced Billing Reports",
     description: "Deep dive into financial reports, revenue streams, and detailed billing analytics.",
@@ -184,7 +194,15 @@ const billingSections = [
   },
 ]
 
-const retentionSections = [
+const retentionSections: ManageSection[] = [
+  {
+    title: "Refer & Earn Program",
+    description: "Turn clients into promoters with WhatsApp 1-click referrals for first-time visitors.",
+    icon: Share2,
+    href: "/manage/referral-program",
+    color: "bg-emerald-50 text-emerald-600",
+    badge: true,
+  },
   {
     title: "Coupons",
     description: "Create and manage discount coupons to boost sales and attract more clients.",
@@ -218,7 +236,7 @@ const retentionSections = [
   {
     title: "Loyalty Transactions",
     description: "Track all transactions made using loyalty points for accurate customer rewards.",
-    icon: History, CheckCircle,
+    icon: History,
     href: "/manage/loyalty-transactions",
     color: "bg-orange-50 text-orange-600",
   },
@@ -231,7 +249,7 @@ const retentionSections = [
   },
 ]
 
-const miscellaneousSections = [
+const miscellaneousSections: ManageSection[] = [
   {
     title: "Resource Availability",
     description:
@@ -312,7 +330,7 @@ const miscellaneousSections = [
   },
 ]
 
-const integrationSections = [
+const integrationSections: ManageSection[] = [
   {
     title: "WhatsApp Configuration",
     description:
@@ -331,7 +349,7 @@ const integrationSections = [
   },
 ]
 
-const reportsSections = [
+const reportsSections: ManageSection[] = [
   {
     title: "Store Performance",
     description: "Comprehensive analytics and performance metrics for the store, including revenue growth, leaderboards, and quarterly results.",
@@ -342,7 +360,7 @@ const reportsSections = [
   }
 ]
 
-const storeOnlineSections = [
+const storeOnlineSections: ManageSection[] = [
   {
     title: "Plans & Billing",
     description:
@@ -369,7 +387,7 @@ const storeOnlineSections = [
   },
 ]
 
-const additionalSections = [
+const additionalSections: ManageSection[] = [
   {
     title: "Review Questions",
     description: "View customer feedback to improve services and attract new clients.",

@@ -21,6 +21,9 @@ export type WhatsAppEventType =
   | "winback"
   | "loyalty_update"
   | "loyalty_alert"
+  | "referral_reward"
+  | "referral_credit"
+  | "referral_reward_earned"
 
 export interface WhatsAppAutomationRule {
   id: number
@@ -62,6 +65,11 @@ export interface WhatsAppTemplateVariables {
   gmb_url?: string
   points?: string | number
   coupon_code?: string
+  referee_name?: string
+  referrer_name?: string
+  friend_name?: string
+  reward_amount?: string | number
+  new_balance?: string | number
   [key: string]: any
 }
 
@@ -87,6 +95,9 @@ export const CANONICAL_EVENT_TYPES: Record<string, string> = {
   winback: "we_miss_you",
   loyalty_update: "loyalty_update",
   loyalty_alert: "loyalty_update",
+  referral_reward: "referral_reward_earned",
+  referral_credit: "referral_reward_earned",
+  referral_reward_earned: "referral_reward_earned",
 }
 
 export const DEFAULT_AUTOMATION_TEMPLATES: Record<string, { template: string; delay_minutes: number; send_time: string }> = {
@@ -135,6 +146,16 @@ export const DEFAULT_AUTOMATION_TEMPLATES: Record<string, { template: string; de
     delay_minutes: 0,
     send_time: "09:00",
   },
+  referral_reward: {
+    template: "Hey {{customer_name}}! 🎉 Great news! Your friend {{referee_name}} just completed their first visit at {{business_name}}. We've credited ₹{{reward_amount}} to your wallet! Your new wallet balance is ₹{{new_balance}}.",
+    delay_minutes: 0,
+    send_time: "09:00",
+  },
+  referral_reward_earned: {
+    template: "Congratulations {{referrer_name}}! 🎉 Your friend {{friend_name}} just completed their first visit at {{business_name}}. We've credited ₹{{reward_amount}} to your salon wallet! Use it on your next visit.",
+    delay_minutes: 0,
+    send_time: "09:00",
+  },
 }
 
 /**
@@ -160,9 +181,18 @@ export function interpolateTemplate(template: string, variables: WhatsAppTemplat
     vars[snake] = stringVal
   }
 
+  // Cross-alias referral variable names
+  if (!vars["referrer_name"] && vars["customer_name"]) vars["referrer_name"] = vars["customer_name"]
+  if (!vars["customer_name"] && vars["referrer_name"]) vars["customer_name"] = vars["referrer_name"]
+  if (!vars["friend_name"] && vars["referee_name"]) vars["friend_name"] = vars["referee_name"]
+  if (!vars["referee_name"] && vars["friend_name"]) vars["referee_name"] = vars["friend_name"]
+
   // Set default fallbacks for common keys if missing
   if (!vars["business_name"] && !vars["businessname"]) vars["business_name"] = "our salon"
   if (!vars["customer_name"] && !vars["customername"]) vars["customer_name"] = "Valued Customer"
+  if (!vars["referrer_name"] && !vars["referrername"]) vars["referrer_name"] = "Valued Member"
+  if (!vars["friend_name"] && !vars["friendname"]) vars["friend_name"] = "your friend"
+  if (!vars["reward_amount"] && !vars["rewardamount"]) vars["reward_amount"] = "250"
   if (!vars["service_name"] && !vars["servicename"]) vars["service_name"] = "your service"
   if (!vars["staff_name"] && !vars["staffname"]) vars["staff_name"] = "our team"
   if (!vars["points"]) vars["points"] = "0"

@@ -62,6 +62,25 @@ export async function POST(req: Request) {
       LIMIT 1
     `;
 
+    // Check referral code
+    const referralCode = body.referral_code || null;
+    let referrerId: number | null = null;
+    if (referralCode) {
+      const refMatches = await sql`
+        SELECT id FROM customers
+        WHERE tenant_id = ${tenantId}
+          AND (
+            ('REF' || LPAD(id::text, 4, '0') || RIGHT(phone_number, 4)) = ${referralCode}
+            OR ('REF' || id::text) = ${referralCode}
+            OR code = ${referralCode}
+          )
+        LIMIT 1
+      `.catch(() => []);
+      if (refMatches.length > 0) {
+        referrerId = refMatches[0].id;
+      }
+    }
+
     let customerId: number;
     let customerPhone: string;
     let customerName: string;
@@ -70,19 +89,41 @@ export async function POST(req: Request) {
       customerId = existingCustomer[0].id;
       customerPhone = existingCustomer[0].phone_number;
       customerName = existingCustomer[0].full_name;
+
+      // If existing customer tried using a referral code, mark as ineligible repeat client
+      if (referrerId && referrerId !== customerId) {
+        await sql`
+          INSERT INTO referral_records (
+            tenant_id, referrer_id, referee_id, referral_code, status, order_amount, created_at
+          ) VALUES (
+            ${tenantId}, ${referrerId}, ${customerId}, ${referralCode}, 'ineligible', 0, NOW()
+          )
+        `.catch(() => {});
+      }
     } else {
-      // Create new customer
+      // Create new customer (First-Timer!)
       const newCustomer = await sql`
         INSERT INTO customers (
-          tenant_id, full_name, phone_number, email
+          tenant_id, full_name, phone_number, email, referred_by_customer_id
         ) VALUES (
-          ${tenantId}, ${customer.name}, ${customer.phone}, ${customer.email || null}
+          ${tenantId}, ${customer.name}, ${customer.phone}, ${customer.email || null}, ${referrerId}
         )
         RETURNING id, full_name, phone_number
       `;
       customerId = newCustomer[0].id;
       customerPhone = newCustomer[0].phone_number;
       customerName = newCustomer[0].full_name;
+
+      // Record pending referral for first-timer
+      if (referrerId && referrerId !== customerId) {
+        await sql`
+          INSERT INTO referral_records (
+            tenant_id, referrer_id, referee_id, referral_code, status, order_amount, created_at
+          ) VALUES (
+            ${tenantId}, ${referrerId}, ${customerId}, ${referralCode}, 'pending', 0, NOW()
+          )
+        `.catch(() => {});
+      }
     }
 
     // Get service amounts

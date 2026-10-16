@@ -6,6 +6,7 @@ import { notFound } from "next/navigation"
 import { getInvoiceByShareToken } from "@/app/actions/invoices"
 import { InvoiceTemplate } from "@/components/invoice-template"
 import { ReviewWidget } from "@/components/review-widget"
+import { InvoiceReferralGiftCard } from "@/components/invoice-referral-gift-card"
 
 export default async function PublicInvoicePage({ params }: { params: Promise<{ token: string }> }) {
   const resolvedParams = await params;
@@ -101,6 +102,20 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     <div className="min-h-screen bg-slate-50 py-12 print:py-0 print:bg-white">
       <div className="max-w-4xl mx-auto px-4 print:px-0 print:max-w-none" id="invoice-template-wrapper">
         <InvoiceTemplate data={data} className="bg-white shadow-xl mx-auto print:shadow-none" />
+        
+        {/* Gift to a Friend on WhatsApp Card */}
+        <InvoiceReferralGiftCard
+          customerName={inv.customer_name}
+          customerId={inv.customer_id ? Number(inv.customer_id) : null}
+          customerPhone={inv.customer_phone}
+          salonName={bizProfile.salonName || "Hanva Salon"}
+          bookingSlug={res.bookingSlug || String(inv.tenant_id)}
+          discountAmount={Number(res.referralSettings?.referee_discount_amount) || 250}
+          rewardAmount={Number(res.referralSettings?.referrer_reward_amount) || 250}
+          minOrderAmount={Number(res.referralSettings?.minimum_order_amount) || 700}
+          shareTemplate={res.referralSettings?.share_message_template}
+        />
+
         <ReviewWidget 
           tenantId={String(inv.tenant_id)} 
           bookingId={inv.booking_id ? Number(inv.booking_id) : null} 

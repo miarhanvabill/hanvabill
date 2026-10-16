@@ -2,7 +2,7 @@
 "use client"
 import React, { useEffect, useState, use, useMemo, useRef } from "react"
 import { format, addDays, startOfToday, parse, isBefore, isSameDay } from "date-fns"
-import { Calendar, Clock, CheckCircle, ChevronLeft, ChevronRight, MapPin, Search, Phone, Share2, X, ShoppingCart, Facebook, Instagram, Twitter, MessageCircle, Send, Star, ChevronDown, ChevronUp, Plus, Minus, StarHalf, Users } from "lucide-react"
+import { Calendar, Clock, CheckCircle, ChevronLeft, ChevronRight, MapPin, Search, Phone, Share2, X, ShoppingCart, Facebook, Instagram, Twitter, MessageCircle, Send, Star, ChevronDown, ChevronUp, Plus, Minus, StarHalf, Users, Copy, Check, Gift, Sparkles, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -76,7 +76,13 @@ interface PortalProfile {
   memberships: any[]
   packages: any[]
   wallet_balance: number
-  referral: { code: string; referrals_count: number }
+  referral: {
+    code: string
+    referrals_count: number
+    friends_invited?: number
+    friends_visited?: number
+    total_earned?: number
+  }
 }
 
 const getCategoryFallbackImage = (categoryName: string) => {
@@ -229,6 +235,29 @@ const [editingProfile, setEditingProfile] = useState(false)
 const [profileEditForm, setProfileEditForm] = useState<Partial<PortalCustomer>>({})
 const [savingProfile, setSavingProfile] = useState(false)
 
+// Referral State & Detection
+const [referralCode, setReferralCode] = useState<string | null>(null)
+const [referralSettings, setReferralSettings] = useState<any>(null)
+const [copiedRefCode, setCopiedRefCode] = useState(false)
+const [copiedRefLink, setCopiedRefLink] = useState(false)
+
+useEffect(() => {
+  if (typeof window !== "undefined") {
+    const urlParams = new URLSearchParams(window.location.search)
+    const refParam = urlParams.get("ref")
+    if (refParam) {
+      setReferralCode(refParam)
+      try {
+        localStorage.setItem(`referral_code_${slug}`, refParam)
+      } catch {}
+    } else {
+      try {
+        const cached = localStorage.getItem(`referral_code_${slug}`)
+        if (cached) setReferralCode(cached)
+      } catch {}
+    }
+  }
+}, [slug])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -241,6 +270,7 @@ const [savingProfile, setSavingProfile] = useState(false)
         setTenantId(data.tenantId)
         setBusiness(data.business)
         if (data.miniWebsite) setMiniWebsite(data.miniWebsite)
+        if (data.referralSettings) setReferralSettings(data.referralSettings)
         setServices(data.services || [])
         setProducts(data.products || [])
         setPackages(data.packages || [])
@@ -499,7 +529,8 @@ END:VCALENDAR`
           date: format(selectedDate, "yyyy-MM-dd"),
           time: selectedTime,
           staff_id: selectedStaff === 'any' ? null : selectedStaff?.id,
-          customer: customerForm
+          customer: customerForm,
+          referral_code: referralCode,
         })
       })
       
@@ -1264,24 +1295,109 @@ const ProfileDrawer = () => (
 
         {profileTab === 'referral' && portalProfile && (
           <div className="space-y-4">
-            <h3 className="font-black text-lg">Refer & Earn</h3>
-            <div className="bg-gradient-to-br from-black to-gray-800 text-white rounded-3xl p-6 text-center">
-              <p className="text-xs opacity-60 mb-2">YOUR REFERRAL CODE</p>
-              <p className="text-3xl font-black tracking-widest mb-4">{portalProfile.referral.code}</p>
-              <button
-                onClick={() => { navigator.clipboard?.writeText(portalProfile.referral.code); alert('Copied!') }}
-                className="bg-white text-black text-sm font-bold px-6 py-2 rounded-full"
-              >
-                Copy Code
-              </button>
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-lg">Refer & Earn</h3>
+              <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-300 text-[11px] font-bold">
+                First-Time Visitors Only
+              </Badge>
             </div>
-            <div className="bg-green-50 rounded-2xl p-4 text-center">
-              <p className="text-3xl font-black text-green-600">{portalProfile.referral.referrals_count}</p>
-              <p className="text-sm text-gray-600">Friends Referred</p>
+
+            <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-800 rounded-2xl text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed">
+              Your friend gets <strong>₹{referralSettings?.referee_discount_amount || 250}</strong> on their very first booking (min bill ₹{referralSettings?.minimum_order_amount || 700}). You get <strong>₹{referralSettings?.referrer_reward_amount || 250}</strong> in your salon wallet as soon as they complete their visit!
             </div>
-            <div className="bg-gray-50 rounded-2xl p-4 text-sm text-gray-600">
-              <p className="font-bold mb-1">How it works</p>
-              <p>Share your code with friends. When they complete their first booking, you both earn loyalty points!</p>
+
+            {/* Referral Code Showcase */}
+            <div className="bg-gradient-to-br from-zinc-950 via-zinc-900 to-black text-white rounded-3xl p-5 text-center shadow-lg border border-zinc-800 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
+              <p className="text-[10px] tracking-widest uppercase text-zinc-400 font-bold mb-1.5">
+                YOUR REFERRAL CODE
+              </p>
+              <p className="text-3xl font-black tracking-widest font-mono text-emerald-400 mb-4 select-all">
+                {portalProfile.referral.code}
+              </p>
+
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(portalProfile.referral.code)
+                    setCopiedRefCode(true)
+                    setTimeout(() => setCopiedRefCode(false), 2000)
+                  }}
+                  className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-4 py-2 rounded-full transition-colors flex items-center gap-1.5 border border-white/10"
+                >
+                  {copiedRefCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedRefCode ? "Code Copied!" : "Copy Code"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const link = `https://biz.hanva.in/book/${slug}?ref=${portalProfile.referral.code}`
+                    navigator.clipboard?.writeText(link)
+                    setCopiedRefLink(true)
+                    setTimeout(() => setCopiedRefLink(false), 2000)
+                  }}
+                  className="bg-white text-black hover:bg-gray-100 text-xs font-bold px-4 py-2 rounded-full transition-colors flex items-center gap-1.5 shadow-sm"
+                >
+                  {copiedRefLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5" />}
+                  {copiedRefLink ? "Link Copied!" : "Copy Link"}
+                </button>
+              </div>
+            </div>
+
+            {/* Big 1-Click WhatsApp Share Button */}
+            <button
+              type="button"
+              onClick={() => {
+                const link = `https://biz.hanva.in/book/${slug}?ref=${portalProfile.referral.code}`
+                const salon = business?.name || "Hanva Salon"
+                const discount = referralSettings?.referee_discount_amount || 250
+                const minOrder = referralSettings?.minimum_order_amount || 700
+                const msg = `Hey! 🌸 I love my salon ${salon}. Use my link to get ₹${discount} off your first visit (Min bill ₹${minOrder}): ${link}`
+                const waUrl = `https://wa.me/?text=${encodeURIComponent(msg)}`
+                window.open(waUrl, "_blank")
+              }}
+              className="w-full bg-[#25D366] hover:bg-[#20ba59] active:scale-[0.99] text-white py-3.5 px-6 rounded-2xl font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 text-sm sm:text-base"
+            >
+              <MessageCircle className="w-5 h-5 fill-current" />
+              <span>Share on WhatsApp 📲</span>
+            </button>
+
+            {/* Live Stats Tracker */}
+            <div className="grid grid-cols-3 gap-2.5 pt-1">
+              <div className="bg-blue-50/70 border border-blue-100 rounded-2xl p-3 text-center">
+                <p className="text-xl sm:text-2xl font-black text-blue-600">
+                  {portalProfile.referral.friends_invited ?? portalProfile.referral.referrals_count ?? 0}
+                </p>
+                <p className="text-[11px] font-semibold text-gray-500 mt-0.5">Friends Invited</p>
+              </div>
+
+              <div className="bg-emerald-50/70 border border-emerald-100 rounded-2xl p-3 text-center">
+                <p className="text-xl sm:text-2xl font-black text-emerald-600">
+                  {portalProfile.referral.friends_visited ?? 0}
+                </p>
+                <p className="text-[11px] font-semibold text-gray-500 mt-0.5">Friends Visited</p>
+              </div>
+
+              <div className="bg-purple-50/70 border border-purple-100 rounded-2xl p-3 text-center">
+                <p className="text-xl sm:text-2xl font-black text-purple-600">
+                  ₹{portalProfile.referral.total_earned ?? 0}
+                </p>
+                <p className="text-[11px] font-semibold text-gray-500 mt-0.5">Wallet Earned</p>
+              </div>
+            </div>
+
+            {/* How it works info */}
+            <div className="bg-gray-50 rounded-2xl p-4 text-xs text-gray-600 space-y-2">
+              <p className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-emerald-600" /> How Referrals Work
+              </p>
+              <ol className="list-decimal pl-4 space-y-1 text-muted-foreground leading-relaxed">
+                <li>Send your link to friends via WhatsApp or social media.</li>
+                <li>They get <strong>₹{referralSettings?.referee_discount_amount || 250} OFF</strong> automatically on their very first booking.</li>
+                <li>Once their visit is completed (min bill ₹{referralSettings?.minimum_order_amount || 700}), <strong>₹{referralSettings?.referrer_reward_amount || 250}</strong> is credited directly to your salon wallet!</li>
+              </ol>
             </div>
           </div>
         )}
@@ -1296,6 +1412,25 @@ const ProfileDrawer = () => (
   return (
     <div className="min-h-screen bg-gray-50/50 pb-32 font-sans selection:bg-black selection:text-white transition-all duration-300 relative">
       
+      {/* Prominent Referral Gift Top Banner */}
+      {referralCode && (
+        <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white px-4 py-3 shadow-md sticky top-0 z-[60]">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs sm:text-sm font-medium">
+            <div className="flex items-center gap-2 text-center sm:text-left">
+              <span className="text-lg">🎁</span>
+              <span>
+                Referral Gift: <strong className="font-bold underline decoration-white/40">₹{referralSettings?.referee_discount_amount || 250} OFF</strong> on your first visit! (Min bill ₹{referralSettings?.minimum_order_amount || 700}) • Applied from your friend
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Badge variant="secondary" className="bg-white/20 hover:bg-white/30 text-white border-0 text-[11px] font-mono tracking-wider px-2.5 py-0.5 rounded-full font-bold">
+                REF: {referralCode}
+              </Badge>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showLoginModal && <LoginModal />}
       {showProfileDrawer && <ProfileDrawer />}
 

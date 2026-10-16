@@ -239,8 +239,28 @@ export async function getInvoiceByShareToken(token: string) {
     console.error("DEBUG ERROR:", err);
       console.error("Error fetching store settings for public invoice:", err);
     }
+
+    let referralSettings = null;
+    let bookingSlug = tenantId ? tenantId.toString() : "salon";
+    try {
+      const miniWebRows = await sql`
+        SELECT custom_url_slug FROM mini_website_settings WHERE tenant_id = ${tenantId.toString()} LIMIT 1
+      `;
+      if (miniWebRows[0]?.custom_url_slug) {
+        bookingSlug = miniWebRows[0].custom_url_slug;
+      }
+      const refRows = await sql`
+        SELECT is_active, referrer_reward_amount, referee_discount_amount, minimum_order_amount, share_message_template
+        FROM referral_settings WHERE tenant_id = ${tenantId.toString()} LIMIT 1
+      `;
+      if (refRows.length > 0) {
+        referralSettings = refRows[0];
+      }
+    } catch (refErr) {
+      console.warn("Could not load referral info for invoice:", refErr);
+    }
     
-    return { success: true, invoice: result[0], businessSettings }
+    return { success: true, invoice: result[0], businessSettings, referralSettings, bookingSlug }
   } catch (error) {
     console.error("Error fetching invoice by token:", error)
     return { success: false, message: "Failed to fetch invoice" }

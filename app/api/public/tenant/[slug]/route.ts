@@ -165,6 +165,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       }
     }
 
+    // Fetch referral settings
+    const referralRows = await sql`
+      SELECT is_active, referrer_reward_amount, referee_discount_amount, minimum_order_amount, validity_days, share_message_template
+      FROM referral_settings
+      WHERE tenant_id = ${tenantId}
+      LIMIT 1
+    `.catch(() => []);
+
+    const referralSettings = referralRows[0] || {
+      is_active: true,
+      referrer_reward_amount: 250,
+      referee_discount_amount: 250,
+      minimum_order_amount: 700,
+      validity_days: 45,
+      share_message_template: "Hey! 🌸 I love my salon {salon_name}. Use my link to get ₹{discount} off your first visit: {link}"
+    };
+
     return NextResponse.json({
       success: true,
       tenantId,
@@ -176,7 +193,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
       staff,
       rating,
       galleryImages,
-      miniWebsite
+      miniWebsite,
+      referralSettings,
     });
   } catch (error) {
     console.error("Error fetching public tenant info:", error);
