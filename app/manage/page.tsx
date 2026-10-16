@@ -410,12 +410,6 @@ export default function ManagePage() {
   const router = useRouter()
 
   const handleCardClick = (section: any) => {
-    // Show loading toast
-    toast({
-      title: "Loading...",
-      description: `Opening ${section.title}`,
-    })
-
     // Navigate to the appropriate route
     if (section.href) {
       router.push(section.href)
