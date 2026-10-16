@@ -42,46 +42,65 @@ export async function GET(request: NextRequest) {
     }
     const resolvedTenantId = tenantCheck[0].id;
 
-    // Query booked time slots — filter by staff if provided
-    let bookedSlots: any[];
-    if (staffId && staffId !== 'any') {
-      bookedSlots = await sql`
-        SELECT booking_time
-        FROM bookings
-        WHERE tenant_id = ${resolvedTenantId}
-          AND booking_date = ${date}
-          AND staff_id = ${staffId}
-          AND status != 'cancelled'
-        ORDER BY booking_time
-      `;
-    } else {
-      // For "Any staff", a slot is only unavailable if all active stylists are booked
-      const staffCountRows = await sql`
-        SELECT COUNT(*)::int as count 
-        FROM staff 
-        WHERE tenant_id = ${resolvedTenantId} AND is_active = true
-      `.catch(() => [{ count: 1 }]);
-      const activeStaffCount = Math.max(Number(staffCountRows[0]?.count || 1), 1);
+function expandDurationToSlots(startTimeStr: string, durationMinutes: number = 30): string[] {
+  if (!startTimeStr) return [];
+  const cleanTime = startTimeStr.substring(0, 5);
+  const [hStr, mStr] = cleanTime.split(":");
+  const h = parseInt(hStr, 10);
+  const m = parseInt(mStr, 10);
+  if (isNaN(h) || isNaN(m)) return [cleanTime];
 
-      bookedSlots = await sql`
-        SELECT booking_time
-        FROM bookings
-        WHERE tenant_id = ${resolvedTenantId}
-          AND booking_date = ${date}
-          AND status != 'cancelled'
-          AND staff_id IS NOT NULL
-        GROUP BY booking_time
-        HAVING COUNT(DISTINCT staff_id) >= ${activeStaffCount}
-        ORDER BY booking_time
-      `.catch(() => []);
+  const slots: string[] = [];
+  const startMins = h * 60 + m;
+  const duration = Math.max(durationMinutes, 30);
+  const endMins = startMins + duration;
+
+  for (let current = startMins; current < endMins; current += 30) {
+    const curH = Math.floor(current / 60);
+    const curM = current % 60;
+    const formatted = `${String(curH).padStart(2, "0")}:${String(curM).padStart(2, "0")}`;
+    slots.push(formatted);
+  }
+  return slots;
+}
+
+    // Query all active bookings on date for tenant with duration
+    const bookings = await sql`
+      SELECT 
+        b.id,
+        b.booking_time::text,
+        b.staff_id,
+        COALESCE(NULLIF(SUM(s.duration_minutes), 0), 30)::int as duration_minutes
+      FROM bookings b
+      LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${resolvedTenantId} OR bs.tenant_id IS NULL)
+      LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${resolvedTenantId} OR s.tenant_id IS NULL)
+      WHERE b.tenant_id = ${resolvedTenantId}
+        AND b.booking_date = ${date}
+        AND b.status != 'cancelled'
+      GROUP BY b.id, b.booking_time, b.staff_id
+      ORDER BY b.booking_time ASC
+    `.catch(() => []);
+
+    const bookedSlotSet = new Set<string>();
+
+    for (const b of bookings) {
+      if (!b.booking_time) continue;
+
+      // If a specific staffId was provided, match this staff OR unassigned booking
+      if (staffId && staffId !== 'any') {
+        const staffMatches = !b.staff_id || String(b.staff_id) === String(staffId);
+        if (!staffMatches) continue;
+      }
+
+      const duration = Number(b.duration_minutes) || 30;
+      const spannedSlots = expandDurationToSlots(b.booking_time, duration);
+      for (const slot of spannedSlots) {
+        bookedSlotSet.add(slot);
+      }
     }
 
-    // Normalize times to HH:MM strings
-    const booked_slots = bookedSlots.map((row: any) => {
-      const t = row.booking_time;
-      if (typeof t === "string") return t.substring(0, 5); // trim seconds if present
-      return t;
-    });
+    // Normalize and sort booked time slots
+    const booked_slots = Array.from(bookedSlotSet).sort();
 
     return NextResponse.json({
       success: true,

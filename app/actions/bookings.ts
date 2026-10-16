@@ -428,6 +428,60 @@ export async function createBooking(formData: FormData) {
         }
       }
 
+      // Conflict Prevention: Ensure time slot is not already booked on this date
+      const [reqH, reqM] = timeStr.split(":").map(Number)
+      const reqStartMins = (reqH || 0) * 60 + (reqM || 0)
+
+      let reqDuration = 30
+      if (finalServiceIds.length > 0) {
+        const durRows = await sql`
+          SELECT COALESCE(NULLIF(SUM(duration_minutes), 0), 30)::int as duration 
+          FROM services 
+          WHERE id = ANY(${finalServiceIds}) AND tenant_id = ${tenantId}
+        `.catch(() => [])
+        if (durRows[0]?.duration) {
+          reqDuration = Number(durRows[0].duration)
+        }
+      }
+      const reqEndMins = reqStartMins + reqDuration
+
+      const conflictingBookings = await sql`
+        SELECT 
+          b.id,
+          b.booking_time::text,
+          b.staff_id,
+          COALESCE(NULLIF(SUM(s.duration_minutes), 0), 30)::int as duration_minutes
+        FROM bookings b
+        LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+        LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
+        WHERE b.tenant_id = ${tenantId}
+          AND b.booking_date = ${dateStr}
+          AND b.status != 'cancelled'
+        GROUP BY b.id, b.booking_time, b.staff_id
+      `.catch(() => [])
+
+      const hasConflict = conflictingBookings.some((b: any) => {
+        if (!b.booking_time) return false
+        const bClean = String(b.booking_time).substring(0, 5)
+        const [h, m] = bClean.split(":").map(Number)
+        const bStart = (h || 0) * 60 + (m || 0)
+        const bEnd = bStart + (Number(b.duration_minutes) || 30)
+
+        if (finalStaffId) {
+          const matchesStaff = !b.staff_id || Number(b.staff_id) === Number(finalStaffId)
+          if (!matchesStaff) return false
+        }
+
+        return reqStartMins < bEnd && reqEndMins > bStart
+      })
+
+      if (hasConflict) {
+        return {
+          success: false,
+          message: `The time slot ${timeStr.slice(0, 5)} is already booked. Please choose another time.`,
+        }
+      }
+
       const timestamp = Date.now()
       const bookingNumber = `BK${timestamp.toString().slice(-8)}${Math.floor(Math.random() * 100)
         .toString()
@@ -1146,6 +1200,42 @@ export async function updateBookingTime(
             }
           }
         }
+      } else {
+        // General conflict check when staff is unassigned
+        const [durationRow] = await sql`
+          SELECT COALESCE(NULLIF(SUM(s.duration_minutes), 0), 30)::int as duration
+          FROM booking_services bs
+          JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
+          WHERE bs.booking_id = ${bookingId} AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+        `.catch(() => [{ duration: 30 }])
+        const targetDuration = Number(durationRow?.duration) || 30
+        const [targetH, targetM] = newTime.split(":").map(Number)
+        const targetStartMins = (targetH || 0) * 60 + (targetM || 0)
+        const targetEndMins = targetStartMins + targetDuration
+
+        const generalConflicts = await sql`
+          SELECT b.id, b.booking_time::text, COALESCE(NULLIF(SUM(s.duration_minutes), 0), 30)::int as duration
+          FROM bookings b
+          LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+          LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
+          WHERE b.booking_date = ${newDate}
+            AND b.tenant_id = ${tenantId}
+            AND b.id != ${bookingId}
+            AND b.status != 'cancelled'
+          GROUP BY b.id, b.booking_time
+        `.catch(() => [])
+
+        for (const c of generalConflicts) {
+          const [cH, cM] = String(c.booking_time).split(":").map(Number)
+          const cStart = (cH || 0) * 60 + (cM || 0)
+          const cEnd = cStart + (Number(c.duration) || 30)
+          if (targetStartMins < cEnd && targetEndMins > cStart) {
+            return {
+              success: false,
+              message: `This time slot (${newTime.slice(0, 5)}) is already booked. Please choose another time.`,
+            }
+          }
+        }
       }
       
       if (newResourceId !== undefined) {
@@ -1289,6 +1379,42 @@ export async function updateBooking(data: UpdateBookingData): Promise<{
             return {
               success: false,
               message: `Staff member has a conflicting booking starting at ${String(c.booking_time).slice(0, 5)}.`,
+            }
+          }
+        }
+      } else if (bookingDate || bookingTime) {
+        // General conflict check when staff is unassigned
+        const [targetDurationRow] = await sql`
+          SELECT COALESCE(NULLIF(SUM(s.duration_minutes), 0), 30)::int as duration
+          FROM booking_services bs
+          JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
+          WHERE bs.booking_id = ${bookingId} AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+        `.catch(() => [{ duration: 30 }])
+        const targetDuration = Number(targetDurationRow?.duration) || 30
+        const [tH, tM] = String(finalTime).split(":").map(Number)
+        const tStart = (tH || 0) * 60 + (tM || 0)
+        const tEnd = tStart + targetDuration
+
+        const generalConflicts = await sql`
+          SELECT b.id, b.booking_time::text, COALESCE(NULLIF(SUM(s.duration_minutes), 0), 30)::int as duration
+          FROM bookings b
+          LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+          LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
+          WHERE b.booking_date = ${finalDate}
+            AND b.tenant_id = ${tenantId}
+            AND b.id != ${bookingId}
+            AND b.status != 'cancelled'
+          GROUP BY b.id, b.booking_time
+        `.catch(() => [])
+
+        for (const c of generalConflicts) {
+          const [cH, cM] = String(c.booking_time).split(":").map(Number)
+          const cStart = (cH || 0) * 60 + (cM || 0)
+          const cEnd = cStart + (Number(c.duration) || 30)
+          if (tStart < cEnd && tEnd > cStart) {
+            return {
+              success: false,
+              message: `This time slot (${String(finalTime).slice(0, 5)}) is already booked. Please choose another time.`,
             }
           }
         }

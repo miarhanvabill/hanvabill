@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CustomerSelectionModal } from "@/components/customer-selection-modal"
 import { ServiceSelectionModal, type SelectedService } from "@/components/service-selection-modal"
 import { ArrowLeft, User, Calendar, IndianRupee } from "lucide-react"
-import { createBooking } from "@/app/actions/bookings"
+import { createBooking, getBookings } from "@/app/actions/bookings"
 import { getStaff, type Staff } from "@/app/actions/staff"
 import { toast } from "@/hooks/use-toast"
 import Link from "next/link"
@@ -49,9 +49,38 @@ export default function CreateBookingPage() {
     status: "pending",
   })
 
+  const [bookedSlots, setBookedSlots] = useState<string[]>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
+
   useEffect(() => {
     loadStaff()
   }, [])
+
+  useEffect(() => {
+    if (!formData.booking_date) {
+      setBookedSlots([])
+      return
+    }
+    setLoadingSlots(true)
+    getBookings(formData.booking_date, formData.booking_date)
+      .then((bList) => {
+        const slots: string[] = []
+        bList.forEach((b) => {
+          if (b.status !== "cancelled" && b.booking_time) {
+            const time = String(b.booking_time).slice(0, 5)
+            if (formData.staff_id) {
+              if (b.staff_id && String(b.staff_id) !== formData.staff_id) {
+                return
+              }
+            }
+            slots.push(time)
+          }
+        })
+        setBookedSlots(Array.from(new Set(slots)).sort())
+      })
+      .catch(() => setBookedSlots([]))
+      .finally(() => setLoadingSlots(false))
+  }, [formData.booking_date, formData.staff_id])
 
   const loadStaff = async () => {
     try {
@@ -110,6 +139,15 @@ export default function CreateBookingPage() {
       toast({
         title: "Error",
         description: "Please select date and time",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (formData.booking_time && bookedSlots.includes(formData.booking_time.slice(0, 5))) {
+      toast({
+        title: "Time Slot Unavailable",
+        description: `The time slot ${formData.booking_time.slice(0, 5)} is already booked on this date. Please choose another time.`,
         variant: "destructive",
       })
       return
@@ -300,8 +338,20 @@ export default function CreateBookingPage() {
                     type="time"
                     value={formData.booking_time}
                     onChange={(e) => setFormData({ ...formData, booking_time: e.target.value })}
+                    className={formData.booking_time && bookedSlots.includes(formData.booking_time.slice(0, 5)) ? "border-red-500 focus-visible:ring-red-500 bg-red-50/40" : ""}
                     required
                   />
+                  {formData.booking_time && bookedSlots.includes(formData.booking_time.slice(0, 5)) && (
+                    <p className="text-xs text-red-600 font-semibold mt-1">
+                      ⚠️ {formData.booking_time.slice(0, 5)} is already booked. Please choose another time.
+                    </p>
+                  )}
+                  {bookedSlots.length > 0 && (
+                    <div className="mt-2 p-2 bg-gray-50 border border-gray-100 rounded-lg text-xs text-gray-600">
+                      <span className="font-semibold text-gray-800">Booked on this date: </span>
+                      <span className="text-red-600 font-medium">{bookedSlots.join(", ")}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 

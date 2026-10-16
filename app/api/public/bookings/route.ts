@@ -130,7 +130,7 @@ export async function POST(req: Request) {
     let serviceRows: any[] = [];
     if (servicesToBook && servicesToBook.length > 0) {
       serviceRows = await sql`
-        SELECT id, name, price 
+        SELECT id, name, price, duration_minutes 
         FROM services 
         WHERE id = ANY(${servicesToBook}) AND tenant_id = ${tenantId} AND is_active = true
       `;
@@ -138,6 +138,51 @@ export async function POST(req: Request) {
     const serviceAmount = serviceRows.reduce((sum, s) => sum + Number(s.price), 0);
     const amount = serviceAmount > 0 ? serviceAmount : (body.total_amount_client || 0);
     const finalNotes = extra_notes || "Online Booking";
+
+    // Conflict Prevention: Verify that the requested time slot is not already booked
+    const reqCleanTime = time.substring(0, 5);
+    const [reqH, reqM] = reqCleanTime.split(":").map(Number);
+    const reqStartMins = (reqH || 0) * 60 + (reqM || 0);
+
+    const reqDurationMinutes = serviceRows.reduce((sum, s) => sum + (Number(s.duration_minutes) || 30), 0) || 30;
+    const reqEndMins = reqStartMins + reqDurationMinutes;
+
+    const existingBookings = await sql`
+      SELECT 
+        b.id,
+        b.booking_time::text,
+        b.staff_id,
+        COALESCE(NULLIF(SUM(s.duration_minutes), 0), 30)::int as duration_minutes
+      FROM bookings b
+      LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+      LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
+      WHERE b.tenant_id = ${tenantId}
+        AND b.booking_date = ${date}
+        AND b.status != 'cancelled'
+      GROUP BY b.id, b.booking_time, b.staff_id
+    `.catch(() => []);
+
+    const hasConflict = existingBookings.some((b: any) => {
+      if (!b.booking_time) return false;
+      const bClean = String(b.booking_time).substring(0, 5);
+      const [h, m] = bClean.split(":").map(Number);
+      const bStart = (h || 0) * 60 + (m || 0);
+      const bEnd = bStart + (Number(b.duration_minutes) || 30);
+
+      if (staff_id) {
+        const matchesStaff = !b.staff_id || String(b.staff_id) === String(staff_id);
+        if (!matchesStaff) return false;
+      }
+
+      return reqStartMins < bEnd && reqEndMins > bStart;
+    });
+
+    if (hasConflict) {
+      return NextResponse.json(
+        { error: `This time slot (${reqCleanTime}) is already booked. Please choose another time.` },
+        { status: 409 }
+      );
+    }
 
     // Generate booking number
     const bookingNumber = "BKG-" + Math.floor(100000 + Math.random() * 900000);

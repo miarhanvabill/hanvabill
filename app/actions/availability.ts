@@ -477,6 +477,28 @@ export async function getAvailableSlots(params: AvailabilityCheckParams): Promis
           return { available: true }
         }
 
+        // Check if any active booking already occupies this time slot
+        const hasSlotConflict = bookingRows.some((b: any) => {
+          if (!b.booking_time) return false
+          const bStart = parseTimeToMinutes(b.booking_time)
+          const bEnd = bStart + (Number(b.duration_minutes) || 30)
+          if (staffId) {
+            const matchesStaff = !b.staff_id || Number(b.staff_id) === Number(staffId)
+            if (!matchesStaff) return false
+          }
+          return slotStart < bEnd && slotEnd > bStart
+        })
+
+        if (hasSlotConflict) {
+          return {
+            time: timeStr,
+            label,
+            available: false,
+            reason: "Time slot is already booked",
+            availableStaffIds: [],
+          }
+        }
+
         if (staffId) {
           const check = isStaffAvailableForSlot(Number(staffId))
           return {

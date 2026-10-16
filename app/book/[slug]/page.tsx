@@ -311,10 +311,10 @@ useEffect(() => {
            setLoadingAvailability(true)
            const staffParam = selectedStaff && selectedStaff !== 'any' ? `&staffId=${selectedStaff.id}` : ''
            fetch(`/api/public/availability?tenantId=${tenantId}&date=${dateStr}${staffParam}`)
-             .then(r => r.json())
              .then(d => {
                 if (d.success && d.booked_slots) {
-                   setBookedSlots(prev => ({ ...prev, [slotKey]: d.booked_slots }))
+                   setBookedSlots(prev => ({ ...prev, [slotKey]: d.booked_slots, [dateStr]: d.booked_slots }))
+                   setSelectedTime(prevTime => (prevTime && d.booked_slots.includes(prevTime) ? null : prevTime))
                 } else {
                    setBookedSlots(prev => ({ ...prev, [slotKey]: [] }))
                 }
@@ -2269,25 +2269,26 @@ const ProfileDrawer = () => (
                        return (
                          <button
                            key={time}
+                           type="button"
                            disabled={isBooked}
-                           onClick={() => setSelectedTime(time)}
+                           onClick={() => !isBooked && setSelectedTime(time)}
                            className={`relative py-3.5 rounded-xl text-sm font-bold transition-all duration-300 border-2 overflow-hidden ${
-                             isBooked 
-                               ? 'bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed opacity-70' 
-                               : isSelected 
-                                 ? 'bg-black border-black text-white shadow-lg scale-105' 
+                             isBooked
+                               ? 'bg-gray-100/80 border-gray-200 text-gray-400 cursor-not-allowed opacity-60'
+                               : isSelected
+                                 ? 'bg-black border-black text-white shadow-lg scale-105'
                                  : 'bg-white border-gray-100 text-gray-700 hover:border-gray-900 hover:text-gray-900 hover:shadow-md'
                            }`}
                          >
                            {isBooked && (
                               <>
-                                 <div className="absolute inset-0 flex items-center justify-center opacity-30">
+                                 <div className="absolute inset-0 flex items-center justify-center opacity-40">
                                     <div className="w-full h-px bg-red-500 rotate-[-15deg]"></div>
                                  </div>
-                                 <div className="absolute top-0 right-0 bg-gray-200 text-gray-600 text-[9px] px-1 rounded-bl-lg font-black uppercase">Booked</div>
+                                 <div className="absolute top-0 right-0 bg-red-50 text-red-600 border-l border-b border-red-200 text-[9px] px-1.5 py-0.5 rounded-bl-lg font-black uppercase tracking-wider">Booked</div>
                               </>
                            )}
-                           <span className={isBooked ? 'line-through' : ''}>{time}</span>
+                           <span className={isBooked ? 'line-through text-gray-400' : ''}>{time}</span>
                          </button>
                        )
                      })}

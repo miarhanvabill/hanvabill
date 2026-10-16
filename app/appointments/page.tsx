@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -171,11 +171,42 @@ export default function AppointmentsPage() {
     }
   }
 
+  const bookedSlotsOnDate = useMemo(() => {
+    if (!appointmentForm.date) return new Set<string>()
+    const booked = new Set<string>()
+    appointments.forEach((appt) => {
+      if (appt.date === appointmentForm.date && appt.status !== "cancelled" && appt.time) {
+        const clean = appt.time.slice(0, 5)
+        booked.add(clean)
+        const duration = appt.duration || 30
+        if (duration > 30) {
+          const [h, m] = clean.split(":").map(Number)
+          const startMins = (h || 0) * 60 + (m || 0)
+          for (let cur = startMins + 30; cur < startMins + duration; cur += 30) {
+            const curH = Math.floor(cur / 60)
+            const curM = cur % 60
+            booked.add(`${String(curH).padStart(2, "0")}:${String(curM).padStart(2, "0")}`)
+          }
+        }
+      }
+    })
+    return booked
+  }, [appointments, appointmentForm.date])
+
   const handleAddAppointment = async () => {
     if (!appointmentForm.customerName.trim() || !appointmentForm.serviceId || !appointmentForm.time) {
       toast({
         title: "Missing Information",
         description: "Please fill in Customer Name, Service, and Time.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (bookedSlotsOnDate.has(appointmentForm.time)) {
+      toast({
+        title: "Time Slot Unavailable",
+        description: `The time slot ${appointmentForm.time} is already booked on this date. Please choose another time.`,
         variant: "destructive",
       })
       return
@@ -593,13 +624,26 @@ export default function AppointmentsPage() {
                                 <SelectValue placeholder="Select time" />
                               </SelectTrigger>
                               <SelectContent>
-                                {timeSlots.map((time) => (
-                                  <SelectItem key={time} value={time}>
-                                    {time}
-                                  </SelectItem>
-                                ))}
+                                {timeSlots.map((time) => {
+                                  const isBooked = bookedSlotsOnDate.has(time)
+                                  return (
+                                    <SelectItem 
+                                      key={time} 
+                                      value={time}
+                                      disabled={isBooked}
+                                      className={isBooked ? "opacity-50 text-red-500 line-through cursor-not-allowed" : ""}
+                                    >
+                                      {time} {isBooked ? "— Already Booked 🚫" : ""}
+                                    </SelectItem>
+                                  )
+                                })}
                               </SelectContent>
                             </Select>
+                            {appointmentForm.time && bookedSlotsOnDate.has(appointmentForm.time) && (
+                              <p className="text-xs text-red-600 font-semibold mt-1">
+                                ⚠️ This slot is already booked. Please choose another time.
+                              </p>
+                            )}
                           </div>
                         </div>
 
