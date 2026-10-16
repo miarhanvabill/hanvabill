@@ -1297,22 +1297,21 @@ const ProfileDrawer = () => (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-black text-lg">Refer & Earn</h3>
-              <Badge className="bg-violet-100 text-violet-800 border border-violet-200 text-[11px] font-bold">
+              <Badge className="bg-gray-100 text-gray-800 border border-gray-200 text-[11px] font-bold">
                 First-Time Visitors Only
               </Badge>
             </div>
 
-            <div className="p-3.5 bg-violet-50/70 border border-violet-200 rounded-2xl text-xs text-violet-900 leading-relaxed">
+            <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs text-gray-800 leading-relaxed">
               Your friend gets <strong>₹{referralSettings?.referee_discount_amount || 250}</strong> on their very first booking (min bill ₹{referralSettings?.minimum_order_amount || 700}). You get <strong>₹{referralSettings?.referrer_reward_amount || 250}</strong> in your salon wallet as soon as they complete their visit!
             </div>
 
             {/* Referral Code Showcase */}
             <div className="bg-gradient-to-br from-zinc-950 via-zinc-900 to-black text-white rounded-3xl p-5 text-center shadow-lg border border-zinc-800 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-violet-500/15 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none" />
               <p className="text-[10px] tracking-widest uppercase text-zinc-400 font-bold mb-1.5">
                 YOUR REFERRAL CODE
               </p>
-              <p className="text-3xl font-black tracking-widest font-mono text-violet-300 mb-4 select-all">
+              <p className="text-3xl font-black tracking-widest font-mono text-white mb-4 select-all">
                 {portalProfile.referral.code}
               </p>
 
@@ -1326,7 +1325,7 @@ const ProfileDrawer = () => (
                   }}
                   className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-4 py-2 rounded-full transition-colors flex items-center gap-1.5 border border-white/10"
                 >
-                  {copiedRefCode ? <Check className="w-3.5 h-3.5 text-violet-300" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedRefCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                   {copiedRefCode ? "Code Copied!" : "Copy Code"}
                 </button>
 
@@ -1340,7 +1339,7 @@ const ProfileDrawer = () => (
                   }}
                   className="bg-white text-black hover:bg-gray-100 text-xs font-bold px-4 py-2 rounded-full transition-colors flex items-center gap-1.5 shadow-sm"
                 >
-                  {copiedRefLink ? <Check className="w-3.5 h-3.5 text-violet-600" /> : <Share2 className="w-3.5 h-3.5" />}
+                  {copiedRefLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5" />}
                   {copiedRefLink ? "Link Copied!" : "Copy Link"}
                 </button>
               </div>
@@ -1380,8 +1379,8 @@ const ProfileDrawer = () => (
                 <p className="text-[11px] font-semibold text-gray-500 mt-0.5">Friends Visited</p>
               </div>
 
-              <div className="bg-purple-50/70 border border-purple-100 rounded-2xl p-3 text-center">
-                <p className="text-xl sm:text-2xl font-black text-purple-600">
+              <div className="bg-amber-50/70 border border-amber-100 rounded-2xl p-3 text-center">
+                <p className="text-xl sm:text-2xl font-black text-amber-600">
                   ₹{portalProfile.referral.total_earned ?? 0}
                 </p>
                 <p className="text-[11px] font-semibold text-gray-500 mt-0.5">Wallet Earned</p>
@@ -1391,7 +1390,7 @@ const ProfileDrawer = () => (
             {/* How it works info */}
             <div className="bg-gray-50 rounded-2xl p-4 text-xs text-gray-600 space-y-2">
               <p className="font-bold text-gray-900 text-sm flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4 text-violet-600" /> How Referrals Work
+                <Sparkles className="w-4 h-4 text-gray-900" /> How Referrals Work
               </p>
               <ol className="list-decimal pl-4 space-y-1 text-muted-foreground leading-relaxed">
                 <li>Send your link to friends via WhatsApp or social media.</li>

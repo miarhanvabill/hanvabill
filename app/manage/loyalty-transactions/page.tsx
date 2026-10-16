@@ -85,8 +85,8 @@ const TYPE_META: Record<
   },
   bonus: {
     label: "Bonus",
-    bg: "bg-violet-100",
-    text: "text-violet-700",
+    bg: "bg-blue-100",
+    text: "text-blue-700",
     icon: <Gift className="w-3 h-3" />,
     positive: true,
   },
@@ -491,13 +491,13 @@ export default function LoyaltyTransactionsPage() {
           }
         />
         <div className="flex items-center gap-2.5">
-          <Button asChild variant="outline" className="bg-white border-gray-200 text-gray-700 hover:text-violet-700 hover:bg-violet-50 shadow-sm font-medium">
+          <Button asChild variant="outline" className="bg-white border-gray-200 text-gray-700 hover:text-gray-900 hover:bg-gray-50 shadow-sm font-medium">
             <Link href="/manage/referral-program" className="flex items-center gap-2">
-              <Share2 className="w-4 h-4 text-violet-600" />
+              <Share2 className="w-4 h-4 text-gray-700" />
               <span>Refer & Earn Program</span>
             </Link>
           </Button>
-          <Button onClick={() => setIsAdjustOpen(true)} className="bg-violet-600 hover:bg-violet-700 text-white shadow-sm font-medium">
+          <Button onClick={() => setIsAdjustOpen(true)} className="bg-gray-900 hover:bg-black text-white shadow-sm font-medium">
             <Zap className="w-4 h-4 mr-2" />
             Adjust Points
           </Button>
@@ -511,7 +511,7 @@ export default function LoyaltyTransactionsPage() {
           <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
             <Link
               href="/manage/loyalty-transactions"
-              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 text-white shadow-sm"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-900 text-white shadow-sm"
             >
               Loyalty Transactions
             </Link>
@@ -523,11 +523,11 @@ export default function LoyaltyTransactionsPage() {
             </Link>
             <Link
               href="/manage/referral-program"
-              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-white text-gray-700 border border-gray-200 hover:text-violet-700 hover:border-violet-200 hover:bg-violet-50 transition-colors flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-white text-gray-700 border border-gray-200 hover:text-gray-900 hover:border-gray-300 hover:bg-gray-50 transition-colors flex items-center gap-1.5"
             >
-              <Share2 className="w-3.5 h-3.5 text-violet-600" />
+              <Share2 className="w-3.5 h-3.5 text-gray-700" />
               <span>Refer & Earn Program</span>
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-violet-100 text-violet-700 font-bold">New</span>
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-700 font-bold">New</span>
             </Link>
             <Link
               href="/manage/wallet"
@@ -562,8 +562,8 @@ export default function LoyaltyTransactionsPage() {
               value={stats.active_loyalty_members.toLocaleString()}
               sub="Customers with loyalty activity"
               icon={<Users className="w-5 h-5" />}
-              iconBg="bg-violet-50"
-              iconColor="text-violet-600"
+              iconBg="bg-blue-50"
+              iconColor="text-blue-600"
             />
             <SummaryCard
               label="Expiring This Week"
@@ -634,7 +634,7 @@ export default function LoyaltyTransactionsPage() {
                 <Button
                   size="sm"
                   onClick={handleExport}
-                  className="h-9 bg-violet-600 hover:bg-violet-700 text-white"
+                  className="h-9 bg-gray-900 hover:bg-black text-white"
                 >
                   <Download className="w-4 h-4 mr-1.5" />
                   Export CSV
@@ -646,9 +646,9 @@ export default function LoyaltyTransactionsPage() {
             {(filterType !== "all" || filterDate !== "all") && (
               <div className="flex gap-2 mt-3 flex-wrap">
                 {filterType !== "all" && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                     <Zap className="w-3 h-3" /> {filterType}
-                    <button onClick={() => setFilterType("all")} className="ml-1 hover:text-violet-900">
+                    <button onClick={() => setFilterType("all")} className="ml-1 hover:text-black">
                       x
                     </button>
                   </span>
@@ -744,7 +744,7 @@ export default function LoyaltyTransactionsPage() {
                         {/* Customer */}
                         <TableCell className="pl-5 py-3.5">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                               {txn.customer_name.charAt(0).toUpperCase()}
                             </div>
                             <div>
@@ -951,7 +951,7 @@ export default function LoyaltyTransactionsPage() {
             <Button variant="outline" onClick={() => setIsAdjustOpen(false)} disabled={adjustSubmitting}>
               Cancel
             </Button>
-            <Button onClick={handleAdjustSubmit} disabled={adjustSubmitting} className="bg-violet-600 hover:bg-violet-700 text-white">
+            <Button onClick={handleAdjustSubmit} disabled={adjustSubmitting} className="bg-gray-900 hover:bg-black text-white">
               {adjustSubmitting ? "Adjusting..." : "Confirm Adjustment"}
             </Button>
           </DialogFooter>

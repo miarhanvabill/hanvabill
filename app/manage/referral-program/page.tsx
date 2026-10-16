@@ -208,7 +208,7 @@ export default function ReferralProgramPage() {
           <Button
             onClick={handleSaveSettings}
             disabled={isSaving}
-            className="bg-violet-600 hover:bg-violet-700 text-white shadow-sm gap-2 font-medium"
+            className="bg-gray-900 hover:bg-black text-white shadow-sm gap-2 font-medium"
           >
             {isSaving ? "Saving..." : "Save Settings"}
           </Button>
@@ -221,7 +221,7 @@ export default function ReferralProgramPage() {
           <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
             <Link
               href="/manage/referral-program"
-              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 text-white shadow-sm flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-900 text-white shadow-sm flex items-center gap-1.5"
             >
               <Share2 className="w-3.5 h-3.5" />
               <span>Refer & Earn Program</span>
@@ -251,7 +251,7 @@ export default function ReferralProgramPage() {
             <div className="flex items-center gap-3.5">
               <div
                 className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                  settings.is_active ? "bg-violet-50 text-violet-600" : "bg-gray-100 text-gray-500"
+                  settings.is_active ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-500"
                 }`}
               >
                 <Sparkles className="w-5 h-5" />
@@ -264,14 +264,14 @@ export default function ReferralProgramPage() {
                   <span
                     className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
                       settings.is_active
-                        ? "bg-violet-50 text-violet-700 border border-violet-200"
+                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                         : "bg-amber-50 text-amber-700 border border-amber-200"
                     }`}
                   >
                     {settings.is_active ? "Live" : "Paused"}
                   </span>
                   <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
-                    <ShieldCheck className="w-3.5 h-3.5 mr-1 text-violet-600" /> Strictly 1st-Time Visitors
+                    <ShieldCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" /> Strictly 1st-Time Visitors
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
@@ -377,7 +377,7 @@ export default function ReferralProgramPage() {
                       Credited to promoters&#39; salon wallets
                     </p>
                   </div>
-                  <div className="w-11 h-11 bg-violet-50 text-violet-600 rounded-xl flex items-center justify-center flex-shrink-0 ml-3">
+                  <div className="w-11 h-11 bg-gray-100 text-gray-800 rounded-xl flex items-center justify-center flex-shrink-0 ml-3">
                     <Gift className="w-5 h-5" />
                   </div>
                 </div>
@@ -407,7 +407,7 @@ export default function ReferralProgramPage() {
               <Card className="border border-gray-100 shadow-sm bg-white rounded-xl">
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2 text-gray-900">
-                    <Sparkles className="w-5 h-5 text-violet-600" />
+                    <Sparkles className="w-5 h-5 text-gray-900" />
                     How First-Time Referrals Work
                   </CardTitle>
                   <CardDescription>
@@ -417,7 +417,7 @@ export default function ReferralProgramPage() {
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors">
-                      <div className="w-8 h-8 rounded-full bg-violet-50 text-violet-700 font-bold flex items-center justify-center mb-3">
+                      <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-900 font-bold flex items-center justify-center mb-3">
                         1
                       </div>
                       <h4 className="font-semibold text-sm mb-1 text-gray-900">1-Click WhatsApp Share</h4>
@@ -437,7 +437,7 @@ export default function ReferralProgramPage() {
                     </div>
 
                     <div className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors">
-                      <div className="w-8 h-8 rounded-full bg-purple-50 text-purple-700 font-bold flex items-center justify-center mb-3">
+                      <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-900 font-bold flex items-center justify-center mb-3">
                         3
                       </div>
                       <h4 className="font-semibold text-sm mb-1 text-gray-900">Instant Promoter Reward</h4>
@@ -448,7 +448,7 @@ export default function ReferralProgramPage() {
                   </div>
 
                   <div className="p-3.5 bg-gray-50 border border-gray-200 rounded-lg flex items-start gap-3 text-xs text-gray-700">
-                    <ShieldCheck className="w-4 h-4 text-violet-600 shrink-0 mt-0.5" />
+                    <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                     <div>
                       <strong>Strict First-Time Verification Active:</strong> Repeat visitors, existing phone numbers with previous visits, or orders below ₹{settings.minimum_order_amount} are automatically tagged as &#34;Ineligible&#34; and will not disburse rewards.
                     </div>
@@ -549,7 +549,7 @@ export default function ReferralProgramPage() {
                     {/* Referrer Reward Amount */}
                     <div className="space-y-2 p-4 rounded-xl border border-gray-100 bg-white">
                       <Label htmlFor="referrer_reward" className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                        <Gift className="w-4 h-4 text-violet-600" />
+                        <Gift className="w-4 h-4 text-gray-700" />
                         Referrer Reward Amount (₹)
                       </Label>
                       <div className="relative">
@@ -577,7 +577,7 @@ export default function ReferralProgramPage() {
                     {/* Friend Discount Amount */}
                     <div className="space-y-2 p-4 rounded-xl border border-gray-100 bg-white">
                       <Label htmlFor="referee_discount" className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-violet-600" />
+                        <Sparkles className="w-4 h-4 text-gray-700" />
                         Friend Discount Amount (₹)
                       </Label>
                       <div className="relative">
@@ -605,7 +605,7 @@ export default function ReferralProgramPage() {
                     {/* Minimum Order Amount */}
                     <div className="space-y-2 p-4 rounded-xl border border-gray-100 bg-white">
                       <Label htmlFor="min_order" className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                        <IndianRupee className="w-4 h-4 text-blue-600" />
+                        <IndianRupee className="w-4 h-4 text-gray-700" />
                         Minimum Order Amount (₹)
                       </Label>
                       <div className="relative">
@@ -633,7 +633,7 @@ export default function ReferralProgramPage() {
                     {/* Expiry Validity (Days) */}
                     <div className="space-y-2 p-4 rounded-xl border border-gray-100 bg-white">
                       <Label htmlFor="validity_days" className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
-                        <Clock className="w-4 h-4 text-amber-500" />
+                        <Clock className="w-4 h-4 text-gray-700" />
                         Validity (Days)
                       </Label>
                       <Input
@@ -658,7 +658,7 @@ export default function ReferralProgramPage() {
                             onClick={() => setSettings({ ...settings, validity_days: days })}
                             className={`text-[11px] px-2 py-0.5 rounded border transition-colors ${
                               settings.validity_days === days
-                                ? "bg-violet-600 text-white font-semibold border-violet-600"
+                                ? "bg-gray-900 text-white font-semibold border-gray-900"
                                 : "bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200"
                             }`}
                           >
@@ -689,7 +689,7 @@ export default function ReferralProgramPage() {
                           key={item.label}
                           type="button"
                           onClick={() => insertVariableIntoTemplate(item.label)}
-                          className="text-xs px-2.5 py-1 bg-violet-50 hover:bg-violet-100 text-violet-700 rounded-md border border-violet-200 transition-colors font-mono font-medium"
+                          className="text-xs px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md border border-gray-200 transition-colors font-mono font-medium"
                           title={item.desc}
                         >
                           + {item.label}
@@ -720,7 +720,7 @@ export default function ReferralProgramPage() {
                     <Button
                       onClick={handleSaveSettings}
                       disabled={isSaving}
-                      className="bg-violet-600 hover:bg-violet-700 text-white min-w-[140px] shadow-sm font-medium"
+                      className="bg-gray-900 hover:bg-black text-white min-w-[140px] shadow-sm font-medium"
                     >
                       {isSaving ? "Saving..." : "Save Settings"}
                     </Button>
@@ -869,7 +869,7 @@ export default function ReferralProgramPage() {
                                   title="Copy Code"
                                 >
                                   {copiedCode === rec.referral_code ? (
-                                    <Check className="w-3.5 h-3.5 text-violet-600" />
+                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
                                   ) : (
                                     <Copy className="w-3.5 h-3.5" />
                                   )}
@@ -906,7 +906,7 @@ export default function ReferralProgramPage() {
                                   ? `₹${Number(rec.order_amount).toLocaleString("en-IN")}`
                                   : "—"}
                               </div>
-                              <div className="text-xs text-violet-600 font-medium">
+                              <div className="text-xs text-emerald-700 font-medium">
                                 {Number(rec.reward_amount) > 0
                                   ? `+₹${Number(rec.reward_amount)} reward paid`
                                   : "₹0 reward"}

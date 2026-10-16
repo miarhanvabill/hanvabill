@@ -186,7 +186,7 @@ export default function LoyaltyPage() {
           <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
             <Link
               href="/manage/loyalty"
-              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 text-white shadow-sm"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-900 text-white shadow-sm"
             >
               Loyalty Settings & Tiers
             </Link>
@@ -198,11 +198,11 @@ export default function LoyaltyPage() {
             </Link>
             <Link
               href="/manage/referral-program"
-              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-white text-gray-700 border border-gray-200 hover:text-violet-700 hover:border-violet-200 hover:bg-violet-50 transition-colors flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-white text-gray-700 border border-gray-200 hover:text-gray-900 hover:border-gray-300 hover:bg-gray-50 transition-colors flex items-center gap-1.5"
             >
-              <Share2 className="w-3.5 h-3.5 text-violet-600" />
+              <Share2 className="w-3.5 h-3.5 text-gray-700" />
               <span>Refer & Earn Program</span>
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-violet-100 text-violet-700 font-bold">New</span>
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-gray-100 text-gray-700 font-bold">New</span>
             </Link>
             <Link
               href="/manage/wallet"
@@ -259,8 +259,8 @@ export default function LoyaltyPage() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <Gift className="w-5 h-5 text-purple-600" />
+                  <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+                    <Gift className="w-5 h-5 text-amber-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Cashback Given</p>
@@ -279,8 +279,8 @@ export default function LoyaltyPage() {
               <TabsTrigger value="members">Members</TabsTrigger>
               <TabsTrigger value="transactions">Transactions</TabsTrigger>
               <TabsTrigger value="referral" asChild>
-                <Link href="/manage/referral-program" className="flex items-center gap-1.5 text-violet-700">
-                  <Share2 className="w-3.5 h-3.5 text-violet-600" />
+                <Link href="/manage/referral-program" className="flex items-center gap-1.5 text-gray-700 hover:text-black">
+                  <Share2 className="w-3.5 h-3.5 text-gray-600" />
                   Refer & Earn 🎁
                 </Link>
               </TabsTrigger>
@@ -576,7 +576,7 @@ export default function LoyaltyPage() {
                                   {member.tier || "Bronze"}
                                 </Badge>
                               </td>
-                              <td className="p-3 font-semibold text-purple-700">{member.totalPoints} pts</td>
+                              <td className="p-3 font-semibold text-gray-900">{member.totalPoints} pts</td>
                               <td className="p-3 text-gray-600">{member.lifetimeEarned} pts</td>
                               <td className="p-3 text-right">
                                 <Button asChild variant="ghost" size="sm">
@@ -611,14 +611,14 @@ export default function LoyaltyPage() {
                   </Button>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="p-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-xl border border-purple-100 flex flex-col md:flex-row items-center justify-between gap-4">
+                  <div className="p-6 bg-gray-50 rounded-xl border border-gray-200 flex flex-col md:flex-row items-center justify-between gap-4">
                     <div className="space-y-1 text-center md:text-left">
-                      <h4 className="font-semibold text-purple-950 text-lg">Live Points & Adjustment System</h4>
-                      <p className="text-sm text-purple-700">
+                      <h4 className="font-semibold text-gray-900 text-lg">Live Points & Adjustment System</h4>
+                      <p className="text-sm text-gray-600">
                         Search transactions by customer, filter by earning type (Earned, Redeemed, Bonus, Refund), and make manual adjustments.
                       </p>
                     </div>
-                    <Button asChild className="bg-purple-600 hover:bg-purple-700 text-white shrink-0">
+                    <Button asChild className="bg-gray-900 hover:bg-black text-white shrink-0">
                       <Link href="/manage/loyalty-transactions" className="flex items-center gap-2">
                         View & Adjust Transactions
                         <ArrowRight className="w-4 h-4" />
@@ -642,7 +642,7 @@ export default function LoyaltyPage() {
                     <Card className="border shadow-none">
                       <CardContent className="p-4">
                         <p className="text-xs text-muted-foreground font-medium">Total Cashback Credited</p>
-                        <p className="text-xl font-bold text-purple-700 mt-1">₹{stats.total_cashback_given.toLocaleString()}</p>
+                        <p className="text-xl font-bold text-gray-900 mt-1">₹{stats.total_cashback_given.toLocaleString()}</p>
                       </CardContent>
                     </Card>
                   </div>
