@@ -111,16 +111,29 @@ export async function getVendors() {
 export async function getProducts() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      // ✅ TENANT-AWARE: Explicit tenant filtering
-      const products = await sql`
-        SELECT id, name, cost FROM products 
+      let products = await sql`
+        SELECT id, name, COALESCE(cost, price, 0)::numeric as cost FROM products 
         WHERE is_active = true AND tenant_id = ${tenantId}
         ORDER BY name
-      `
-      return products
+      `.catch(() => [])
+
+      if (!products || products.length === 0) {
+        products = await sql`
+          SELECT id, COALESCE(name, item_name, 'Product') as name, COALESCE(cost_price, unit_price, 0)::numeric as cost 
+          FROM inventory 
+          WHERE tenant_id = ${tenantId}
+          ORDER BY name
+        `.catch(() => [])
+      }
+
+      return (products || []).map((p: any) => ({
+        id: Number(p.id),
+        name: String(p.name),
+        cost: Number(p.cost) || 0,
+      }))
     } catch (error) {
-      console.error("[v0] Error fetching products:", error)
-      throw new Error("Failed to fetch products")
+      console.error("[v0] Error fetching products for receipts:", error)
+      return []
     }
   })
 }

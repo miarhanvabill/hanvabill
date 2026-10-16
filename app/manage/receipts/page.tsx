@@ -19,7 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Search, Eye, FileText, TrendingUp, Package, CheckCircle2, XCircle } from "lucide-react"
+import { Plus, Search, Eye, FileText, TrendingUp, Package, CheckCircle2, XCircle, Trash2 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { getReceipts, createReceipt, getVendors, getProducts, receiveReceipt, cancelReceipt } from "@/app/actions/receipts"
 import { formatCurrency } from "@/lib/currency"
@@ -171,7 +171,16 @@ export default function ReceiptsPage() {
 
   const updateItem = (index: number, field: string, value: string) => {
     const updatedItems = [...formData.items]
-    updatedItems[index] = { ...updatedItems[index], [field]: value }
+    if (field === "product_id") {
+      const selectedProduct = products.find((p) => p.id.toString() === value)
+      updatedItems[index] = {
+        ...updatedItems[index],
+        product_id: value,
+        unit_cost: selectedProduct?.cost ? String(selectedProduct.cost) : updatedItems[index].unit_cost,
+      }
+    } else {
+      updatedItems[index] = { ...updatedItems[index], [field]: value }
+    }
     setFormData({ ...formData, items: updatedItems })
   }
 
@@ -215,19 +224,20 @@ export default function ReceiptsPage() {
               New Receipt
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-4xl">
+          <DialogContent className="sm:max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Create New Receipt</DialogTitle>
+              <DialogTitle className="text-xl font-semibold">Create New Receipt</DialogTitle>
               <DialogDescription>Record incoming inventory from a vendor</DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="vendor">Vendor</Label>
+            <form onSubmit={handleSubmit} className="space-y-5 pt-1">
+              <div className="space-y-1.5">
+                <Label htmlFor="vendor" className="font-medium text-sm">Vendor</Label>
                 <Select
                   value={formData.vendor_id}
                   onValueChange={(value) => setFormData({ ...formData, vendor_id: value })}
+                  required
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="vendor" className="w-full">
                     <SelectValue placeholder="Select vendor" />
                   </SelectTrigger>
                   <SelectContent>
@@ -240,72 +250,150 @@ export default function ReceiptsPage() {
                 </Select>
               </div>
 
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <Label>Items</Label>
-                  <Button type="button" variant="outline" size="sm" onClick={addItem}>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <Label className="text-sm font-semibold">Receipt Items</Label>
+                    <p className="text-xs text-muted-foreground">Select products, received quantities, and unit costs</p>
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={addItem} className="gap-1.5 h-8">
+                    <Plus className="h-3.5 w-3.5" />
                     Add Item
                   </Button>
                 </div>
-                <div className="space-y-2">
-                  {formData.items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-4 gap-2 items-end">
-                      <div>
-                        <Label>Product</Label>
-                        <Select
-                          value={item.product_id}
-                          onValueChange={(value) => updateItem(index, "product_id", value)}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select product" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {products.map((product) => (
-                              <SelectItem key={product.id} value={product.id.toString()}>
-                                {product.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label>Quantity</Label>
-                        <Input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => updateItem(index, "quantity", e.target.value)}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <Label>Unit Cost</Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={item.unit_cost}
-                          onChange={(e) => updateItem(index, "unit_cost", e.target.value)}
-                          required
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => removeItem(index)}
-                        disabled={formData.items.length === 1}
+
+                {/* Column Headers (Desktop/Tablet) */}
+                <div className="hidden sm:grid sm:grid-cols-12 gap-3 px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/50 rounded-md">
+                  <div className="sm:col-span-5">Product</div>
+                  <div className="sm:col-span-2 text-center">Quantity</div>
+                  <div className="sm:col-span-2 text-right">Unit Cost (₹)</div>
+                  <div className="sm:col-span-2 text-right">Subtotal</div>
+                  <div className="sm:col-span-1 text-center">Action</div>
+                </div>
+
+                {/* Items List */}
+                <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+                  {formData.items.map((item, index) => {
+                    const qty = Number(item.quantity) || 0
+                    const cost = Number(item.unit_cost) || 0
+                    const subtotal = qty * cost
+
+                    return (
+                      <div
+                        key={index}
+                        className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 sm:gap-3 items-center bg-card border rounded-lg p-3 sm:px-3 sm:py-2.5 transition-colors hover:border-slate-300"
                       >
-                        Remove
-                      </Button>
-                    </div>
-                  ))}
+                        {/* Product Column */}
+                        <div className="sm:col-span-5 min-w-0">
+                          <Label className="sm:hidden text-xs text-muted-foreground mb-1 block">Product</Label>
+                          <Select
+                            value={item.product_id}
+                            onValueChange={(value) => updateItem(index, "product_id", value)}
+                          >
+                            <SelectTrigger className="w-full min-w-0 truncate text-left">
+                              <SelectValue placeholder="Select product" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-60 max-w-[380px]">
+                              {products.map((product) => (
+                                <SelectItem key={product.id} value={product.id.toString()}>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="truncate">{product.name}</span>
+                                    {product.cost > 0 && (
+                                      <span className="text-xs text-muted-foreground shrink-0">
+                                        ₹{product.cost}
+                                      </span>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Quantity Column */}
+                        <div className="sm:col-span-2 min-w-0">
+                          <Label className="sm:hidden text-xs text-muted-foreground mb-1 block">Quantity</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            placeholder="Qty"
+                            value={item.quantity}
+                            onChange={(e) => updateItem(index, "quantity", e.target.value)}
+                            required
+                            className="w-full text-center"
+                          />
+                        </div>
+
+                        {/* Unit Cost Column */}
+                        <div className="sm:col-span-2 min-w-0">
+                          <Label className="sm:hidden text-xs text-muted-foreground mb-1 block">Unit Cost (₹)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="Cost"
+                            value={item.unit_cost}
+                            onChange={(e) => updateItem(index, "unit_cost", e.target.value)}
+                            required
+                            className="w-full text-right"
+                          />
+                        </div>
+
+                        {/* Subtotal Column */}
+                        <div className="sm:col-span-2 min-w-0 flex sm:justify-end items-center justify-between">
+                          <span className="sm:hidden text-xs text-muted-foreground">Subtotal:</span>
+                          <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                            {formatCurrency(subtotal)}
+                          </span>
+                        </div>
+
+                        {/* Action Column */}
+                        <div className="sm:col-span-1 flex justify-end">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            onClick={() => removeItem(index)}
+                            disabled={formData.items.length === 1}
+                            title="Remove Item"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Total Summary Footer Bar */}
+                <div className="flex items-center justify-between p-3 bg-muted/30 border rounded-lg">
+                  <span className="text-sm text-muted-foreground font-medium">
+                    Total: {formData.items.length} {formData.items.length === 1 ? "Item" : "Items"}
+                  </span>
+                  <div className="text-right">
+                    <span className="text-xs text-muted-foreground mr-2 font-medium">Grand Total:</span>
+                    <span className="text-base font-bold text-green-600">
+                      {formatCurrency(
+                        formData.items.reduce((sum, item) => {
+                          const q = Number(item.quantity) || 0
+                          const c = Number(item.unit_cost) || 0
+                          return sum + q * c
+                        }, 0)
+                      )}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <DialogFooter>
+              <DialogFooter className="gap-2 sm:gap-0 pt-2">
                 <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button type="submit">Create Receipt</Button>
+                <Button type="submit" className="gap-1.5">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Create Receipt
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -443,7 +531,7 @@ export default function ReceiptsPage() {
 
       {/* View Receipt Dialog */}
       <Dialog open={!!viewingReceipt} onOpenChange={() => setViewingReceipt(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="sm:max-w-2xl w-full">
           <DialogHeader>
             <DialogTitle>Receipt Details</DialogTitle>
             <DialogDescription>Receipt #{viewingReceipt?.receipt_number}</DialogDescription>
