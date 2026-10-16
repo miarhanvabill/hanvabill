@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import Link from "next/link"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -30,6 +31,7 @@ import {
   ArrowDownRight,
   AlertCircle,
   Zap,
+  Share2,
 } from "lucide-react"
 import { getLoyaltyDashboardStats, adjustLoyaltyPoints, getLoyaltySettings } from "@/app/actions/loyalty"
 import { getCustomers } from "@/app/actions/customers"
@@ -488,14 +490,52 @@ export default function LoyaltyTransactionsPage() {
               : "Track every point earned, redeemed, and expiring across all customers"
           }
         />
-        <Button onClick={() => setIsAdjustOpen(true)} className="bg-violet-600 hover:bg-violet-700 text-white shadow-sm">
-          <Zap className="w-4 h-4 mr-2" />
-          Adjust Points
-        </Button>
+        <div className="flex items-center gap-2.5">
+          <Button asChild variant="outline" className="bg-white border-gray-200 text-gray-700 hover:text-violet-700 hover:bg-violet-50 shadow-sm font-medium">
+            <Link href="/manage/referral-program" className="flex items-center gap-2">
+              <Share2 className="w-4 h-4 text-violet-600" />
+              <span>Refer & Earn Program</span>
+            </Link>
+          </Button>
+          <Button onClick={() => setIsAdjustOpen(true)} className="bg-violet-600 hover:bg-violet-700 text-white shadow-sm font-medium">
+            <Zap className="w-4 h-4 mr-2" />
+            Adjust Points
+          </Button>
+        </div>
       </div>
 
       <main className="flex-1 px-6 pb-6 pt-2">
         <div className="max-w-7xl mx-auto space-y-6">
+
+          {/* Retention Module Sub-Navigation */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
+            <Link
+              href="/manage/loyalty-transactions"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 text-white shadow-sm"
+            >
+              Loyalty Transactions
+            </Link>
+            <Link
+              href="/manage/loyalty"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-white text-gray-600 border border-gray-200 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+            >
+              Loyalty Settings & Tiers
+            </Link>
+            <Link
+              href="/manage/referral-program"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-white text-gray-700 border border-gray-200 hover:text-violet-700 hover:border-violet-200 hover:bg-violet-50 transition-colors flex items-center gap-1.5"
+            >
+              <Share2 className="w-3.5 h-3.5 text-violet-600" />
+              <span>Refer & Earn Program</span>
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-violet-100 text-violet-700 font-bold">New</span>
+            </Link>
+            <Link
+              href="/manage/wallet"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-white text-gray-600 border border-gray-200 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+            >
+              Customer Wallets
+            </Link>
+          </div>
 
           {/* Summary Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

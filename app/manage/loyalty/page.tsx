@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "@/hooks/use-toast"
-import { Star, Gift, Settings, Users, TrendingUp, Crown, Trash2, Plus, ArrowRight, ExternalLink } from "lucide-react"
+import { Star, Gift, Settings, Users, TrendingUp, Crown, Trash2, Plus, ArrowRight, ExternalLink, Share2 } from "lucide-react"
 import { getLoyaltySettings, updateLoyaltySettings, getLoyaltyStats, getLoyaltyTiers, createLoyaltyTier, updateLoyaltyTier, deleteLoyaltyTier, LoyaltyTier } from "@/app/actions/loyalty"
 import { getCustomerWallets } from "@/app/actions/wallet"
 
@@ -181,6 +181,37 @@ export default function LoyaltyPage() {
 
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-5xl mx-auto space-y-6">
+
+          {/* Retention Module Sub-Navigation */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
+            <Link
+              href="/manage/loyalty"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 text-white shadow-sm"
+            >
+              Loyalty Settings & Tiers
+            </Link>
+            <Link
+              href="/manage/loyalty-transactions"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-white text-gray-600 border border-gray-200 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+            >
+              Loyalty Transactions
+            </Link>
+            <Link
+              href="/manage/referral-program"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-white text-gray-700 border border-gray-200 hover:text-violet-700 hover:border-violet-200 hover:bg-violet-50 transition-colors flex items-center gap-1.5"
+            >
+              <Share2 className="w-3.5 h-3.5 text-violet-600" />
+              <span>Refer & Earn Program</span>
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-violet-100 text-violet-700 font-bold">New</span>
+            </Link>
+            <Link
+              href="/manage/wallet"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-white text-gray-600 border border-gray-200 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+            >
+              Customer Wallets
+            </Link>
+          </div>
+
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>
@@ -247,6 +278,12 @@ export default function LoyaltyPage() {
               <TabsTrigger value="tiers">VIP Tiers</TabsTrigger>
               <TabsTrigger value="members">Members</TabsTrigger>
               <TabsTrigger value="transactions">Transactions</TabsTrigger>
+              <TabsTrigger value="referral" asChild>
+                <Link href="/manage/referral-program" className="flex items-center gap-1.5 text-violet-700">
+                  <Share2 className="w-3.5 h-3.5 text-violet-600" />
+                  Refer & Earn 🎁
+                </Link>
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="settings">

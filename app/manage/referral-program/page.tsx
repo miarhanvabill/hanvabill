@@ -217,6 +217,35 @@ export default function ReferralProgramPage() {
 
       <main className="flex-1 px-6 pb-6 pt-2">
         <div className="max-w-7xl mx-auto space-y-6">
+          {/* Retention Module Sub-Navigation */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
+            <Link
+              href="/manage/referral-program"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 text-white shadow-sm flex items-center gap-1.5"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Refer & Earn Program</span>
+            </Link>
+            <Link
+              href="/manage/loyalty"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-white text-gray-600 border border-gray-200 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+            >
+              Loyalty Settings & Tiers
+            </Link>
+            <Link
+              href="/manage/loyalty-transactions"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-white text-gray-600 border border-gray-200 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+            >
+              Loyalty Transactions
+            </Link>
+            <Link
+              href="/manage/wallet"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-medium bg-white text-gray-600 border border-gray-200 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+            >
+              Customer Wallets
+            </Link>
+          </div>
+
           {/* Program Status Banner */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
