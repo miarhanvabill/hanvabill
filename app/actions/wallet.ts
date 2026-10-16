@@ -81,8 +81,20 @@ export async function getCustomerWallets(): Promise<CustomerWallet[]> {
           c.full_name as name,
           c.phone_number,
           COALESCE(c.wallet_balance, 0)::numeric as wallet_balance,
-          COALESCE(SUM(CASE WHEN (lt.transaction_type IN ('earned', 'bonus', 'refund', 'referral', 'welcome') OR lt.points > 0) AND lt.transaction_type != 'redeemed' THEN lt.points ELSE 0 END), 0) -
-          COALESCE(SUM(CASE WHEN lt.transaction_type = 'redeemed' OR lt.points < 0 THEN ABS(lt.points) ELSE 0 END), 0) as current_points,
+          GREATEST(0,
+            COALESCE(SUM(CASE 
+              WHEN (lt.transaction_type IN ('earned', 'bonus', 'refund', 'referral', 'welcome') OR lt.points > 0) 
+                AND lt.transaction_type NOT IN ('redeemed', 'expired')
+                AND (lt.expires_at IS NULL OR lt.expires_at > NOW())
+              THEN lt.points 
+              ELSE 0 
+            END), 0) -
+            COALESCE(SUM(CASE 
+              WHEN lt.transaction_type = 'redeemed' OR (lt.points < 0 AND lt.transaction_type != 'expired')
+              THEN ABS(lt.points) 
+              ELSE 0 
+            END), 0)
+          ) as current_points,
           COALESCE(SUM(CASE WHEN (lt.transaction_type IN ('earned', 'bonus', 'refund', 'referral', 'welcome') OR lt.points > 0) AND lt.transaction_type != 'redeemed' THEN lt.points ELSE 0 END), 0) as lifetime_earned,
           COALESCE(SUM(CASE WHEN lt.transaction_type = 'redeemed' OR lt.points < 0 THEN ABS(lt.points) ELSE 0 END), 0) as lifetime_redeemed,
           COALESCE(MAX(lt.created_at), c.created_at) as last_activity

@@ -27,7 +27,7 @@ export async function GET(request: Request) {
           SELECT 
             ia.id,
             ia.product_id,
-            COALESCE(i.item_name, 'Unknown Product') as product_name,
+            COALESCE(i.name, i.item_name, 'Unknown Product') as product_name,
             ia.adjustment_type,
             ia.quantity,
             ia.reason,
@@ -49,7 +49,7 @@ export async function GET(request: Request) {
           SELECT 
             ia.id,
             ia.product_id,
-            COALESCE(i.item_name, 'Unknown Product') as product_name,
+            COALESCE(i.name, i.item_name, 'Unknown Product') as product_name,
             ia.adjustment_type,
             ia.quantity,
             ia.reason,

@@ -50,17 +50,33 @@ export async function GET(request: Request) {
         WHERE tenant_id = ${tenantId}
       `
 
-      // Get inventory data
-      const inventoryData = await sql`
+      // Get inventory data (checking products or salon inventory)
+      let inventoryData = await sql`
         SELECT 
           COUNT(*) as total_items,
-          COUNT(CASE WHEN stock_quantity <= min_stock_level THEN 1 END) as low_stock,
+          COUNT(CASE WHEN stock_quantity <= min_stock_level AND stock_quantity > 0 THEN 1 END) as low_stock,
           COUNT(CASE WHEN stock_quantity = 0 THEN 1 END) as out_of_stock,
           COALESCE(SUM(stock_quantity * COALESCE(price, 0)), 0) as total_value
         FROM products
         WHERE is_active = 'true'
           AND tenant_id = ${tenantId}
-      `
+      `.catch(() => [])
+
+      if (!inventoryData[0] || Number(inventoryData[0].total_items) === 0) {
+        const invRows = await sql`
+          SELECT 
+            COUNT(*) as total_items,
+            COUNT(CASE WHEN quantity <= COALESCE(reorder_level, min_stock_level, 5) AND quantity > 0 THEN 1 END) as low_stock,
+            COUNT(CASE WHEN quantity = 0 THEN 1 END) as out_of_stock,
+            COALESCE(SUM(quantity * CASE WHEN COALESCE(cost_price, 0) > 0 THEN cost_price ELSE COALESCE(selling_price, unit_price, 0) END), 0) as total_value
+          FROM inventory
+          WHERE tenant_id = ${tenantId}
+        `.catch(() => [])
+
+        if (invRows && invRows.length > 0 && Number(invRows[0].total_items) > 0) {
+          inventoryData = invRows
+        }
+      }
 
       // Get staff salary
       const staffData = await sql`
@@ -121,8 +137,8 @@ export async function GET(request: Request) {
           total_value: Number(inventoryData[0]?.total_value) || 0,
         },
         expenses: {
-          total: expenses,
-          categories: expenses > 0 ? [
+          total: totalExpenses,
+          categories: totalExpenses > 0 ? [
             { name: "Staff Salaries", amount: staffSalary, percentage: 100 },
           ] : [],
         },

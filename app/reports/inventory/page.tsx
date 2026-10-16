@@ -27,7 +27,7 @@ export default function InventoryReportPage() {
   const fetchInventory = async () => {
     setLoading(true)
     try {
-      const response = await fetch("/api/reports/inventory")
+      const response = await fetch("/api/reports/inventory", { cache: "no-store" })
       if (response.ok) {
         const data = await response.json()
         setInventory(data)

@@ -719,12 +719,9 @@ export async function finalizeCheckout(
 
           // 2. Send Loyalty Update if points were earned or redeemed
           if (pointsEarned > 0 || pointsRedeemed > 0) {
-            sql`
-              SELECT COALESCE(SUM(CASE WHEN transaction_type = 'earned' THEN points ELSE -points END), 0) as balance
-              FROM loyalty_transactions
-              WHERE customer_id = ${customerId} AND tenant_id = ${tenantId}
-            `.then((balRes: any) => {
-              const balance = balRes[0]?.balance || pointsEarned
+            import("@/app/actions/loyalty").then(async ({ getCustomerLoyalty }) => {
+              const loyaltyInfo = await getCustomerLoyalty(customerId, tenantId.toString())
+              const balance = (loyaltyInfo as any)?.current_points ?? pointsEarned
               triggerWhatsAppAutomation({
                 tenantId: tenantId.toString(),
                 eventType: "loyalty_update",
@@ -739,7 +736,30 @@ export async function finalizeCheckout(
                 },
                 sql,
               }).catch((err: any) => console.error("Failed to send WhatsApp loyalty automation:", err))
-            }).catch(() => {})
+            }).catch(() => {
+              sql`
+                SELECT COALESCE(SUM(CASE WHEN transaction_type IN ('earned', 'bonus', 'refund', 'referral', 'welcome') THEN points ELSE -points END), 0) as balance
+                FROM loyalty_transactions
+                WHERE customer_id = ${customerId} AND tenant_id = ${tenantId}
+                  AND (expires_at IS NULL OR expires_at > NOW())
+              `.then((balRes: any) => {
+                const balance = balRes[0]?.balance || pointsEarned
+                triggerWhatsAppAutomation({
+                  tenantId: tenantId.toString(),
+                  eventType: "loyalty_update",
+                  recipientPhone: customer.phone_number,
+                  customerId: customerId,
+                  referenceId: `loyalty:${invoice.id}`,
+                  variables: {
+                    customer_name: customer.full_name,
+                    points: balance,
+                    points_earned: pointsEarned,
+                    points_redeemed: pointsRedeemed,
+                  },
+                  sql,
+                }).catch((err: any) => console.error("Failed to send WhatsApp loyalty automation:", err))
+              }).catch(() => {})
+            })
           }
         }).catch((err) => console.error("Failed to import whatsapp-automations:", err))
       }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
+import { getInventory } from "@/app/actions/inventory"
 
 export async function GET() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
@@ -38,6 +39,70 @@ export async function GET() {
       `
 
       console.log("[v0] Found", products.length, "products")
+
+      if (products.length === 0) {
+        const inventoryItems = await getInventory()
+        if (inventoryItems.length > 0) {
+          const invProducts = inventoryItems.map((item) => {
+            const currentStock = Number(item.quantity) || 0
+            const minStock = Number(item.reorder_level || item.min_stock_level) || 5
+            const costPrice = Number(item.cost_price) || 0
+            const sellingPrice = Number(item.selling_price || item.unit_price) || 0
+            const unitPrice = costPrice > 0 ? costPrice : sellingPrice
+            const totalValue = Math.round(currentStock * unitPrice * 100) / 100
+
+            let status: "in_stock" | "low_stock" | "out_of_stock" = "in_stock"
+            if (currentStock === 0) {
+              status = "out_of_stock"
+            } else if (currentStock <= minStock) {
+              status = "low_stock"
+            }
+
+            return {
+              id: item.id,
+              name: item.name || item.item_name || "Unnamed Item",
+              category: item.category || "General",
+              current_stock: currentStock,
+              min_stock_level: minStock,
+              max_stock_level: 100,
+              unit_price: unitPrice,
+              total_value: totalValue,
+              sku: item.sku || `SKU-${item.id}`,
+              supplier: item.supplier || "Salon Inventory",
+              last_updated: item.updated_at || item.created_at || new Date().toISOString(),
+              status,
+            }
+          })
+
+          const inStock = invProducts.filter((p) => p.status === "in_stock").length
+          const lowStock = invProducts.filter((p) => p.status === "low_stock").length
+          const outOfStock = invProducts.filter((p) => p.status === "out_of_stock").length
+          const totalVal = Math.round(invProducts.reduce((sum, p) => sum + p.total_value, 0) * 100) / 100
+
+          return NextResponse.json(
+            {
+              success: true,
+              products: invProducts,
+              stats: {
+                total_products: invProducts.length,
+                in_stock: inStock,
+                low_stock: lowStock,
+                out_of_stock: outOfStock,
+                total_value: totalVal,
+                last_updated: new Date().toISOString(),
+              },
+              message: "Inventory stock data retrieved successfully",
+            },
+            {
+              headers: {
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                Pragma: "no-cache",
+                Expires: "0",
+              },
+            },
+          )
+        }
+      }
 
       const stats = await sql`
         SELECT 

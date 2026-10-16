@@ -1,49 +1,46 @@
 import { NextResponse } from "next/server"
-import { withTenantAuth } from "@/lib/withTenantAuth"
+import { getInventory } from "@/app/actions/inventory"
+
+export const dynamic = "force-dynamic"
 
 export async function GET() {
-  return await withTenantAuth(async ({ sql, tenantId }) => {
-    try {
-      const inventory = await sql`
-        SELECT 
-          id,
-          name,
-          stock_quantity,
-          min_stock_level,
-          price,
-          updated_at,
-          (stock_quantity * price) as stock_value,
-          CASE 
-            WHEN stock_quantity = 0 THEN 'out_of_stock'
-            WHEN stock_quantity <= min_stock_level THEN 'low_stock'
-            ELSE 'in_stock'
-          END as status
-        FROM products
-        WHERE tenant_id = ${tenantId}
-        ORDER BY 
-          CASE 
-            WHEN stock_quantity = 0 THEN 1
-            WHEN stock_quantity <= min_stock_level THEN 2
-            ELSE 3
-          END,
-          name
-      `
+  try {
+    const items = await getInventory()
 
-      const formattedInventory = inventory.map((item: any) => ({
-        ...item,
-        item_name: item.name,
-        current_stock: Number(item.stock_quantity) || 0,
-        min_stock_level: Number(item.min_stock_level) || 0,
-        unit_price: Number(item.price) || 0,
-        stock_value: Number(item.stock_value) || 0,
-        last_restocked: item.updated_at ? new Date(item.updated_at).toLocaleDateString() : "Never",
-        supplier: item.supplier || "Unknown",
-      }))
+    const formattedInventory = items.map((item) => {
+      const currentStock = Number(item.quantity) || 0
+      const minStockLevel = Number(item.reorder_level || item.min_stock_level) || 5
+      const costPrice = Number(item.cost_price) || 0
+      const sellingPrice = Number(item.selling_price || item.unit_price) || 0
+      // In inventory reports, unit price represents cost value (or selling price if cost is 0)
+      const unitPrice = costPrice > 0 ? costPrice : sellingPrice
+      const stockValue = Math.round(currentStock * unitPrice * 100) / 100
 
-      return NextResponse.json(formattedInventory)
-    } catch (error) {
-      console.error("Error fetching inventory report:", error)
-      return NextResponse.json({ error: "Failed to fetch inventory report" }, { status: 500 })
-    }
-  })
+      let status: "in_stock" | "low_stock" | "out_of_stock" = "in_stock"
+      if (currentStock === 0) {
+        status = "out_of_stock"
+      } else if (currentStock <= minStockLevel) {
+        status = "low_stock"
+      }
+
+      return {
+        id: item.id,
+        item_name: item.name || item.item_name || "Unnamed Item",
+        current_stock: currentStock,
+        min_stock_level: minStockLevel,
+        unit_price: unitPrice,
+        stock_value: stockValue,
+        supplier: item.supplier || "Professional Salon Supply",
+        last_restocked: item.updated_at
+          ? new Date(item.updated_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+          : (item.created_at ? new Date(item.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Active"),
+        status,
+      }
+    })
+
+    return NextResponse.json(formattedInventory)
+  } catch (error) {
+    console.error("Error fetching inventory report:", error)
+    return NextResponse.json({ error: "Failed to fetch inventory report" }, { status: 500 })
+  }
 }

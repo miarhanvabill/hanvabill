@@ -316,18 +316,17 @@ export async function getCustomerChatSidebarData(phoneNumber: string): Promise<C
 
       const customerId = Number(customer.id)
 
-      // 2. Fetch loyalty points if available
-      let loyaltyPoints = 250
+      // 2. Fetch loyalty points if available (respecting expiration and FIFO)
+      let loyaltyPoints = 0
       try {
-        const loyaltyRows = await sql`
-          SELECT COALESCE(SUM(points), 0) as points_balance 
-          FROM loyalty_transactions 
-          WHERE customer_id = ${customerId} AND tenant_id = ${tenantId}
-        `
-        if (loyaltyRows.length > 0 && loyaltyRows[0].points_balance != null) {
-          loyaltyPoints = Number(loyaltyRows[0].points_balance)
+        const { getCustomerLoyalty } = await import("@/app/actions/loyalty")
+        const loyaltyInfo = (await getCustomerLoyalty(customerId, tenantId)) as any
+        if (loyaltyInfo && loyaltyInfo.current_points != null) {
+          loyaltyPoints = Number(loyaltyInfo.current_points)
         }
-      } catch {}
+      } catch (loyaltyErr) {
+        console.error("Error fetching loyalty points in WhatsApp sidebar:", loyaltyErr)
+      }
 
       // 3. Fetch upcoming/recent bookings
       let upcomingBookings: any[] = []
