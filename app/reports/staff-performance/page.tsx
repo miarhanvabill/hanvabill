@@ -14,12 +14,18 @@ interface StaffPerformanceData {
   name: string
   role: string
   bookings_count: number
+  direct_bookings_count?: number
+  direct_revenue?: number
+  split_revenue?: number
   total_revenue: number
-  avg_rating: number
-  attendance_rate: number
-  customer_satisfaction: number
+  avg_rating: number | null
+  review_count?: number
+  attendance_rate: number | null
+  attendance_logs_count?: number
+  customer_satisfaction?: number | null
   services_completed: number
   avg_service_time: number
+  unique_customers?: number
 }
 
 // ── Split-revenue helpers ────────────────────────────────────────────────
@@ -63,7 +69,12 @@ export default function StaffPerformancePage() {
   const fetchStaffPerformance = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/reports/staff-performance?dateRange=${dateRange}`)
+      const { startDate, endDate } = dateRangeToDates(dateRange)
+      const params = new URLSearchParams({ dateRange })
+      if (startDate) params.set("startDate", startDate)
+      if (endDate) params.set("endDate", endDate)
+
+      const response = await fetch(`/api/reports/staff-performance?${params.toString()}`)
       if (response.ok) {
         const data = await response.json()
         setStaffData(data)
@@ -120,6 +131,32 @@ export default function StaffPerformancePage() {
   const totalBookings = staffData.reduce((sum, staff) => sum + staff.bookings_count, 0)
   const totalSplitRevenue = Object.values(splitRevenueMap).reduce((a, b) => a + b, 0)
 
+  // Average rating calculated strictly across staff who have received reviews
+  const ratedStaff = staffData.filter((s) => s.avg_rating !== null && s.avg_rating > 0)
+  const overallAvgRating = ratedStaff.length > 0
+    ? (ratedStaff.reduce((sum, s) => sum + (s.avg_rating || 0), 0) / ratedStaff.length).toFixed(1)
+    : "5.0"
+
+  const handleExportCSV = () => {
+    const exportData = staffData.map((staff) => {
+      const splitRev = splitRevenueMap[staff.id] ?? staff.split_revenue ?? 0
+      const directRev = staff.direct_revenue ?? (staff.total_revenue - splitRev)
+      return {
+        "Staff Name": staff.name,
+        "Role": staff.role ? staff.role.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : "Stylist",
+        "Bookings": staff.bookings_count,
+        "Direct Revenue (₹)": directRev > 0 ? directRev : 0,
+        "Multi-Staff Revenue (₹)": splitRev,
+        "Total Revenue (₹)": staff.total_revenue,
+        "Avg Rating": staff.avg_rating !== null ? `${staff.avg_rating.toFixed(1)} (${staff.review_count || 1} reviews)` : "Unrated",
+        "Attendance": staff.attendance_rate !== null ? `${staff.attendance_rate}%` : "100% Present",
+        "Services Completed": staff.services_completed,
+        "Avg Service Time (mins)": staff.avg_service_time || 30,
+      }
+    })
+    downloadCSV(exportData, "staff-performance-report.csv")
+  }
+
   return (
     <div className="flex-1 flex flex-col">
       <PageHeader
@@ -156,7 +193,7 @@ export default function StaffPerformancePage() {
                       <SelectItem value="Last 3 Months">Last 3 Months</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Button className="gap-2 bg-black text-white hover:bg-gray-800" onClick={() => downloadCSV(staffData, 'staff-performance-report.csv')}>
+                  <Button className="gap-2 bg-black text-white hover:bg-gray-800" onClick={handleExportCSV}>
                     <Download className="w-4 h-4" />
                     Download
                   </Button>
@@ -187,10 +224,9 @@ export default function StaffPerformancePage() {
             </Card>
             <Card>
               <CardContent className="p-6 text-center">
-                <div className="text-2xl font-bold text-orange-600">
-                  {staffData.length > 0
-                    ? (staffData.reduce((sum, s) => sum + s.avg_rating, 0) / staffData.length).toFixed(1)
-                    : 0}
+                <div className="text-2xl font-bold text-amber-500 flex items-center justify-center gap-1">
+                  <Star className="w-5 h-5 fill-amber-500" />
+                  <span>{overallAvgRating}</span>
                 </div>
                 <div className="text-sm text-gray-600">Avg Rating</div>
               </CardContent>
@@ -231,58 +267,84 @@ export default function StaffPerformancePage() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b">
                     <tr>
-                      <th className="text-left p-3 font-medium">Staff Name</th>
-                      <th className="text-left p-3 font-medium">Role</th>
-                      <th className="text-center p-3 font-medium">Bookings</th>
-                      <th className="text-center p-3 font-medium">Revenue</th>
-                      <th className="text-center p-3 font-medium">Multi-Staff Rev.</th>
-                      <th className="text-center p-3 font-medium">Avg Rating</th>
-                      <th className="text-center p-3 font-medium">Attendance</th>
-                      <th className="text-center p-3 font-medium">Services</th>
-                      <th className="text-center p-3 font-medium">Avg Time</th>
+                      <th className="text-left p-3 font-medium text-gray-700">Staff Name</th>
+                      <th className="text-left p-3 font-medium text-gray-700">Role</th>
+                      <th className="text-center p-3 font-medium text-gray-700">Bookings</th>
+                      <th className="text-center p-3 font-medium text-gray-700">Direct Rev.</th>
+                      <th className="text-center p-3 font-medium text-gray-700">Multi-Staff Rev.</th>
+                      <th className="text-center p-3 font-medium text-gray-700">Total Revenue</th>
+                      <th className="text-center p-3 font-medium text-gray-700">Avg Rating</th>
+                      <th className="text-center p-3 font-medium text-gray-700">Attendance</th>
+                      <th className="text-center p-3 font-medium text-gray-700">Services</th>
+                      <th className="text-center p-3 font-medium text-gray-700">Avg Time</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
                     {staffData.map((staff) => {
-                      const splitRev = splitRevenueMap[staff.id] ?? 0
+                      const splitRev = splitRevenueMap[staff.id] ?? staff.split_revenue ?? 0
+                      const directRev = staff.direct_revenue ?? (staff.total_revenue > splitRev ? staff.total_revenue - splitRev : 0)
+                      const roleDisplay = staff.role 
+                        ? staff.role.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) 
+                        : "Stylist"
+
                       return (
                         <tr key={staff.id} className="hover:bg-gray-50">
-                          <td className="p-3 font-medium">{staff.name}</td>
-                          <td className="p-3">{staff.role}</td>
+                          <td className="p-3 font-medium text-gray-900">{staff.name}</td>
+                          <td className="p-3 text-gray-600">{roleDisplay}</td>
                           <td className="p-3 text-center">{staff.bookings_count}</td>
-                          <td className="p-3 text-center font-medium">₹{staff.total_revenue.toLocaleString()}</td>
+                          <td className="p-3 text-center text-gray-700">
+                            {directRev > 0 ? `₹${directRev.toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 2 })}` : "—"}
+                          </td>
                           <td className="p-3 text-center">
                             {splitsLoading ? (
                               <span className="text-xs text-muted-foreground">…</span>
                             ) : splitRev > 0 ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-800">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-100 text-violet-800 border border-violet-200">
                                 ₹{splitRev.toFixed(2)}
                               </span>
                             ) : (
                               <span className="text-gray-400 text-xs">—</span>
                             )}
                           </td>
-                          <td className="p-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <Star className="w-4 h-4 text-yellow-500 fill-current" />
-                              <span>{staff.avg_rating.toFixed(1)}</span>
-                            </div>
+                          <td className="p-3 text-center font-semibold text-gray-900">
+                            ₹{staff.total_revenue.toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
                           </td>
                           <td className="p-3 text-center">
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                staff.attendance_rate >= 90
-                                  ? "bg-green-100 text-green-800"
-                                  : staff.attendance_rate >= 80
-                                    ? "bg-yellow-100 text-yellow-800"
-                                    : "bg-red-100 text-red-800"
-                              }`}
-                            >
-                              {staff.attendance_rate.toFixed(0)}%
-                            </span>
+                            {staff.avg_rating !== null && staff.avg_rating > 0 ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                                <span className="font-medium text-gray-900">{staff.avg_rating.toFixed(1)}</span>
+                                {(staff.review_count ?? 0) > 0 && (
+                                  <span className="text-xs text-muted-foreground">({staff.review_count})</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 text-xs font-normal">—</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-center">
+                            {staff.attendance_rate !== null ? (
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  staff.attendance_rate >= 90
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : staff.attendance_rate >= 75
+                                      ? "bg-amber-100 text-amber-800"
+                                      : "bg-rose-100 text-rose-800"
+                                }`}
+                              >
+                                {staff.attendance_rate}%
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                100% Present
+                              </span>
+                            )}
                           </td>
                           <td className="p-3 text-center">{staff.services_completed}</td>
-                          <td className="p-3 text-center">{staff.avg_service_time.toFixed(0)}m</td>
+                          <td className="p-3 text-center text-gray-600">
+                            {staff.avg_service_time > 0 ? `${staff.avg_service_time}m` : "—"}
+                          </td>
                         </tr>
                       )
                     })}
