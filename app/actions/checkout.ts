@@ -845,6 +845,85 @@ export async function finalizeCheckout(
         console.error("Failed to process referral reward:", err)
       }
 
+      // -------------------------------------------------------------
+      // POS CASH DRAWER SYNCHRONIZATION
+      // Increment open cash drawer when payment_method is Cash or split with Cash
+      // -------------------------------------------------------------
+      try {
+        const isCash = input.payment_method?.toLowerCase() === "cash"
+        let cashPaid = 0
+        if (isCash) {
+          cashPaid = Math.max(0, Number(total) || 0)
+        } else if (Array.isArray(input.payment_splits)) {
+          for (const split of input.payment_splits) {
+            if (split.method?.toLowerCase() === "cash") {
+              cashPaid += Number(split.amount) || 0
+            }
+          }
+        }
+
+        if (cashPaid > 0) {
+          // 1. Find active drawer with an open shift for this tenant
+          let regRows = await sql`
+            SELECT id, current_shift_id, current_balance FROM cash_registers
+            WHERE tenant_id = ${tenantId} AND current_shift_id IS NOT NULL
+            LIMIT 1
+          `.catch(() => [])
+
+          // 2. Fallback to any active drawer if no shift is currently open
+          if (regRows.length === 0) {
+            regRows = await sql`
+              SELECT id, current_shift_id, current_balance FROM cash_registers
+              WHERE tenant_id = ${tenantId}
+              ORDER BY id ASC
+              LIMIT 1
+            `.catch(() => [])
+          }
+
+          // 3. If no register exists for tenant at all, auto-provision the default one!
+          if (regRows.length === 0) {
+            regRows = await sql`
+              INSERT INTO cash_registers (tenant_id, name, location, opening_balance, current_balance, status)
+              VALUES (${tenantId}, 'Main Cash Drawer', 'Front Desk', 0, 0, 'active')
+              RETURNING id, current_shift_id, current_balance
+            `.catch(() => [])
+          }
+
+          if (regRows.length > 0) {
+            const activeReg = regRows[0]
+            const activeShiftId = activeReg.current_shift_id || null
+
+            // Record cash_in transaction in cash_transactions
+            await sql`
+              INSERT INTO cash_transactions (
+                register_id, shift_id, type, amount, description, category, reference, tenant_id, created_at
+              ) VALUES (
+                ${activeReg.id}, ${activeShiftId}, 'cash_in', ${cashPaid},
+                ${'POS Sale - Invoice #' + invoice.invoice_number}, 'sales', ${invoice.invoice_number}, ${tenantId}, NOW()
+              )
+            `.catch(() => {})
+
+            // Increment current_balance in cash_registers
+            await sql`
+              UPDATE cash_registers
+              SET current_balance = current_balance + ${cashPaid}, updated_at = NOW()
+              WHERE id = ${activeReg.id} AND tenant_id = ${tenantId}
+            `.catch(() => {})
+
+            // If shift is open, increment expected_balance in register_shifts
+            if (activeShiftId) {
+              await sql`
+                UPDATE register_shifts
+                SET expected_balance = expected_balance + ${cashPaid}
+                WHERE id = ${activeShiftId} AND tenant_id = ${tenantId}
+              `.catch(() => {})
+            }
+          }
+        }
+      } catch (cashSyncErr) {
+        console.warn("Cash drawer sync error during checkout:", cashSyncErr)
+      }
+
       return {
         success: true,
         invoice,

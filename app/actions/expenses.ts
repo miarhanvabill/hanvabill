@@ -30,24 +30,64 @@ export interface ExpenseVendorRollup {
   percentage: number
 }
 
-export async function createExpensesTable() {
-  return withTenantAuth(async ({ sql, tenantId }) => {
+function normalizeDate(rawDate?: string): string {
+  if (!rawDate) return new Date().toISOString().split("T")[0]
+  const str = rawDate.trim()
+  // Match DD/MM/YYYY or DD-MM-YYYY
+  if (/^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(str)) {
+    const parts = str.split(/[\/\-]/)
+    const day = parts[0].padStart(2, "0")
+    const month = parts[1].padStart(2, "0")
+    const year = parts[2]
+    return `${year}-${month}-${day}`
+  }
+  // Match YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.split("T")[0]
+  }
+  const d = new Date(str)
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().split("T")[0]
+  }
+  return new Date().toISOString().split("T")[0]
+}
+
+export async function ensureExpensesTable(sql: any) {
+  try {
     await sql`
       CREATE TABLE IF NOT EXISTS expenses (
-          id SERIAL PRIMARY KEY,
-          tenant_id VARCHAR(100) NOT NULL,
-          date DATE NOT NULL,
-          category VARCHAR(100) NOT NULL,
-          description TEXT,
-          amount DECIMAL(10, 2) NOT NULL,
-          payment_method VARCHAR(50),
-          vendor VARCHAR(100),
-          receipt_url TEXT,
-          status VARCHAR(50) DEFAULT 'completed',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR(100) NOT NULL,
+        date DATE NOT NULL,
+        category VARCHAR(100) NOT NULL,
+        description TEXT,
+        amount DECIMAL(10, 2) NOT NULL,
+        payment_method VARCHAR(50),
+        vendor VARCHAR(100),
+        receipt_url TEXT,
+        status VARCHAR(50) DEFAULT 'completed',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `
+    await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100)`.catch(() => {})
+    await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS date DATE`.catch(() => {})
+    await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS category VARCHAR(100)`.catch(() => {})
+    await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS description TEXT`.catch(() => {})
+    await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS amount DECIMAL(10, 2)`.catch(() => {})
+    await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50)`.catch(() => {})
+    await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS vendor VARCHAR(100)`.catch(() => {})
+    await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_url TEXT`.catch(() => {})
+    await sql`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'completed'`.catch(() => {})
+    await sql`CREATE INDEX IF NOT EXISTS idx_expenses_tenant_date ON expenses(tenant_id, date)`.catch(() => {})
+  } catch (err) {
+    console.error("[Expenses] Error ensuring schema:", err)
+  }
+}
+
+export async function createExpensesTable() {
+  return withTenantAuth(async ({ sql }) => {
+    await ensureExpensesTable(sql)
     return { success: true }
   })
 }
@@ -55,6 +95,7 @@ export async function createExpensesTable() {
 export async function getExpenses(): Promise<ExpenseRecord[]> {
   return withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureExpensesTable(sql)
       const data = await sql`
         SELECT * FROM expenses 
         WHERE tenant_id = ${tenantId}
@@ -84,6 +125,7 @@ export async function getExpenseRollups(): Promise<{
 }> {
   return withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureExpensesTable(sql)
       // Category rollup
       const catResult = await sql`
         SELECT 
@@ -173,17 +215,62 @@ export async function addExpense(expenseData: {
   status?: string
 }) {
   return withTenantAuth(async ({ sql, tenantId }) => {
+    await ensureExpensesTable(sql)
+
+    const normalizedDate = normalizeDate(expenseData.date)
+    const numAmount = Math.max(0, Number(expenseData.amount) || 0)
+    const paymentMethod = expenseData.payment_method || "Cash"
+
     const result = await sql`
       INSERT INTO expenses (
         tenant_id, date, category, description, amount, payment_method, vendor, receipt_url, status
       ) VALUES (
-        ${tenantId}, ${expenseData.date}, ${expenseData.category}, ${expenseData.description},
-        ${expenseData.amount}, ${expenseData.payment_method || null}, ${expenseData.vendor || null},
+        ${tenantId}, ${normalizedDate}, ${expenseData.category}, ${expenseData.description},
+        ${numAmount}, ${paymentMethod}, ${expenseData.vendor || null},
         ${expenseData.receipt_url || null}, ${expenseData.status || 'completed'}
       )
       RETURNING *
     `
     const row = result[0] || (result as any).rows?.[0]
+
+    // If paid by Cash, synchronize with Cash Register drawer!
+    if (paymentMethod.toLowerCase() === "cash" && numAmount > 0) {
+      try {
+        const regRows = await sql`
+          SELECT id, current_shift_id FROM cash_registers
+          WHERE tenant_id = ${tenantId} AND current_shift_id IS NOT NULL
+          LIMIT 1
+        `.catch(() => [])
+
+        if (regRows.length > 0) {
+          const reg = regRows[0]
+          await sql`
+            INSERT INTO cash_transactions (
+              register_id, shift_id, type, amount, description, category, reference, tenant_id, created_at
+            ) VALUES (
+              ${reg.id}, ${reg.current_shift_id}, 'cash_out', ${numAmount},
+              ${'Expense: ' + expenseData.category + ' - ' + expenseData.description}, 'expense',
+              ${'EXP-' + row.id}, ${tenantId}, NOW()
+            )
+          `.catch(() => {})
+
+          await sql`
+            UPDATE cash_registers
+            SET current_balance = current_balance - ${numAmount}, updated_at = NOW()
+            WHERE id = ${reg.id} AND tenant_id = ${tenantId}
+          `.catch(() => {})
+
+          await sql`
+            UPDATE register_shifts
+            SET expected_balance = expected_balance - ${numAmount}
+            WHERE id = ${reg.current_shift_id} AND tenant_id = ${tenantId}
+          `.catch(() => {})
+        }
+      } catch (cashErr) {
+        console.warn("Failed to sync cash expense to register:", cashErr)
+      }
+    }
+
     return {
       ...row,
       id: Number(row.id),
@@ -205,13 +292,17 @@ export async function updateExpense(
   }
 ) {
   return withTenantAuth(async ({ sql, tenantId }) => {
+    await ensureExpensesTable(sql)
+    const normalizedDate = normalizeDate(expenseData.date)
+    const numAmount = Math.max(0, Number(expenseData.amount) || 0)
+
     const result = await sql`
       UPDATE expenses 
       SET 
-        date = ${expenseData.date},
+        date = ${normalizedDate},
         category = ${expenseData.category},
         description = ${expenseData.description},
-        amount = ${expenseData.amount},
+        amount = ${numAmount},
         payment_method = ${expenseData.payment_method || null},
         vendor = ${expenseData.vendor || null},
         status = ${expenseData.status || 'completed'},
