@@ -35,7 +35,7 @@ export default function GiftCardRedeemer({ baseDue, onChange }: GiftCardRedeemer
   useEffect(() => { onChangeRef.current = onChange }, [onChange])
 
   useEffect(() => {
-    const payload = applied.map((a) => ({ code: a.code, amount: Math.max(0, Math.floor(a.amount)) }))
+    const payload = applied.map((a) => ({ code: a.code, amount: Math.max(0, Math.round((Number(a.amount) || 0) * 100) / 100) }))
     const serialized = JSON.stringify(payload)
     if (serialized !== lastSerializedRef.current) {
       lastSerializedRef.current = serialized
@@ -61,7 +61,7 @@ export default function GiftCardRedeemer({ baseDue, onChange }: GiftCardRedeemer
       }
       setApplied((prev) => [
         ...prev,
-        { id: data.card.id, code: data.card.code, balance: Number(data.card.balance), amount: defaultAmount, expires_at: data.card.expires_at },
+        { id: data.card.id, code: data.card.code, balance: Number(data.card.balance), amount: Math.round(defaultAmount * 100) / 100, expires_at: data.card.expires_at },
       ])
       setCode("")
     } catch (e: any) {
@@ -70,7 +70,7 @@ export default function GiftCardRedeemer({ baseDue, onChange }: GiftCardRedeemer
   }
 
   const adjustAmount = (idx: number, val: string) => {
-    const num = Math.max(0, Math.floor(Number(val) || 0))
+    const num = Math.max(0, Math.round((Number(val) || 0) * 100) / 100)
     setApplied((list) => {
       const next = [...list]
       const card = next[idx]

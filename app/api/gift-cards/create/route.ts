@@ -4,13 +4,16 @@ import { createGiftCard } from "@/app/actions/gift-cards"
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const formData = new FormData()
-    formData.set("amount", String(body.amount ?? ""))
-    if (body.customerName) formData.set("customerName", String(body.customerName))
-    if (body.customerPhone) formData.set("customerPhone", String(body.customerPhone))
-    formData.set("expiryDays", String(body.expiryDays ?? "365"))
-
-    const res = await createGiftCard(formData)
+    const res = await createGiftCard({
+      amount: Number(body.amount),
+      code: body.code ? String(body.code) : undefined,
+      customerName: body.customerName ? String(body.customerName) : undefined,
+      customerPhone: body.customerPhone ? String(body.customerPhone) : undefined,
+      customerEmail: body.customerEmail ? String(body.customerEmail) : undefined,
+      customerId: body.customerId ? Number(body.customerId) : undefined,
+      expiryDays: body.expiryDays !== undefined ? (body.expiryDays === null || body.expiryDays === "never" ? null : Number(body.expiryDays)) : 365,
+      notes: body.notes ? String(body.notes) : undefined,
+    })
     const status = res.success ? 200 : 400
     return NextResponse.json(res, { status })
   } catch (e: any) {

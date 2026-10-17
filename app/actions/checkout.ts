@@ -272,18 +272,44 @@ export async function finalizeCheckout(
         `
       }
 
-      // Deduct Gift Card balances if redeemed during checkout
+      // Deduct Gift Card balances if redeemed during checkout & record audit transaction
       if (input.gift_cards && input.gift_cards.length > 0) {
         for (const gc of input.gift_cards) {
           if (gc.code && gc.amount > 0) {
-            await sql`
-              UPDATE gift_cards 
-              SET balance = GREATEST(0, balance - ${gc.amount}),
-                  status = CASE WHEN balance - ${gc.amount} <= 0 THEN 'used' ELSE status END,
-                  updated_at = NOW()
-              WHERE UPPER(code) = UPPER(${gc.code}) 
-              AND tenant_id = ${tenantId}
-            `.catch((err: any) => console.error("Error deducting gift card balance in checkout:", err))
+            try {
+              const cardRows = await sql`
+                SELECT id, code, balance FROM gift_cards 
+                WHERE UPPER(TRIM(code)) = UPPER(TRIM(${gc.code})) 
+                AND tenant_id = ${tenantId}
+                LIMIT 1
+              `
+              if (cardRows && cardRows.length > 0) {
+                const card = cardRows[0]
+                const curBal = Number(card.balance || 0)
+                const deductAmt = Math.min(curBal, Number(gc.amount) || 0)
+                const newBal = Math.max(0, Math.round((curBal - deductAmt) * 100) / 100)
+                const newStatus = newBal <= 0 ? "used" : "active"
+
+                await sql`
+                  UPDATE gift_cards 
+                  SET balance = ${newBal},
+                      status = ${newStatus},
+                      updated_at = NOW()
+                  WHERE id = ${card.id} AND tenant_id = ${tenantId}
+                `
+
+                await sql`
+                  INSERT INTO gift_card_transactions (
+                    tenant_id, gift_card_id, code, type, amount, balance_before, balance_after, customer_id, notes, created_at
+                  ) VALUES (
+                    ${tenantId}, ${card.id}, ${card.code}, 'redeem', ${deductAmt}, ${curBal}, ${newBal}, 
+                    ${customerId || null}, ${'Redeemed in POS Checkout (Invoice #' + invoiceNumber + ')'}, NOW()
+                  )
+                `.catch(() => {})
+              }
+            } catch (err: any) {
+              console.error("Error deducting gift card balance in checkout:", err)
+            }
           }
         }
       }
