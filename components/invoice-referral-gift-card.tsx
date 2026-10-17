@@ -8,6 +8,7 @@ interface InvoiceReferralGiftCardProps {
   customerName?: string
   customerId?: number | null
   customerPhone?: string | null
+  customerReferralCode?: string | null
   salonName: string
   bookingSlug: string
   discountAmount?: number
@@ -20,6 +21,7 @@ export function InvoiceReferralGiftCard({
   customerName = "Valued Customer",
   customerId,
   customerPhone,
+  customerReferralCode,
   salonName = "our salon",
   bookingSlug,
   discountAmount = 250,
@@ -29,10 +31,12 @@ export function InvoiceReferralGiftCard({
 }: InvoiceReferralGiftCardProps) {
   const [copied, setCopied] = useState(false)
 
-  // Compute referral code
-  const referralCode = customerId
-    ? `REF${String(customerId).padStart(4, "0")}${String(customerPhone || "").slice(-4)}`
-    : "GIFT250"
+  // Priority: 1. Server-persisted customer referral code, 2. Computed vanity code, 3. Fallback
+  const referralCode = customerReferralCode && customerReferralCode.trim()
+    ? customerReferralCode.trim().toUpperCase()
+    : (customerId
+        ? `REF${String(customerId).padStart(4, "0")}${String(customerPhone || "").replace(/\D/g, "").slice(-4)}`
+        : "GIFT250")
 
   const bookingUrl = `https://biz.hanva.in/book/${bookingSlug}?ref=${referralCode}`
 

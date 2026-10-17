@@ -819,25 +819,14 @@ export async function finalizeCheckout(
       if (input.referral_code) {
         try {
           const cleanRef = input.referral_code.trim().toUpperCase()
-          const refRows = await sql`
-            SELECT id FROM customers
-            WHERE tenant_id = ${tenantId}
-              AND (
-                ('REF' || LPAD(id::text, 4, '0') || RIGHT(phone_number, 4)) = ${cleanRef}
-                OR ('REF' || id::text) = ${cleanRef}
-                OR referral_code = ${cleanRef}
-              )
-            LIMIT 1
-          `.catch(() => [])
-          if (refRows.length > 0) {
-            const referrerId = refRows[0].id
-            if (Number(referrerId) !== Number(customerId)) {
-              await sql`
-                UPDATE customers
-                SET referred_by_customer_id = ${referrerId}
-                WHERE id = ${customerId} AND tenant_id = ${tenantId} AND (referred_by_customer_id IS NULL)
-              `.catch(() => {})
-            }
+          const { findReferrerCustomer } = await import("@/app/actions/referrals")
+          const refMatch = await findReferrerCustomer(sql, cleanRef, tenantId)
+          if (refMatch && Number(refMatch.id) !== Number(customerId)) {
+            await sql`
+              UPDATE customers
+              SET referred_by_customer_id = ${refMatch.id}
+              WHERE id = ${customerId} AND tenant_id = ${tenantId} AND (referred_by_customer_id IS NULL)
+            `.catch(() => {})
           }
         } catch (refErr) {
           console.error("Failed to link referral during checkout:", refErr)

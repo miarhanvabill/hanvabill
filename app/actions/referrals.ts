@@ -575,6 +575,156 @@ export async function getOrCreateCustomerReferralCode(
 }
 
 /**
+ * Bulletproof Referrer Customer Lookup:
+ * Matches exact referral_code, LPAD 4-digit code (REF{0049}{6987}), unpadded code (REF{49}{6987}),
+ * candidate ID decomposition for vanity codes (e.g. REF49216987 -> ID 4921 + phone 6987),
+ * and handles cross-tenant discovery with automatic adoption of customer's true tenant_id.
+ */
+export async function findReferrerCustomer(
+  sql: any,
+  rawCode: string,
+  preferredTenantId?: string
+): Promise<{
+  id: number
+  full_name: string
+  phone_number: string
+  referral_code: string | null
+  tenant_id: string
+} | null> {
+  const cleanCode = (rawCode || "").trim().toUpperCase()
+  if (!cleanCode) return null
+
+  // 1. Within preferredTenantId (if provided)
+  if (preferredTenantId) {
+    const preferredRows = await sql`
+      SELECT id, full_name, phone_number, referral_code, tenant_id
+      FROM customers
+      WHERE tenant_id = ${preferredTenantId}
+        AND (
+          UPPER(COALESCE(referral_code, '')) = ${cleanCode}
+          OR ('REF' || LPAD(id::text, 4, '0') || RIGHT(REGEXP_REPLACE(COALESCE(phone_number, ''), '\\D', '', 'g'), 4)) = ${cleanCode}
+          OR ('REF' || id::text || RIGHT(REGEXP_REPLACE(COALESCE(phone_number, ''), '\\D', '', 'g'), 4)) = ${cleanCode}
+          OR ('REF' || id::text) = ${cleanCode}
+          OR ('REF' || LPAD(id::text, 4, '0')) = ${cleanCode}
+        )
+      LIMIT 1
+    `.catch(() => [])
+
+    if (preferredRows.length > 0) {
+      const match = preferredRows[0]
+      if (!match.referral_code || match.referral_code.toUpperCase() !== cleanCode) {
+        await sql`
+          UPDATE customers
+          SET referral_code = ${cleanCode}, updated_at = NOW()
+          WHERE id = ${match.id}
+        `.catch(() => {})
+      }
+      return {
+        id: Number(match.id),
+        full_name: match.full_name,
+        phone_number: match.phone_number,
+        referral_code: cleanCode,
+        tenant_id: String(match.tenant_id),
+      }
+    }
+  }
+
+  // 2. Global search across all customers (handles slug/tenantId mismatch)
+  const globalRows = await sql`
+    SELECT id, full_name, phone_number, referral_code, tenant_id
+    FROM customers
+    WHERE UPPER(COALESCE(referral_code, '')) = ${cleanCode}
+      OR ('REF' || LPAD(id::text, 4, '0') || RIGHT(REGEXP_REPLACE(COALESCE(phone_number, ''), '\\D', '', 'g'), 4)) = ${cleanCode}
+      OR ('REF' || id::text || RIGHT(REGEXP_REPLACE(COALESCE(phone_number, ''), '\\D', '', 'g'), 4)) = ${cleanCode}
+      OR ('REF' || id::text) = ${cleanCode}
+      OR ('REF' || LPAD(id::text, 4, '0')) = ${cleanCode}
+    ORDER BY id DESC
+    LIMIT 1
+  `.catch(() => [])
+
+  if (globalRows.length > 0) {
+    const match = globalRows[0]
+    if (!match.referral_code || match.referral_code.toUpperCase() !== cleanCode) {
+      await sql`
+        UPDATE customers
+        SET referral_code = ${cleanCode}, updated_at = NOW()
+        WHERE id = ${match.id}
+      `.catch(() => {})
+    }
+    return {
+      id: Number(match.id),
+      full_name: match.full_name,
+      phone_number: match.phone_number,
+      referral_code: cleanCode,
+      tenant_id: String(match.tenant_id),
+    }
+  }
+
+  // 3. Decomposition fallback for REF codes (e.g. REF49216987, REF00496987, REF49)
+  if (cleanCode.startsWith("REF")) {
+    const numPart = cleanCode.substring(3).replace(/\D/g, "")
+    const candidates: { id: number; suffix: string | null }[] = []
+
+    // Try 4-digit phone suffix (e.g. 4921 + 6987, or 0049 + 6987)
+    if (numPart.length >= 5) {
+      const suffix4 = numPart.slice(-4)
+      const idPart = numPart.slice(0, -4)
+      const parsedId = parseInt(idPart, 10)
+      if (!isNaN(parsedId) && parsedId > 0) {
+        candidates.push({ id: parsedId, suffix: suffix4 })
+      }
+    }
+
+    // Try 3-digit phone suffix
+    if (numPart.length >= 4) {
+      const suffix3 = numPart.slice(-3)
+      const idPart = numPart.slice(0, -3)
+      const parsedId = parseInt(idPart, 10)
+      if (!isNaN(parsedId) && parsedId > 0) {
+        candidates.push({ id: parsedId, suffix: suffix3 })
+      }
+    }
+
+    // Try direct customer ID (e.g. REF49)
+    const directId = parseInt(numPart, 10)
+    if (!isNaN(directId) && directId > 0) {
+      candidates.push({ id: directId, suffix: null })
+    }
+
+    for (const cand of candidates) {
+      const checkRows = await sql`
+        SELECT id, full_name, phone_number, referral_code, tenant_id
+        FROM customers
+        WHERE id = ${cand.id}
+        LIMIT 1
+      `.catch(() => [])
+
+      if (checkRows.length > 0) {
+        const row = checkRows[0]
+        const cleanPhone = (row.phone_number || "").replace(/\D/g, "")
+        if (!cand.suffix || cleanPhone.endsWith(cand.suffix)) {
+          await sql`
+            UPDATE customers
+            SET referral_code = ${cleanCode}, updated_at = NOW()
+            WHERE id = ${row.id}
+          `.catch(() => {})
+
+          return {
+            id: Number(row.id),
+            full_name: row.full_name,
+            phone_number: row.phone_number,
+            referral_code: cleanCode,
+            tenant_id: String(row.tenant_id),
+          }
+        }
+      }
+    }
+  }
+
+  return null
+}
+
+/**
  * Validates a referral code, ensures referrer is not same as referee,
  * and checks IF the phone has ANY previous completed invoice or booking in this salon.
  * Returns: { valid, discount_amount, discount_type, min_order, referrer_name, is_first_time }
@@ -585,7 +735,7 @@ export async function validateReferralCode(
   tenantId?: string
 ): Promise<ValidateReferralResult> {
   return await withTenantAuth(async ({ sql, tenantId: authTenantId }) => {
-    const resolvedTenantId = tenantId ? await getInternalTenantId(tenantId) : authTenantId
+    let resolvedTenantId = tenantId ? await getInternalTenantId(tenantId) : authTenantId
     await ensureReferralSchema(sql, resolvedTenantId)
 
     const cleanCode = (code || "").trim().toUpperCase()
@@ -601,6 +751,27 @@ export async function validateReferralCode(
       }
     }
 
+    // 1. Locate referrer using the robust matching engine
+    const referrer = await findReferrerCustomer(sql, cleanCode, resolvedTenantId)
+
+    if (!referrer) {
+      return {
+        valid: false,
+        discount_amount: 0,
+        discount_type: "fixed",
+        min_order: 0,
+        referrer_name: "",
+        is_first_time: true,
+        message: "Invalid referral code",
+      }
+    }
+
+    // Adopt referrer's tenant_id if available to prevent cross-tenant/slug resolution mismatch
+    if (referrer.tenant_id) {
+      resolvedTenantId = String(referrer.tenant_id)
+    }
+
+    // Load referral settings for the resolved tenant
     const settings = await getReferralSettings(resolvedTenantId)
     if (!settings.is_active) {
       return {
@@ -614,47 +785,6 @@ export async function validateReferralCode(
       }
     }
 
-    // 1. Locate referrer by referral code
-    let referrerRows = await sql`
-      SELECT id, full_name, phone_number, referral_code
-      FROM customers
-      WHERE tenant_id = ${resolvedTenantId} AND UPPER(referral_code) = ${cleanCode}
-      LIMIT 1
-    `
-
-    // Fallback: If code follows REF{customerId}{suffix} convention
-    if (referrerRows.length === 0) {
-      const match = cleanCode.match(/^REF(\d+)/i)
-      if (match && match[1]) {
-        const parsedId = Number(match[1])
-        referrerRows = await sql`
-          SELECT id, full_name, phone_number, referral_code
-          FROM customers
-          WHERE tenant_id = ${resolvedTenantId} AND id = ${parsedId}
-          LIMIT 1
-        `
-        if (referrerRows.length > 0 && !referrerRows[0].referral_code) {
-          await sql`
-            UPDATE customers SET referral_code = ${cleanCode}
-            WHERE id = ${parsedId} AND tenant_id = ${resolvedTenantId}
-          `.catch(() => {})
-        }
-      }
-    }
-
-    if (referrerRows.length === 0) {
-      return {
-        valid: false,
-        discount_amount: 0,
-        discount_type: settings.referee_discount_type || "fixed",
-        min_order: Number(settings.minimum_order_amount || 0),
-        referrer_name: "",
-        is_first_time: true,
-        message: "Invalid referral code",
-      }
-    }
-
-    const referrer = referrerRows[0]
     let isFirstTime = true
 
     // 2. If phone is provided, validate first-time visitor status and self-referral

@@ -255,12 +255,21 @@ const handleApplyReferralCode = async (overrideCode?: string) => {
       phone: customerForm.phone || "",
     })
     if (tenantId) queryParams.set("tenant", tenantId)
+    if (slug) queryParams.set("slug", slug)
 
     const res = await fetch(`/api/public/referral/validate?${queryParams.toString()}`)
     const data = await res.json()
     if (data && data.valid) {
       setReferralCode(codeToValidate)
       setManualRefInput("")
+      if (data.discount_amount !== undefined || data.min_order !== undefined) {
+        setReferralSettings((prev: any) => ({
+          ...prev,
+          referee_discount_amount: data.discount_amount ?? prev?.referee_discount_amount ?? 250,
+          referee_discount_type: data.discount_type ?? prev?.referee_discount_type ?? "fixed",
+          minimum_order_amount: data.min_order ?? prev?.minimum_order_amount ?? 700,
+        }))
+      }
       try {
         localStorage.setItem(`referral_code_${slug}`, codeToValidate)
       } catch {}
@@ -308,8 +317,44 @@ useEffect(() => {
         if (cached) setReferralCode(cached)
       } catch {}
     }
+
+    const savedToken = localStorage.getItem(`portal_token_${slug}`)
+    const savedCustomer = localStorage.getItem(`portal_customer_${slug}`)
+    if (savedToken && savedCustomer) {
+      try {
+        const customer = JSON.parse(savedCustomer)
+        setPortalToken(savedToken)
+        setPortalCustomer(customer)
+        setCustomerForm(prev => ({
+          ...prev,
+          name: prev.name || customer.name || '',
+          phone: prev.phone || customer.phone || '',
+          email: prev.email || customer.email || ''
+        }))
+      } catch {}
+    }
   }
 }, [slug])
+
+useEffect(() => {
+  if (!portalToken) return
+  fetch('/api/public/customer-profile', {
+    headers: { 'Authorization': `Bearer ${portalToken}` }
+  })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        setPortalProfile(data)
+      } else {
+        localStorage.removeItem(`portal_token_${slug}`)
+        localStorage.removeItem(`portal_customer_${slug}`)
+        setPortalToken(null)
+        setPortalCustomer(null)
+        setPortalProfile(null)
+      }
+    })
+    .catch(() => {})
+}, [portalToken, slug])
 
   useEffect(() => {
     const fetchData = async () => {

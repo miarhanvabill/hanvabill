@@ -168,13 +168,30 @@ export async function getInvoiceByShareToken(token: string) {
     const sql = baseSql;
     
     const result = await sql`
-      SELECT i.*, c.full_name as customer_name, c.phone_number as customer_phone, c.email as customer_email
+      SELECT i.*, c.full_name as customer_name, c.phone_number as customer_phone, c.email as customer_email, c.referral_code as customer_referral_code
       FROM invoices i
       LEFT JOIN customers c ON i.customer_id = c.id
       WHERE i.share_token = ${token}
       LIMIT 1
     `
     if (result.length === 0) return { success: false, message: "Invoice not found" }
+    
+    // Ensure referral code is assigned and saved to customer record if missing
+    let customerReferralCode = result[0].customer_referral_code;
+    if (!customerReferralCode && result[0].customer_id) {
+      try {
+        const cleanPhone = (result[0].customer_phone || "").replace(/\D/g, "");
+        const suffix = cleanPhone.length >= 4 ? cleanPhone.slice(-4) : "0000";
+        customerReferralCode = `REF${String(result[0].customer_id).padStart(4, "0")}${suffix}`.toUpperCase();
+        await sql`
+          UPDATE customers
+          SET referral_code = ${customerReferralCode}, updated_at = NOW()
+          WHERE id = ${result[0].customer_id} AND (referral_code IS NULL OR referral_code = '')
+        `.catch(() => {});
+      } catch (refErr) {
+        console.warn("Could not auto-generate referral code for customer:", refErr);
+      }
+    }
     
     // Also fetch the tenant details so the invoice can display business information!
     const tenantId = result[0].tenant_id;
@@ -260,7 +277,14 @@ export async function getInvoiceByShareToken(token: string) {
       console.warn("Could not load referral info for invoice:", refErr);
     }
     
-    return { success: true, invoice: result[0], businessSettings, referralSettings, bookingSlug }
+    return {
+      success: true,
+      invoice: { ...result[0], customer_referral_code: customerReferralCode },
+      businessSettings,
+      referralSettings,
+      bookingSlug,
+      customerReferralCode,
+    }
   } catch (error) {
     console.error("Error fetching invoice by token:", error)
     return { success: false, message: "Failed to fetch invoice" }

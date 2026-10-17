@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const code = searchParams.get("code")
-    const tenant = searchParams.get("tenant") || searchParams.get("tenantId") || undefined
+    const tenant = searchParams.get("tenant") || searchParams.get("tenantId") || searchParams.get("slug") || undefined
     const phone = searchParams.get("phone") || undefined
 
     if (!code || !code.trim()) {

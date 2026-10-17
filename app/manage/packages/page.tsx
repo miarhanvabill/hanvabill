@@ -414,7 +414,12 @@ export default function PackagesPage() {
                 <p className="text-sm font-medium text-gray-600">Avg. Package Price</p>
                 <p className="text-3xl font-bold text-purple-600">
                   {packages.length > 0
-                    ? formatCurrency(packages.reduce((sum, p) => sum + p.package_price, 0) / packages.length)
+                    ? formatCurrency(
+                        packages.reduce(
+                          (sum, p) => sum + (Number(p.package_price ?? (p as any).price ?? 0) || 0),
+                          0
+                        ) / packages.length
+                      )
                     : formatCurrency(0)}
                 </p>
               </div>
@@ -429,7 +434,18 @@ export default function PackagesPage() {
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Savings</p>
                 <p className="text-3xl font-bold text-orange-600">
-                  {formatCurrency(packages.reduce((sum, p) => sum + (p.original_price - p.package_price), 0))}
+                  {formatCurrency(
+                    packages.reduce(
+                      (sum, p) =>
+                        sum +
+                        Math.max(
+                          0,
+                          (Number(p.original_price || 0) || 0) -
+                            (Number(p.package_price ?? (p as any).price ?? 0) || 0)
+                        ),
+                      0
+                    )
+                  )}
                 </p>
               </div>
               <Calendar className="w-8 h-8 text-orange-600" />

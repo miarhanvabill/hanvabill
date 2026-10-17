@@ -108,6 +108,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
           customerName={inv.customer_name}
           customerId={inv.customer_id ? Number(inv.customer_id) : null}
           customerPhone={inv.customer_phone}
+          customerReferralCode={res.customerReferralCode || inv.customer_referral_code}
           salonName={bizProfile.salonName || "Hanva Salon"}
           bookingSlug={res.bookingSlug || String(inv.tenant_id)}
           discountAmount={Number(res.referralSettings?.referee_discount_amount) || 250}

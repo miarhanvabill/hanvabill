@@ -66,18 +66,14 @@ export async function POST(req: Request) {
     const referralCode = body.referral_code ? String(body.referral_code).trim().toUpperCase() : null;
     let referrerId: number | null = null;
     if (referralCode) {
-      const refMatches = await sql`
-        SELECT id FROM customers
-        WHERE tenant_id = ${tenantId}
-          AND (
-            ('REF' || LPAD(id::text, 4, '0') || RIGHT(phone_number, 4)) = ${referralCode}
-            OR ('REF' || id::text) = ${referralCode}
-            OR UPPER(referral_code) = ${referralCode}
-          )
-        LIMIT 1
-      `.catch(() => []);
-      if (refMatches.length > 0) {
-        referrerId = refMatches[0].id;
+      try {
+        const { findReferrerCustomer } = await import("@/app/actions/referrals");
+        const refMatch = await findReferrerCustomer(sql, referralCode, tenantId);
+        if (refMatch) {
+          referrerId = refMatch.id;
+        }
+      } catch (refErr) {
+        console.warn("Failed to find referrer during public booking:", refErr);
       }
     }
 

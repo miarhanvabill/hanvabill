@@ -13,12 +13,25 @@ const tenantIdCache = new Map<string, string>();
  * Get the internal tenant ID from a tenant key (Clerk orgId or orgSlug)
  */
 export async function getInternalTenantId(tenantKey: string, orgId?: string): Promise<string> {
-  const cacheKey = tenantKey.trim();
+  const cacheKey = String(tenantKey || "").trim();
+  if (!cacheKey) return "1";
   if (tenantIdCache.has(cacheKey)) {
     return tenantIdCache.get(cacheKey)!;
   }
 
   try {
+    // 0. If tenantKey is already a numeric ID, verify existence and return it
+    if (/^\d+$/.test(cacheKey)) {
+      const byIdResult = await baseSql`
+        SELECT id FROM tenants WHERE id = ${Number(cacheKey)} LIMIT 1
+      `.catch(() => [])
+      if (byIdResult.length > 0) {
+        const idStr = String(byIdResult[0].id);
+        tenantIdCache.set(cacheKey, idStr);
+        return idStr;
+      }
+    }
+
     // 1. First try to find by slug (case-insensitive)
     const bySlugResult = await baseSql`
       SELECT id, tenant_key, slug FROM tenants 
