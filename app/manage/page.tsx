@@ -139,6 +139,14 @@ const staffSections: ManageSection[] = [
     color: "bg-green-50 text-green-600",
   },
   {
+    title: "Payroll Management",
+    description: "Generate automated monthly payroll runs, calculate staff commissions, base salaries, and track payouts.",
+    icon: IndianRupee,
+    href: "/manage/payroll",
+    color: "bg-emerald-50 text-emerald-600",
+    badge: true,
+  },
+  {
     title: "Roles & Permissions",
     description: "Set different access levels for staff, ensuring everyone has the right permissions for their roles.",
     icon: Shield,

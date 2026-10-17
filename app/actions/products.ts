@@ -19,9 +19,37 @@ function isUndefinedTable(err: any) {
   return err?.code === "42P01" || /relation .* does not exist/i.test(err?.message || "")
 }
 
+let productsSchemaEnsured = false;
+async function ensureProductsSchema(sql: any) {
+  if (productsSchemaEnsured) return;
+  try {
+    await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS tenant_id TEXT`.catch(() => {});
+    await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS sku VARCHAR(100)`.catch(() => {});
+    await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT`.catch(() => {});
+    await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS cost NUMERIC(10,2) DEFAULT 0`.catch(() => {});
+    await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS cost_price NUMERIC(10,2) DEFAULT 0`.catch(() => {});
+    await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS category_id INTEGER`.catch(() => {});
+    await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS category VARCHAR(100)`.catch(() => {});
+    await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS barcode VARCHAR(100)`.catch(() => {});
+    await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS unit VARCHAR(50) DEFAULT 'piece'`.catch(() => {});
+    await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_quantity INTEGER DEFAULT 0`.catch(() => {});
+    await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS min_stock_level INTEGER DEFAULT 0`.catch(() => {});
+    await sql`ALTER TABLE products ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`.catch(() => {});
+    
+    // Drop global unique constraints so products are tenant-scoped
+    await sql`ALTER TABLE products DROP CONSTRAINT IF EXISTS products_barcode_key`.catch(() => {});
+    await sql`ALTER TABLE products DROP CONSTRAINT IF EXISTS products_sku_key`.catch(() => {});
+
+    productsSchemaEnsured = true;
+  } catch (err) {
+    console.warn("ensureProductsSchema warning:", err);
+  }
+}
+
 export async function getProducts() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureProductsSchema(sql);
       const rows = await sql`
         SELECT p.*, c.name as category_name,
         (
@@ -65,62 +93,76 @@ export async function createProduct(data: {
   sku?: string
   image_url?: string
   is_active: boolean
-}) {
+}): Promise<any> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      // Ensure columns exist on products table
-      await sql`
-        ALTER TABLE products ADD COLUMN IF NOT EXISTS sku VARCHAR(100);
-        ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
-      `.catch(() => {})
+      await ensureProductsSchema(sql);
 
-      const barcode = data.barcode ? data.barcode.trim() : null
-      const sku = data.sku ? data.sku.trim() : barcode
+      if (!data.name || !data.name.trim()) {
+        return { success: false, error: "Product name is required" }
+      }
+
+      const barcode = data.barcode && data.barcode.trim() ? data.barcode.trim() : null
+      const sku = data.sku && data.sku.trim() ? data.sku.trim() : barcode
       const categoryId = data.category_id && !isNaN(Number(data.category_id)) ? Number(data.category_id) : null
       const price = Math.max(0, Number(data.price) || 0)
       const cost = Math.max(0, Number(data.cost) || 0)
       const stockQuantity = Math.max(0, Number(data.stock_quantity) || 0)
       const minStockLevel = Math.max(0, Number(data.min_stock_level) || 5)
 
-      // 1. Check SKU / Barcode uniqueness per tenant
-      if (sku || barcode) {
+      // Check SKU / Barcode uniqueness per tenant
+      if (sku && barcode) {
         const existing = await sql`
           SELECT id, name FROM products 
-          WHERE tenant_id = ${tenantId}
-            AND (
-              (${sku ? sql`sku = ${sku}` : sql`FALSE`})
-              OR (${barcode ? sql`barcode = ${barcode}` : sql`FALSE`})
-            )
+          WHERE tenant_id = ${tenantId} AND (sku = ${sku} OR barcode = ${barcode})
           LIMIT 1
-        `
+        `.catch(() => [])
         if (existing.length > 0) {
-          throw new Error(`A product with SKU or Barcode "${sku || barcode}" already exists (${existing[0].name}).`)
+          return { success: false, error: `A product with SKU or Barcode "${sku || barcode}" already exists (${existing[0].name}).` }
         }
+      } else if (sku) {
+        const existing = await sql`
+          SELECT id, name FROM products 
+          WHERE tenant_id = ${tenantId} AND sku = ${sku}
+          LIMIT 1
+        `.catch(() => [])
+        if (existing.length > 0) {
+          return { success: false, error: `A product with SKU "${sku}" already exists (${existing[0].name}).` }
+        }
+      } else if (barcode) {
+        const existing = await sql`
+          SELECT id, name FROM products 
+          WHERE tenant_id = ${tenantId} AND barcode = ${barcode}
+          LIMIT 1
+        `.catch(() => [])
+        if (existing.length > 0) {
+          return { success: false, error: `A product with Barcode "${barcode}" already exists (${existing[0].name}).` }
+        }
+      }
+
+      let catName = "General"
+      if (categoryId) {
+        const cat = await sql`SELECT name FROM categories WHERE id = ${categoryId} LIMIT 1`.catch(() => [])
+        if (cat.length > 0) catName = cat[0].name
       }
 
       const result = await sql`
         INSERT INTO products (
-          tenant_id, name, description, category_id, price, cost,
-          stock_quantity, min_stock_level, barcode, sku, is_active, image_url,
+          tenant_id, name, description, category_id, category, price, cost, cost_price,
+          stock_quantity, min_stock_level, barcode, sku, is_active, image_url, unit,
           created_at, updated_at
         )
         VALUES (
-          ${tenantId}, ${data.name.trim()}, ${data.description || null}, ${categoryId},
-          ${price}, ${cost}, ${stockQuantity},
-          ${minStockLevel}, ${barcode}, ${sku}, ${data.is_active ?? true}, ${data.image_url || null},
+          ${tenantId}, ${data.name.trim()}, ${data.description || null}, ${categoryId}, ${catName},
+          ${price}, ${cost}, ${cost},
+          ${stockQuantity}, ${minStockLevel}, ${barcode}, ${sku}, ${data.is_active ?? true}, ${data.image_url || null}, 'piece',
           NOW(), NOW()
         )
         RETURNING *
       `
 
-      // 2. Cross-sync into inventory table for unified inventory management
+      // Cross-sync into inventory table for unified stock management
       try {
-        let catName = "General"
-        if (categoryId) {
-          const cat = await sql`SELECT name FROM categories WHERE id = ${categoryId} LIMIT 1`.catch(() => [])
-          if (cat.length > 0) catName = cat[0].name
-        }
-
         let invStatus = "active"
         if (stockQuantity === 0) invStatus = "out_of_stock"
         else if (stockQuantity <= minStockLevel) invStatus = "low_stock"
@@ -139,10 +181,10 @@ export async function createProduct(data: {
         `.catch(() => {})
       } catch {}
 
-      return result[0]
+      return { success: true, ...result[0], id: result[0]?.id }
     } catch (e: any) {
       console.error("Error creating product:", e)
-      throw e
+      return { success: false, error: e?.message || "Failed to create product" }
     }
   })
 }
@@ -162,37 +204,57 @@ export async function updateProduct(
     image_url?: string
     is_active: boolean
   },
-) {
+): Promise<any> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      await sql`
-        ALTER TABLE products ADD COLUMN IF NOT EXISTS sku VARCHAR(100);
-        ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
-      `.catch(() => {})
+      await ensureProductsSchema(sql);
 
-      const barcode = data.barcode ? data.barcode.trim() : null
-      const sku = data.sku ? data.sku.trim() : barcode
+      if (!data.name || !data.name.trim()) {
+        return { success: false, error: "Product name is required" }
+      }
+
+      const barcode = data.barcode && data.barcode.trim() ? data.barcode.trim() : null
+      const sku = data.sku && data.sku.trim() ? data.sku.trim() : barcode
       const categoryId = data.category_id && !isNaN(Number(data.category_id)) ? Number(data.category_id) : null
       const price = Math.max(0, Number(data.price) || 0)
       const cost = Math.max(0, Number(data.cost) || 0)
       const stockQuantity = Math.max(0, Number(data.stock_quantity) || 0)
       const minStockLevel = Math.max(0, Number(data.min_stock_level) || 5)
 
-      // 1. Check SKU / Barcode uniqueness per tenant (excluding self)
-      if (sku || barcode) {
+      // Check SKU / Barcode uniqueness per tenant (excluding self)
+      if (sku && barcode) {
         const existing = await sql`
           SELECT id, name FROM products 
-          WHERE tenant_id = ${tenantId}
-            AND id != ${id}
-            AND (
-              (${sku ? sql`sku = ${sku}` : sql`FALSE`})
-              OR (${barcode ? sql`barcode = ${barcode}` : sql`FALSE`})
-            )
+          WHERE tenant_id = ${tenantId} AND id != ${id} AND (sku = ${sku} OR barcode = ${barcode})
           LIMIT 1
-        `
+        `.catch(() => [])
         if (existing.length > 0) {
-          throw new Error(`Another product with SKU or Barcode "${sku || barcode}" already exists (${existing[0].name}).`)
+          return { success: false, error: `Another product with SKU or Barcode "${sku || barcode}" already exists (${existing[0].name}).` }
         }
+      } else if (sku) {
+        const existing = await sql`
+          SELECT id, name FROM products 
+          WHERE tenant_id = ${tenantId} AND id != ${id} AND sku = ${sku}
+          LIMIT 1
+        `.catch(() => [])
+        if (existing.length > 0) {
+          return { success: false, error: `Another product with SKU "${sku}" already exists (${existing[0].name}).` }
+        }
+      } else if (barcode) {
+        const existing = await sql`
+          SELECT id, name FROM products 
+          WHERE tenant_id = ${tenantId} AND id != ${id} AND barcode = ${barcode}
+          LIMIT 1
+        `.catch(() => [])
+        if (existing.length > 0) {
+          return { success: false, error: `Another product with Barcode "${barcode}" already exists (${existing[0].name}).` }
+        }
+      }
+
+      let catName = "General"
+      if (categoryId) {
+        const cat = await sql`SELECT name FROM categories WHERE id = ${categoryId} LIMIT 1`.catch(() => [])
+        if (cat.length > 0) catName = cat[0].name
       }
 
       const result = await sql`
@@ -201,8 +263,10 @@ export async function updateProduct(
           name = ${data.name.trim()},
           description = ${data.description || null},
           category_id = ${categoryId},
+          category = ${catName},
           price = ${price},
           cost = ${cost},
+          cost_price = ${cost},
           stock_quantity = ${stockQuantity},
           min_stock_level = ${minStockLevel},
           barcode = ${barcode},
@@ -214,7 +278,7 @@ export async function updateProduct(
         RETURNING *
       `
 
-      // 2. Cross-sync updated stock and prices to inventory table
+      // Cross-sync updated stock and prices to inventory table
       try {
         let invStatus = "active"
         if (stockQuantity === 0) invStatus = "out_of_stock"
@@ -245,10 +309,10 @@ export async function updateProduct(
         `.catch(() => {})
       } catch {}
 
-      return result[0]
+      return { success: true, ...result[0], id: result[0]?.id }
     } catch (e: any) {
       console.error("Error updating product:", e)
-      throw e
+      return { success: false, error: e?.message || "Failed to update product" }
     }
   })
 }

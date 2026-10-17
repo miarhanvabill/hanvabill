@@ -123,8 +123,41 @@ export async function validateCoupon(code: string, orderAmount: number) {
   })
 }
 
+let couponsSchemaEnsured = false;
+async function ensureCouponsSchema(sql: any) {
+  if (couponsSchemaEnsured) return;
+  try {
+    // 1. Drop the legacy global unique constraint on code so each salon has its own coupon code space
+    await sql`ALTER TABLE coupons DROP CONSTRAINT IF EXISTS coupons_code_key`.catch(() => {});
+    
+    // 2. Make sure tenant_id column exists
+    await sql`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS tenant_id TEXT`.catch(() => {});
+
+    // 3. Add composite unique constraint on (tenant_id, code) if not exists
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'coupons_tenant_id_code_key'
+        ) THEN
+          BEGIN
+            ALTER TABLE coupons ADD CONSTRAINT coupons_tenant_id_code_key UNIQUE (tenant_id, code);
+          EXCEPTION WHEN OTHERS THEN
+            NULL;
+          END;
+        END IF;
+      END $$;
+    `.catch(() => {});
+
+    couponsSchemaEnsured = true;
+  } catch (err) {
+    console.warn("ensureCouponsSchema warning:", err);
+  }
+}
+
 export async function getCoupons(): Promise<Coupon[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
+    await ensureCouponsSchema(sql);
     const rows = await sql`
       SELECT id, code, name, description, discount_type, discount_value, min_order_amount,
              max_discount, valid_from, valid_until, usage_limit, used_count, is_active,
@@ -141,6 +174,8 @@ export async function createCoupon(
   couponData: Omit<Coupon, "id" | "used_count" | "created_at" | "updated_at">,
 ): Promise<Coupon> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
+    await ensureCouponsSchema(sql);
+
     if (!couponData.code || !couponData.code.trim()) {
       throw new Error("Coupon code is required");
     }
@@ -190,27 +225,52 @@ export async function createCoupon(
     `.catch(() => []);
 
     if (existing.length > 0) {
-      throw new Error(`A coupon with code "${cleanCode}" already exists. Please choose a different code.`);
+      throw new Error(`A coupon with code "${cleanCode}" already exists for your salon. Please choose a different code.`);
     }
 
-    const rows = await sql`
-      INSERT INTO coupons (
-        tenant_id, code, name, description, discount_type, discount_value, min_order_amount,
-        max_discount, valid_from, valid_until, usage_limit, used_count, is_active,
-        created_at, updated_at
-      ) VALUES (
-        ${tenantId}, ${cleanCode}, ${name}, ${description},
-        ${discountType}, ${discountValue}, ${minOrderAmount},
-        ${maxDiscount}, ${validFrom}::date, ${validUntil}::date,
-        ${usageLimit}, 0, ${isActive},
-        NOW(), NOW()
-      )
-      RETURNING id, code, name, description, discount_type, discount_value, min_order_amount,
-                max_discount, valid_from, valid_until, usage_limit, used_count, is_active,
-                created_at, updated_at
-    `;
+    try {
+      const rows = await sql`
+        INSERT INTO coupons (
+          tenant_id, code, name, description, discount_type, discount_value, min_order_amount,
+          max_discount, valid_from, valid_until, usage_limit, used_count, is_active,
+          created_at, updated_at
+        ) VALUES (
+          ${tenantId}, ${cleanCode}, ${name}, ${description},
+          ${discountType}, ${discountValue}, ${minOrderAmount},
+          ${maxDiscount}, ${validFrom}::date, ${validUntil}::date,
+          ${usageLimit}, 0, ${isActive},
+          NOW(), NOW()
+        )
+        RETURNING id, code, name, description, discount_type, discount_value, min_order_amount,
+                  max_discount, valid_from, valid_until, usage_limit, used_count, is_active,
+                  created_at, updated_at
+      `;
 
-    return mapRow(rows[0]);
+      return mapRow(rows[0]);
+    } catch (insertErr: any) {
+      // If it still failed due to legacy coupons_code_key, forcefully drop constraint and retry once
+      if (insertErr?.message?.includes("coupons_code_key") || insertErr?.message?.includes("unique constraint")) {
+        await sql`ALTER TABLE coupons DROP CONSTRAINT IF EXISTS coupons_code_key`.catch(() => {});
+        const retryRows = await sql`
+          INSERT INTO coupons (
+            tenant_id, code, name, description, discount_type, discount_value, min_order_amount,
+            max_discount, valid_from, valid_until, usage_limit, used_count, is_active,
+            created_at, updated_at
+          ) VALUES (
+            ${tenantId}, ${cleanCode}, ${name}, ${description},
+            ${discountType}, ${discountValue}, ${minOrderAmount},
+            ${maxDiscount}, ${validFrom}::date, ${validUntil}::date,
+            ${usageLimit}, 0, ${isActive},
+            NOW(), NOW()
+          )
+          RETURNING id, code, name, description, discount_type, discount_value, min_order_amount,
+                    max_discount, valid_from, valid_until, usage_limit, used_count, is_active,
+                    created_at, updated_at
+        `;
+        return mapRow(retryRows[0]);
+      }
+      throw insertErr;
+    }
   });
 }
 

@@ -93,7 +93,7 @@ export default function ProductsPage() {
     try {
       const parsedCatId = formData.category_id ? Number.parseInt(formData.category_id) : null
       if (editingProduct) {
-        await updateProduct(editingProduct.id, {
+        const res = await updateProduct(editingProduct.id, {
           ...formData,
           price: Number.parseFloat(formData.price) || 0,
           cost: Number.parseFloat(formData.cost) || 0,
@@ -101,12 +101,20 @@ export default function ProductsPage() {
           min_stock_level: Number.parseInt(formData.min_stock_level) || 5,
           category_id: parsedCatId,
         })
+        if (res && res.success === false) {
+          toast({
+            title: "Error",
+            description: res.error || "Failed to update product",
+            variant: "destructive",
+          })
+          return
+        }
         toast({
           title: "Success",
           description: "Product updated successfully",
         })
       } else {
-        await createProduct({
+        const res = await createProduct({
           ...formData,
           price: Number.parseFloat(formData.price) || 0,
           cost: Number.parseFloat(formData.cost) || 0,
@@ -114,6 +122,14 @@ export default function ProductsPage() {
           min_stock_level: Number.parseInt(formData.min_stock_level) || 5,
           category_id: parsedCatId,
         })
+        if (res && res.success === false) {
+          toast({
+            title: "Error",
+            description: res.error || "Failed to create product",
+            variant: "destructive",
+          })
+          return
+        }
         toast({
           title: "Success",
           description: "Product created successfully",
