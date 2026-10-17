@@ -307,23 +307,23 @@ useEffect(() => {
         const dateStr = format(selectedDate, "yyyy-MM-dd")
         const staffKey = selectedStaff && selectedStaff !== 'any' ? String(selectedStaff.id) : 'any'
         const slotKey = `${dateStr}_${staffKey}`
-        if (!bookedSlots[slotKey]) {
-           setLoadingAvailability(true)
-           const staffParam = selectedStaff && selectedStaff !== 'any' ? `&staffId=${selectedStaff.id}` : ''
-           fetch(`/api/public/availability?tenantId=${tenantId}&date=${dateStr}${staffParam}`)
-             .then(d => {
-                if (d.success && d.booked_slots) {
-                   setBookedSlots(prev => ({ ...prev, [slotKey]: d.booked_slots, [dateStr]: d.booked_slots }))
-                   setSelectedTime(prevTime => (prevTime && d.booked_slots.includes(prevTime) ? null : prevTime))
-                } else {
-                   setBookedSlots(prev => ({ ...prev, [slotKey]: [] }))
-                }
-             })
-             .catch(() => setBookedSlots(prev => ({ ...prev, [slotKey]: [] })))
-             .finally(() => setLoadingAvailability(false))
-        }
+        
+        setLoadingAvailability(true)
+        const staffParam = selectedStaff && selectedStaff !== 'any' ? `&staffId=${selectedStaff.id}` : ''
+        fetch(`/api/public/availability?tenantId=${tenantId}&date=${dateStr}${staffParam}&_t=${Date.now()}`, { cache: "no-store" })
+          .then(r => r.json())
+          .then(d => {
+             if (d.success && Array.isArray(d.booked_slots)) {
+                setBookedSlots(prev => ({ ...prev, [slotKey]: d.booked_slots, [dateStr]: d.booked_slots }))
+                setSelectedTime(prevTime => (prevTime && d.booked_slots.includes(prevTime) ? null : prevTime))
+             } else {
+                setBookedSlots(prev => ({ ...prev, [slotKey]: [], [dateStr]: [] }))
+             }
+          })
+          .catch(() => setBookedSlots(prev => ({ ...prev, [slotKey]: [], [dateStr]: [] })))
+          .finally(() => setLoadingAvailability(false))
      }
-  }, [selectedDate, tenantId, step, selectedStaff, bookedSlots])
+  }, [selectedDate, tenantId, step, selectedStaff])
 
   const workingDays = business?.workingDays || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
   const openTime = business?.openTime || "09:00"
@@ -2309,7 +2309,12 @@ const ProfileDrawer = () => (
             <div className="max-w-xl mx-auto flex gap-4">
               <Button 
                 onClick={() => setStep(3)} 
-                disabled={!selectedStaff || !selectedDate || !selectedTime} 
+                disabled={
+                  !selectedStaff || 
+                  !selectedDate || 
+                  !selectedTime || 
+                  Boolean((bookedSlots[`${selectedDate ? format(selectedDate, "yyyy-MM-dd") : ''}_${selectedStaff && selectedStaff !== 'any' ? String(selectedStaff.id) : 'any'}`] || bookedSlots[selectedDate ? format(selectedDate, "yyyy-MM-dd") : ''])?.includes(selectedTime))
+                } 
                 className="flex-1 bg-black text-white hover:bg-gray-800 rounded-2xl h-14 text-base font-bold shadow-xl transition-all active:scale-95 disabled:bg-gray-200 disabled:text-gray-400 disabled:scale-100"
               >
                 Continue to Details

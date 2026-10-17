@@ -141,22 +141,77 @@ export async function createCoupon(
   couponData: Omit<Coupon, "id" | "used_count" | "created_at" | "updated_at">,
 ): Promise<Coupon> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
+    if (!couponData.code || !couponData.code.trim()) {
+      throw new Error("Coupon code is required");
+    }
+    const cleanCode = couponData.code.trim().toUpperCase();
+
+    const name = couponData.name?.trim() || cleanCode;
+    const description = couponData.description?.trim() || `${cleanCode} Discount Offer`;
+    const discountType = couponData.discount_type === "fixed" ? "fixed" : "percentage";
+    const discountValue = Number(couponData.discount_value);
+
+    if (isNaN(discountValue) || discountValue <= 0) {
+      throw new Error("Please enter a valid discount amount greater than 0");
+    }
+    if (discountType === "percentage" && discountValue > 100) {
+      throw new Error("Percentage discount cannot exceed 100%");
+    }
+
+    const minOrderAmount = !isNaN(Number(couponData.min_order_amount)) && Number(couponData.min_order_amount) >= 0 
+      ? Number(couponData.min_order_amount) 
+      : 0;
+
+    const maxDiscount = couponData.max_discount != null && !isNaN(Number(couponData.max_discount)) && Number(couponData.max_discount) > 0
+      ? Number(couponData.max_discount)
+      : null;
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    const validFrom = (couponData.valid_from && typeof couponData.valid_from === "string" && couponData.valid_from.trim())
+      ? couponData.valid_from.trim().split("T")[0]
+      : todayStr;
+
+    const defaultUntil = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const validUntil = (couponData.valid_until && typeof couponData.valid_until === "string" && couponData.valid_until.trim())
+      ? couponData.valid_until.trim().split("T")[0]
+      : defaultUntil;
+
+    const usageLimit = couponData.usage_limit != null && !isNaN(Number(couponData.usage_limit)) && Number(couponData.usage_limit) > 0
+      ? Math.floor(Number(couponData.usage_limit))
+      : null;
+
+    const isActive = couponData.is_active !== undefined ? Boolean(couponData.is_active) : true;
+
+    // Check duplicate code for this tenant
+    const existing = await sql`
+      SELECT id FROM coupons 
+      WHERE tenant_id = ${tenantId} AND UPPER(code) = ${cleanCode}
+      LIMIT 1
+    `.catch(() => []);
+
+    if (existing.length > 0) {
+      throw new Error(`A coupon with code "${cleanCode}" already exists. Please choose a different code.`);
+    }
+
     const rows = await sql`
       INSERT INTO coupons (
         tenant_id, code, name, description, discount_type, discount_value, min_order_amount,
-        max_discount, valid_from, valid_until, usage_limit, used_count, is_active
+        max_discount, valid_from, valid_until, usage_limit, used_count, is_active,
+        created_at, updated_at
       ) VALUES (
-        ${tenantId}, ${couponData.code.toUpperCase()}, ${couponData.name}, ${couponData.description},
-        ${couponData.discount_type}, ${couponData.discount_value}, ${couponData.min_order_amount},
-        ${couponData.max_discount || null}, ${couponData.valid_from}, ${couponData.valid_until},
-        ${couponData.usage_limit || null}, 0, ${couponData.is_active}
+        ${tenantId}, ${cleanCode}, ${name}, ${description},
+        ${discountType}, ${discountValue}, ${minOrderAmount},
+        ${maxDiscount}, ${validFrom}::date, ${validUntil}::date,
+        ${usageLimit}, 0, ${isActive},
+        NOW(), NOW()
       )
       RETURNING id, code, name, description, discount_type, discount_value, min_order_amount,
                 max_discount, valid_from, valid_until, usage_limit, used_count, is_active,
                 created_at, updated_at
-    `
-    return mapRow(rows[0])
-  })
+    `;
+
+    return mapRow(rows[0]);
+  });
 }
 
 export async function updateCoupon(
@@ -164,31 +219,44 @@ export async function updateCoupon(
   couponData: Partial<Omit<Coupon, "id" | "created_at">>,
 ): Promise<Coupon> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
+    const cleanCode = couponData.code ? couponData.code.trim().toUpperCase() : null;
+
+    if (cleanCode) {
+      const duplicate = await sql`
+        SELECT id FROM coupons 
+        WHERE tenant_id = ${tenantId} AND UPPER(code) = ${cleanCode} AND id != ${id}
+        LIMIT 1
+      `.catch(() => []);
+      if (duplicate.length > 0) {
+        throw new Error(`A coupon with code "${cleanCode}" already exists.`);
+      }
+    }
+
     const rows = await sql`
       UPDATE coupons
       SET
-        code = COALESCE(${couponData.code?.toUpperCase() ?? null}, code),
-        name = COALESCE(${couponData.name ?? null}, name),
-        description = COALESCE(${couponData.description ?? null}, description),
+        code = COALESCE(${cleanCode}, code),
+        name = COALESCE(${couponData.name?.trim() ?? null}, name),
+        description = COALESCE(${couponData.description?.trim() ?? null}, description),
         discount_type = COALESCE(${couponData.discount_type ?? null}, discount_type),
-        discount_value = COALESCE(${couponData.discount_value ?? null}, discount_value),
-        min_order_amount = COALESCE(${couponData.min_order_amount ?? null}, min_order_amount),
-        max_discount = COALESCE(${couponData.max_discount ?? null}, max_discount),
-        valid_from = COALESCE(${couponData.valid_from ?? null}, valid_from),
-        valid_until = COALESCE(${couponData.valid_until ?? null}, valid_until),
-        usage_limit = COALESCE(${couponData.usage_limit ?? null}, usage_limit),
+        discount_value = COALESCE(${couponData.discount_value != null && !isNaN(Number(couponData.discount_value)) ? Number(couponData.discount_value) : null}, discount_value),
+        min_order_amount = COALESCE(${couponData.min_order_amount != null && !isNaN(Number(couponData.min_order_amount)) ? Number(couponData.min_order_amount) : null}, min_order_amount),
+        max_discount = ${couponData.max_discount != null && !isNaN(Number(couponData.max_discount)) && Number(couponData.max_discount) > 0 ? Number(couponData.max_discount) : null},
+        valid_from = COALESCE(${couponData.valid_from && couponData.valid_from.trim() ? couponData.valid_from.trim().split("T")[0] : null}::date, valid_from),
+        valid_until = COALESCE(${couponData.valid_until && couponData.valid_until.trim() ? couponData.valid_until.trim().split("T")[0] : null}::date, valid_until),
+        usage_limit = ${couponData.usage_limit != null && !isNaN(Number(couponData.usage_limit)) && Number(couponData.usage_limit) > 0 ? Math.floor(Number(couponData.usage_limit)) : null},
         is_active = COALESCE(${couponData.is_active !== undefined ? couponData.is_active : null}, is_active),
-        updated_at = CURRENT_TIMESTAMP
+        updated_at = NOW()
       WHERE id = ${id} AND tenant_id = ${tenantId}
       RETURNING id, code, name, description, discount_type, discount_value, min_order_amount,
                 max_discount, valid_from, valid_until, usage_limit, used_count, is_active,
                 created_at, updated_at
-    `
+    `;
     if (rows.length === 0) {
-      throw new Error("Coupon not found")
+      throw new Error("Coupon not found");
     }
-    return mapRow(rows[0])
-  })
+    return mapRow(rows[0]);
+  });
 }
 
 export async function toggleCouponActive(id: number, isActive: boolean): Promise<Coupon> {

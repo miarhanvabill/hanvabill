@@ -50,16 +50,19 @@ export default function CouponsManagePage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null)
+  const getTodayStr = () => new Date().toISOString().split("T")[0]
+  const get90DaysStr = () => new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+
   const [formData, setFormData] = useState({
     code: "",
     name: "",
     description: "",
     discount_type: "percentage" as "percentage" | "fixed",
     discount_value: "",
-    min_order_amount: "",
+    min_order_amount: "0",
     max_discount: "",
-    valid_from: "",
-    valid_until: "",
+    valid_from: getTodayStr(),
+    valid_until: get90DaysStr(),
     usage_limit: "",
     is_active: true,
   })
@@ -130,32 +133,41 @@ export default function CouponsManagePage() {
   }, [fetchCoupons, isOnline])
 
   const handleAddCoupon = async () => {
-    if (
-      !formData.code ||
-      !formData.name ||
-      !formData.description ||
-      !formData.discount_value ||
-      !formData.min_order_amount
-    ) {
+    const code = formData.code.trim().toUpperCase()
+    const discountVal = Number.parseFloat(formData.discount_value)
+
+    if (!code) {
       toast({
         title: "Validation Error",
-        description: "Please fill in all required fields",
+        description: "Please enter a coupon code (e.g. SAVE20)",
         variant: "destructive",
       })
       return
     }
 
+    if (isNaN(discountVal) || discountVal <= 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid discount value greater than 0",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const todayStr = getTodayStr()
+    const ninetyDaysStr = get90DaysStr()
+
     try {
       const couponData = {
-        code: formData.code.toUpperCase(),
-        name: formData.name,
-        description: formData.description,
+        code,
+        name: formData.name.trim() || code,
+        description: formData.description.trim() || `${code} Special Offer`,
         discount_type: formData.discount_type,
-        discount_value: Number.parseFloat(formData.discount_value),
-        min_order_amount: Number.parseFloat(formData.min_order_amount),
+        discount_value: discountVal,
+        min_order_amount: formData.min_order_amount ? Number.parseFloat(formData.min_order_amount) || 0 : 0,
         max_discount: formData.max_discount ? Number.parseFloat(formData.max_discount) : undefined,
-        valid_from: formData.valid_from,
-        valid_until: formData.valid_until,
+        valid_from: formData.valid_from ? formData.valid_from.slice(0, 10) : todayStr,
+        valid_until: formData.valid_until ? formData.valid_until.slice(0, 10) : ninetyDaysStr,
         usage_limit: formData.usage_limit ? Number.parseInt(formData.usage_limit) : undefined,
         is_active: formData.is_active,
       }
@@ -189,16 +201,18 @@ export default function CouponsManagePage() {
 
   const handleEditCoupon = (coupon: Coupon) => {
     setEditingCoupon(coupon)
+    const todayStr = getTodayStr()
+    const ninetyDaysStr = get90DaysStr()
     setFormData({
       code: coupon.code,
-      name: coupon.name,
-      description: coupon.description,
+      name: coupon.name || coupon.code,
+      description: coupon.description || "",
       discount_type: coupon.discount_type,
       discount_value: coupon.discount_value.toString(),
-      min_order_amount: coupon.min_order_amount.toString(),
+      min_order_amount: coupon.min_order_amount?.toString() || "0",
       max_discount: coupon.max_discount?.toString() || "",
-      valid_from: coupon.valid_from,
-      valid_until: coupon.valid_until,
+      valid_from: coupon.valid_from ? coupon.valid_from.toString().slice(0, 10) : todayStr,
+      valid_until: coupon.valid_until ? coupon.valid_until.toString().slice(0, 10) : ninetyDaysStr,
       usage_limit: coupon.usage_limit?.toString() || "",
       is_active: coupon.is_active,
     })
@@ -208,18 +222,42 @@ export default function CouponsManagePage() {
   const handleUpdateCoupon = async () => {
     if (!editingCoupon) return
 
+    const code = formData.code.trim().toUpperCase()
+    const discountVal = Number.parseFloat(formData.discount_value)
+
+    if (!code) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a coupon code",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (isNaN(discountVal) || discountVal <= 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid discount value greater than 0",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const todayStr = getTodayStr()
+    const ninetyDaysStr = get90DaysStr()
+
     try {
       const couponData = {
         id: editingCoupon.id,
-        code: formData.code.toUpperCase(),
-        name: formData.name,
-        description: formData.description,
+        code,
+        name: formData.name.trim() || code,
+        description: formData.description.trim() || `${code} Special Offer`,
         discount_type: formData.discount_type,
-        discount_value: Number.parseFloat(formData.discount_value),
-        min_order_amount: Number.parseFloat(formData.min_order_amount),
+        discount_value: discountVal,
+        min_order_amount: formData.min_order_amount ? Number.parseFloat(formData.min_order_amount) || 0 : 0,
         max_discount: formData.max_discount ? Number.parseFloat(formData.max_discount) : undefined,
-        valid_from: formData.valid_from,
-        valid_until: formData.valid_until,
+        valid_from: formData.valid_from ? formData.valid_from.slice(0, 10) : todayStr,
+        valid_until: formData.valid_until ? formData.valid_until.slice(0, 10) : ninetyDaysStr,
         usage_limit: formData.usage_limit ? Number.parseInt(formData.usage_limit) : undefined,
         is_active: formData.is_active,
       }
@@ -312,10 +350,10 @@ export default function CouponsManagePage() {
       description: "",
       discount_type: "percentage",
       discount_value: "",
-      min_order_amount: "",
+      min_order_amount: "0",
       max_discount: "",
-      valid_from: "",
-      valid_until: "",
+      valid_from: getTodayStr(),
+      valid_until: get90DaysStr(),
       usage_limit: "",
       is_active: true,
     })
@@ -402,25 +440,23 @@ export default function CouponsManagePage() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="name">Coupon Name *</Label>
+                      <Label htmlFor="name">Coupon Name (Optional)</Label>
                       <Input
                         id="name"
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                         placeholder="Welcome Offer"
-                        required
                       />
                     </div>
                   </div>
 
                   <div>
-                    <Label htmlFor="description">Description *</Label>
+                    <Label htmlFor="description">Description (Optional)</Label>
                     <Textarea
                       id="description"
                       value={formData.description}
                       onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      placeholder="Describe the coupon offer"
-                      required
+                      placeholder="Describe the coupon offer (e.g. 20% off on all services)"
                     />
                   </div>
 
@@ -456,14 +492,13 @@ export default function CouponsManagePage() {
                       />
                     </div>
                     <div>
-                      <Label htmlFor="min_order_amount">Minimum Amount (₹) *</Label>
+                      <Label htmlFor="min_order_amount">Minimum Spend (₹)</Label>
                       <Input
                         id="min_order_amount"
                         type="number"
                         value={formData.min_order_amount}
                         onChange={(e) => setFormData({ ...formData, min_order_amount: e.target.value })}
-                        placeholder="1000"
-                        required
+                        placeholder="0"
                       />
                     </div>
                   </div>

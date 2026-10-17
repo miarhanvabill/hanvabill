@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, coupon })
   } catch (error: any) {
     console.error("POST coupons route error:", error)
-    return NextResponse.json({ success: false, error: error?.message || "Internal server error" }, { status: 500 })
+    return NextResponse.json({ success: false, error: error?.message || "Failed to create coupon" }, { status: 400 })
   }
 }
 

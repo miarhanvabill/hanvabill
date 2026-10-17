@@ -75,7 +75,7 @@ function expandDurationToSlots(startTimeStr: string, durationMinutes: number = 3
       LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${resolvedTenantId} OR bs.tenant_id IS NULL)
       LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${resolvedTenantId} OR s.tenant_id IS NULL)
       WHERE b.tenant_id = ${resolvedTenantId}
-        AND b.booking_date = ${date}
+        AND (b.booking_date = ${date}::date OR b.booking_date::text = ${date})
         AND b.status != 'cancelled'
       GROUP BY b.id, b.booking_time, b.staff_id
       ORDER BY b.booking_time ASC
@@ -108,6 +108,10 @@ function expandDurationToSlots(startTimeStr: string, durationMinutes: number = 3
       staffId: staffId || null,
       booked_slots,
       total: booked_slots.length,
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      }
     });
   } catch (error) {
     console.error("Error fetching public availability:", error);
