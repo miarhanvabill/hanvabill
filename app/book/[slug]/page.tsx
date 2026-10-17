@@ -240,6 +240,58 @@ const [referralCode, setReferralCode] = useState<string | null>(null)
 const [referralSettings, setReferralSettings] = useState<any>(null)
 const [copiedRefCode, setCopiedRefCode] = useState(false)
 const [copiedRefLink, setCopiedRefLink] = useState(false)
+const [manualRefInput, setManualRefInput] = useState<string>("")
+const [validatingRef, setValidatingRef] = useState<boolean>(false)
+const [refFeedback, setRefFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+const handleApplyReferralCode = async (overrideCode?: string) => {
+  const codeToValidate = (overrideCode || manualRefInput).trim().toUpperCase()
+  if (!codeToValidate) return
+  setValidatingRef(true)
+  setRefFeedback(null)
+  try {
+    const queryParams = new URLSearchParams({
+      code: codeToValidate,
+      phone: customerForm.phone || "",
+    })
+    if (tenantId) queryParams.set("tenant", tenantId)
+
+    const res = await fetch(`/api/public/referral/validate?${queryParams.toString()}`)
+    const data = await res.json()
+    if (data && data.valid) {
+      setReferralCode(codeToValidate)
+      setManualRefInput("")
+      try {
+        localStorage.setItem(`referral_code_${slug}`, codeToValidate)
+      } catch {}
+      setRefFeedback({
+        type: 'success',
+        message: `Referral applied! ₹${data.discount_amount} OFF on your first visit (from ${data.referrer_name || "Friend"}).`
+      })
+    } else {
+      setRefFeedback({
+        type: 'error',
+        message: data?.message || "Invalid or ineligible referral code."
+      })
+    }
+  } catch (e: any) {
+    setRefFeedback({
+      type: 'error',
+      message: e?.message || "Failed to validate referral code."
+    })
+  } finally {
+    setValidatingRef(false)
+  }
+}
+
+const handleRemoveReferralCode = () => {
+  setReferralCode(null)
+  setManualRefInput("")
+  setRefFeedback(null)
+  try {
+    localStorage.removeItem(`referral_code_${slug}`)
+  } catch {}
+}
 
 useEffect(() => {
   if (typeof window !== "undefined") {
@@ -935,11 +987,17 @@ const handleJoinWaitlist = async (e: React.FormEvent) => {
     )
   }
 
-  const totalAmount = 
+  const subtotalAmount = 
     selectedServices.reduce((sum, s) => sum + Number(s.price), 0) + 
     selectedProducts.reduce((sum, p) => sum + (Number(p.price) * (productQuantities[p.id] || 1)), 0) + 
     selectedPackages.reduce((sum, p) => sum + Number(p.price), 0) + 
     selectedMemberships.reduce((sum, m) => sum + Number(m.price), 0);
+
+  const referralDiscountAmount = (referralCode && subtotalAmount >= (referralSettings?.minimum_order_amount || 0))
+    ? Math.min(Number(referralSettings?.referee_discount_amount || 0), subtotalAmount)
+    : 0;
+
+  const totalAmount = Math.max(0, subtotalAmount - referralDiscountAmount);
     
   const totalDuration = selectedServices.reduce((sum, s) => sum + Number(s.duration), 0);
   const totalItems = selectedServices.length + selectedProducts.length + selectedPackages.length + selectedMemberships.length;
@@ -2409,6 +2467,15 @@ const ProfileDrawer = () => (
                            <span className="font-bold text-gray-900">{business.currency}{m.price}</span>
                          </div>
                        ))}
+                       {referralDiscountAmount > 0 && (
+                         <div className="flex justify-between text-sm text-purple-700 font-semibold pt-1">
+                           <span className="flex items-center gap-1">
+                             <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                             Referral Gift ({referralCode})
+                           </span>
+                           <span>-{business.currency}{referralDiscountAmount}</span>
+                         </div>
+                       )}
                        <div className="border-t border-gray-200 pt-3 mt-3 flex justify-between items-center text-base">
                           <span className="font-black text-gray-900">Grand Total</span>
                           <span className="font-black text-red-500">{business.currency}{totalAmount}</span>
@@ -2452,6 +2519,75 @@ const ProfileDrawer = () => (
                   onChange={e => setCustomerForm({...customerForm, email: e.target.value})}
                   className="h-14 rounded-2xl bg-gray-50 border-transparent focus:bg-white focus:ring-2 focus:ring-black transition-all text-base shadow-sm" 
                 />
+              </div>
+
+              {/* Referral Code (First-Timer) */}
+              <div className="p-4 bg-gray-50/90 rounded-2xl border border-gray-200/80 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="referral_code" className="text-gray-900 font-bold text-sm flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-purple-600" />
+                    Referral Code <span className="text-gray-400 font-medium text-xs">(First-Time Visitors)</span>
+                  </Label>
+                  {referralCode && (
+                    <Badge className="bg-purple-100 text-purple-800 border-purple-200 text-[10px] font-bold">
+                      Applied
+                    </Badge>
+                  )}
+                </div>
+
+                {referralCode ? (
+                  <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-purple-200 text-xs shadow-xs">
+                    <div>
+                      <div className="font-mono font-bold text-purple-900 tracking-wider text-sm">
+                        {referralCode}
+                      </div>
+                      <p className="text-[11px] text-gray-600 mt-0.5">
+                        🎁 ₹{referralSettings?.referee_discount_amount || 250} OFF on your first booking (Min bill ₹{referralSettings?.minimum_order_amount || 700})
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRemoveReferralCode}
+                      className="h-8 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 font-semibold px-2.5"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Input
+                        id="referral_code"
+                        placeholder="e.g. REF1042"
+                        value={manualRefInput}
+                        onChange={(e) => {
+                          setManualRefInput(e.target.value.toUpperCase())
+                          if (refFeedback) setRefFeedback(null)
+                        }}
+                        className="h-12 rounded-xl bg-white border-gray-200 focus:bg-white text-sm font-mono uppercase"
+                      />
+                      <Button
+                        type="button"
+                        onClick={() => handleApplyReferralCode()}
+                        disabled={!manualRefInput.trim() || validatingRef}
+                        className="h-12 px-5 bg-black hover:bg-gray-800 text-white rounded-xl text-sm font-bold shrink-0"
+                      >
+                        {validatingRef ? "Checking..." : "Apply"}
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-gray-500">
+                      Have a referral code from a friend? Enter it to get ₹{referralSettings?.referee_discount_amount || 250} OFF on your first booking!
+                    </p>
+                  </div>
+                )}
+
+                {refFeedback && (
+                  <p className={`text-xs font-semibold ${refFeedback.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {refFeedback.message}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="notes" className="text-gray-900 font-bold">Special Requests or Notes <span className="text-gray-400 font-medium">(Optional)</span></Label>

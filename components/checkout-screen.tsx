@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
-import { CreditCard, Banknote, Smartphone, Percent, Receipt, User, ShoppingCart, Tag, Star, Beaker, Plus, Trash2, CheckCircle2, ChevronDown, ChevronUp, Wallet, Split, Globe } from "lucide-react"
+import { CreditCard, Banknote, Smartphone, Percent, Receipt, User, ShoppingCart, Tag, Star, Beaker, Plus, Trash2, CheckCircle2, ChevronDown, ChevronUp, Wallet, Split, Globe, Sparkles } from "lucide-react"
 
 import { CouponSelector } from "@/components/coupon-selector"
 import LoyaltyCheckout from "@/components/loyalty-checkout"
@@ -114,6 +114,21 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
   // Customer Source State
   const [isWalkInSource, setIsWalkInSource] = useState<boolean>(true)
   const [customerSource, setCustomerSource] = useState<string>("Online")
+
+  // Customer Monetary Wallet State
+  const [customerWallet, setCustomerWallet] = useState<{ balance: number } | null>(null)
+  const [loadingWallet, setLoadingWallet] = useState<boolean>(false)
+
+  // Referral Code State (First-Time Visit)
+  const [referralInput, setReferralInput] = useState<string>("")
+  const [appliedReferral, setAppliedReferral] = useState<{
+    code: string
+    referrer_name: string
+    discount_amount: number
+    discount_type: string
+  } | null>(null)
+  const [validatingReferral, setValidatingReferral] = useState<boolean>(false)
+  const [referralError, setReferralError] = useState<string>("")
 
   const [customerLoyalty, setCustomerLoyalty] = useState<UiCustomerLoyalty | null>(null)
   const [loyaltySettings, setLoyaltySettings] = useState<LoyaltySettingsUI | null>(null)
@@ -301,8 +316,68 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
     }
   }, [customer.id])
 
+  const fetchCustomerWallet = useCallback(async () => {
+    if (!customer?.id) return
+    setLoadingWallet(true)
+    try {
+      const res = await fetch(`/api/wallet?customerId=${encodeURIComponent(String(customer.id))}`, {
+        cache: "no-store",
+      })
+      const data = await res.json()
+      if (data?.success && data.wallet) {
+        setCustomerWallet({ balance: Number(data.wallet.balance || 0) })
+      } else {
+        setCustomerWallet({ balance: 0 })
+      }
+    } catch (e) {
+      console.error("Failed to fetch customer wallet:", e)
+      setCustomerWallet({ balance: 0 })
+    } finally {
+      setLoadingWallet(false)
+    }
+  }, [customer?.id])
+
+  const handleApplyReferral = async () => {
+    if (!referralInput.trim()) return
+    setValidatingReferral(true)
+    setReferralError("")
+    try {
+      const clean = referralInput.trim().toUpperCase()
+      const queryParams = new URLSearchParams({
+        code: clean,
+        phone: customer.phone || "",
+      })
+      const res = await fetch(`/api/public/referral/validate?${queryParams.toString()}`)
+      const data = await res.json()
+      if (data && data.valid) {
+        setAppliedReferral({
+          code: clean,
+          referrer_name: data.referrer_name || "Friend",
+          discount_amount: Number(data.discount_amount || 0),
+          discount_type: data.discount_type || "fixed",
+        })
+        setReferralError("")
+      } else {
+        setReferralError(data?.message || "Invalid or ineligible referral code")
+        setAppliedReferral(null)
+      }
+    } catch (err: any) {
+      setReferralError(err.message || "Failed to validate referral code")
+      setAppliedReferral(null)
+    } finally {
+      setValidatingReferral(false)
+    }
+  }
+
+  const handleRemoveReferral = () => {
+    setAppliedReferral(null)
+    setReferralInput("")
+    setReferralError("")
+  }
+
   useEffect(() => {
     refreshLoyalty()
+    fetchCustomerWallet()
     // Fetch membership
     getActiveCustomerMembership(customer.id).then((mem) => {
       if (mem) {
@@ -310,7 +385,7 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
         setDiscountPercent(mem.discount_percentage || 0)
       }
     }).catch(console.error)
-  }, [refreshLoyalty, customer.id])
+  }, [refreshLoyalty, fetchCustomerWallet, customer.id])
 
   // Totals
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
@@ -329,7 +404,15 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
     return Math.min(capped, subtotal)
   }, [appliedCoupon, subtotal])
 
-  const totalDiscount = appliedCoupon ? couponDiscount : manualDiscount
+  const referralDiscount = useMemo(() => {
+    if (!appliedReferral || appliedCoupon) return 0
+    if (appliedReferral.discount_type === "percentage") {
+      return Math.min((subtotal * appliedReferral.discount_amount) / 100, subtotal)
+    }
+    return Math.min(appliedReferral.discount_amount, subtotal)
+  }, [appliedReferral, appliedCoupon, subtotal])
+
+  const totalDiscount = appliedCoupon ? couponDiscount : Math.max(manualDiscount, referralDiscount)
   const discountedSubtotal = Math.max(0, subtotal - totalDiscount)
 
   const gstAmount = taxInclusive
@@ -397,6 +480,24 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
   )
 
   const handleCompletePayment = async () => {
+    // Guard against insufficient wallet funds
+    if (paymentMethod === "wallet") {
+      const avail = customerWallet?.balance || 0
+      if (avail < total) {
+        alert(`Insufficient wallet balance. Available: ${formatCurrency(avail)}, Total: ${formatCurrency(total)}. Please choose Split Pay or another payment method.`)
+        return
+      }
+    }
+
+    if (paymentMethod === "split" && splitSecondMethod === "wallet") {
+      const walletDue = Math.max(0, Math.round((total - splitCashAmount) * 100) / 100)
+      const avail = customerWallet?.balance || 0
+      if (avail < walletDue) {
+        alert(`Wallet portion (${formatCurrency(walletDue)}) exceeds customer wallet balance (${formatCurrency(avail)}). Please adjust the split amount.`)
+        return
+      }
+    }
+
     setIsProcessing(true)
     try {
       if (!idempotencyKeyRef.current) {
@@ -425,10 +526,13 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
         customer_id: customer.id,
         items: cartItems,
         payment_method: finalPaymentMethod,
+        split_cash_amount: paymentMethod === "split" ? splitCashAmount : undefined,
+        split_second_method: paymentMethod === "split" ? splitSecondMethod : undefined,
+        referral_code: appliedReferral?.code || null,
         notes: combinedNotes,
         coupon_code: appliedCoupon?.code,
         coupon_discount: appliedCoupon ? couponDiscount : 0,
-        manual_discount: !appliedCoupon ? manualDiscount : 0,
+        manual_discount: !appliedCoupon ? Math.max(manualDiscount, referralDiscount) : 0,
         invoice_date: today,
         due_date: today,
         redeem_points: redeemEnabled ? loyaltyRedeemPoints : 0,
@@ -457,9 +561,14 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
       const data = await res.json()
       if (!data.success || !data.invoice) throw new Error(data.message || "Failed to finalize checkout")
 
+      // Refresh wallet balance if wallet was used
+      if (paymentMethod === "wallet" || (paymentMethod === "split" && splitSecondMethod === "wallet")) {
+        fetchCustomerWallet()
+      }
+
       const serverTotals = data.totals || {
         subtotal,
-        couponDiscount: appliedCoupon ? couponDiscount : manualDiscount,
+        couponDiscount: appliedCoupon ? couponDiscount : Math.max(manualDiscount, referralDiscount),
         gstAmount,
         giftCardDiscount,
         loyaltyDiscount,
@@ -471,7 +580,7 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
         customer,
         items: cartItems,
         subtotal: serverTotals.subtotal,
-        discount: manualDiscount,
+        discount: Math.max(manualDiscount, referralDiscount),
         couponCode: appliedCoupon ? appliedCoupon.code : undefined,
         couponDiscount: appliedCoupon ? couponDiscount : 0,
         loyaltyDiscount: serverTotals.loyaltyDiscount,
@@ -486,9 +595,9 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
         created_at: new Date().toISOString(),
       }
       onComplete(invoice)
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
-      alert("Failed to process payment. Please try again.")
+      alert(e?.message || "Failed to process payment. Please try again.")
     } finally {
       setIsProcessing(false)
     }
@@ -571,8 +680,20 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground">{customer.phone}</p>
-                {customer.email && <p className="text-sm text-muted-foreground">{customer.email}</p>}
+              {customer.email && <p className="text-sm text-muted-foreground">{customer.email}</p>}
 
+              <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-gray-200/60">
+                <Badge variant="outline" className="bg-emerald-50 text-emerald-800 border-emerald-300 font-semibold text-xs flex items-center gap-1.5 py-0.5 px-2">
+                  <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                  Wallet: {loadingWallet ? "Fetching..." : formatCurrency(customerWallet?.balance || 0)}
+                </Badge>
+                {customerLoyalty && (
+                  <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-300 font-semibold text-xs flex items-center gap-1.5 py-0.5 px-2">
+                    <Star className="w-3.5 h-3.5 text-amber-600" />
+                    Points: {customerLoyalty.points}
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
           {/* Items */}
@@ -810,6 +931,16 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
               </div>
             )}
 
+            {!appliedCoupon && appliedReferral && referralDiscount > 0 && (
+              <div className="flex justify-between text-purple-600">
+                <span className="flex items-center gap-1 font-medium">
+                  <Sparkles className="w-4 h-4" />
+                  Referral Discount ({appliedReferral.code})
+                </span>
+                <span>-{formatCurrency(referralDiscount)}</span>
+              </div>
+            )}
+
             <div className="flex justify-between">
               <span>GST ({taxRate}%{taxInclusive ? " included" : ""}):</span>
               <span>{formatCurrency(gstAmount)}</span>
@@ -865,6 +996,71 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
               }}
               onCouponRemoved={() => setAppliedCoupon(null)}
             />
+          </div>
+
+          {/* Referral Code (First-Time Visit) */}
+          <div className="space-y-2 pt-2 border-t border-gray-100">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1.5 text-xs font-semibold text-gray-700">
+                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                Referral Code (First-Timer)
+              </Label>
+              {appliedReferral && (
+                <Badge className="bg-purple-100 text-purple-800 border-purple-200 text-[10px]">
+                  Applied
+                </Badge>
+              )}
+            </div>
+
+            {appliedReferral ? (
+              <div className="flex items-center justify-between p-2.5 bg-purple-50/80 border border-purple-200 rounded-lg text-xs">
+                <div>
+                  <div className="font-bold text-purple-950 font-mono tracking-wide">
+                    {appliedReferral.code}
+                  </div>
+                  <div className="text-[11px] text-purple-700">
+                    Referred by <strong>{appliedReferral.referrer_name}</strong>
+                    {appliedReferral.discount_amount > 0 && ` • ₹${appliedReferral.discount_amount} OFF`}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRemoveReferral}
+                  className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  Remove
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter referral code (e.g. REF1042)"
+                    value={referralInput}
+                    onChange={(e) => {
+                      setReferralInput(e.target.value.toUpperCase())
+                      if (referralError) setReferralError("")
+                    }}
+                    className="h-9 text-xs font-mono uppercase bg-white"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleApplyReferral}
+                    disabled={!referralInput.trim() || validatingReferral}
+                    className="h-9 px-3 text-xs font-medium border-purple-200 text-purple-700 hover:bg-purple-50 shrink-0"
+                  >
+                    {validatingReferral ? "Checking..." : "Apply"}
+                  </Button>
+                </div>
+                {referralError && (
+                  <p className="text-[11px] text-red-600 font-medium">{referralError}</p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Manual discount */}
@@ -957,6 +1153,66 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
               })}
             </div>
 
+            {/* Wallet Payment Details & Live Balance Deduction Preview */}
+            {paymentMethod === "wallet" && (
+              <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-lg space-y-3 mt-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="w-4 h-4 text-emerald-700" />
+                    <span className="text-xs font-bold text-emerald-950">Prepaid Wallet Payment</span>
+                  </div>
+                  <Badge variant="outline" className="bg-white border-emerald-300 text-emerald-800 text-xs font-bold">
+                    Available: {loadingWallet ? "..." : formatCurrency(customerWallet?.balance || 0)}
+                  </Badge>
+                </div>
+
+                {(customerWallet?.balance || 0) >= total ? (
+                  <div className="space-y-1.5 text-xs text-emerald-900 bg-white/90 p-2.5 rounded-md border border-emerald-200 shadow-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Amount to Deduct:</span>
+                      <span className="font-bold text-emerald-950">{formatCurrency(total)}</span>
+                    </div>
+                    <div className="flex justify-between text-[11px] text-muted-foreground">
+                      <span>Remaining Balance:</span>
+                      <span className="font-semibold text-emerald-800">
+                        {formatCurrency((customerWallet?.balance || 0) - total)}
+                      </span>
+                    </div>
+                    <div className="pt-1.5 border-t border-emerald-100 flex items-center gap-1.5 text-[11px] text-emerald-700 font-medium">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      Sufficient wallet balance. Funds will be auto-debited on completion.
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 text-xs bg-amber-50/90 p-2.5 rounded-md border border-amber-200">
+                    <div className="flex justify-between text-amber-950 font-semibold">
+                      <span>Short by:</span>
+                      <span className="text-red-600 font-bold">
+                        {formatCurrency(total - (customerWallet?.balance || 0))}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-800">
+                      Customer has only {formatCurrency(customerWallet?.balance || 0)}. Insufficient to pay the full bill of {formatCurrency(total)}.
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        const avail = Math.max(0, customerWallet?.balance || 0)
+                        setPaymentMethod("split")
+                        setSplitSecondMethod("wallet")
+                        setSplitCashAmount(Math.max(0, Math.round((total - avail) * 100) / 100))
+                      }}
+                      className="w-full h-8 text-xs bg-amber-600 hover:bg-amber-700 text-white font-semibold gap-1.5"
+                    >
+                      <Split className="w-3.5 h-3.5" />
+                      Split with Wallet (Pay {formatCurrency(customerWallet?.balance || 0)} from Wallet + Rest in Cash)
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Split Payment Details */}
             {paymentMethod === "split" && (
               <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg space-y-3 mt-3">
@@ -1006,6 +1262,35 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
                     </div>
                   </div>
                 </div>
+
+                {splitSecondMethod === "wallet" && (
+                  <div className="p-2.5 bg-white/90 rounded border border-amber-200 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between text-amber-950">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <Wallet className="w-3.5 h-3.5 text-emerald-600" />
+                        Available Wallet Balance: <strong>{formatCurrency(customerWallet?.balance || 0)}</strong>
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-[11px] text-emerald-700 hover:bg-emerald-50 px-2 font-semibold"
+                        onClick={() => {
+                          const avail = Math.max(0, customerWallet?.balance || 0)
+                          const neededCash = Math.max(0, Math.round((total - avail) * 100) / 100)
+                          setSplitCashAmount(neededCash)
+                        }}
+                      >
+                        Use Max Wallet
+                      </Button>
+                    </div>
+                    {Math.max(0, Math.round((total - splitCashAmount) * 100) / 100) > (customerWallet?.balance || 0) && (
+                      <p className="text-[11px] text-red-600 font-semibold">
+                        ⚠ Wallet portion exceeds available balance of {formatCurrency(customerWallet?.balance || 0)}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

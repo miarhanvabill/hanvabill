@@ -1,11 +1,17 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getCustomerWallets, getWalletTransactions, addWalletPoints } from "@/app/actions/wallet"
+import { getCustomerWallets, getWalletTransactions, addWalletPoints, getCustomerWalletDetails } from "@/app/actions/wallet"
 import { withTenantAuth } from "@/lib/withTenantAuth"
 
 export async function GET(request: NextRequest) {
   return await withTenantAuth(async ({ tenantId }) => {
     try {
       const searchParams = request.nextUrl.searchParams
+      const customerId = searchParams.get("customerId")
+      if (customerId) {
+        const wallet = await getCustomerWalletDetails(customerId)
+        return NextResponse.json({ success: true, wallet: wallet || { balance: 0, customerId: Number(customerId) } })
+      }
+
       const type = searchParams.get("type")
 
       if (type === "transactions") {

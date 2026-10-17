@@ -63,7 +63,7 @@ export async function POST(req: Request) {
     `;
 
     // Check referral code
-    const referralCode = body.referral_code || null;
+    const referralCode = body.referral_code ? String(body.referral_code).trim().toUpperCase() : null;
     let referrerId: number | null = null;
     if (referralCode) {
       const refMatches = await sql`
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
           AND (
             ('REF' || LPAD(id::text, 4, '0') || RIGHT(phone_number, 4)) = ${referralCode}
             OR ('REF' || id::text) = ${referralCode}
-            OR code = ${referralCode}
+            OR UPPER(referral_code) = ${referralCode}
           )
         LIMIT 1
       `.catch(() => []);

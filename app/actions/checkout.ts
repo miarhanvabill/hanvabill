@@ -16,6 +16,9 @@ export interface FinalizeCheckoutInput {
     staff_members?: Array<{ id: number; name: string; split_percentage: number }>
   }>
   payment_method: string
+  split_cash_amount?: number
+  split_second_method?: string
+  referral_code?: string | null
   notes?: string | null
   coupon_code?: string | null
   coupon_discount?: number
@@ -765,8 +768,82 @@ export async function finalizeCheckout(
       }
 
       // -------------------------------------------------------------
-      // REFERRAL REWARD (First-Time Checkout Logic)
+      // WALLET DEDUCTION (Customer prepaid monetary wallet)
       // -------------------------------------------------------------
+      const methodStr = String(input.payment_method || "").toLowerCase().trim()
+      const isFullWallet = methodStr === 'wallet'
+      const isSplitWallet = input.split_second_method === 'wallet' || (methodStr.includes('split') && methodStr.includes('wallet'))
+
+      if (isFullWallet) {
+        try {
+          const { debitWallet } = await import("@/app/actions/wallet")
+          const debitAmount = Math.round(total * 100) / 100
+          if (debitAmount > 0) {
+            const debitRes = await debitWallet(
+              customerId,
+              debitAmount,
+              `Payment for Invoice #${invoiceNumber}`,
+              invoice.id
+            )
+            if (!debitRes.success) {
+              console.warn("Wallet debit warning:", debitRes.error)
+            }
+          }
+        } catch (walletErr) {
+          console.error("Failed to debit wallet during checkout:", walletErr)
+        }
+      } else if (isSplitWallet) {
+        try {
+          const { debitWallet } = await import("@/app/actions/wallet")
+          const cashPortion = Number(input.split_cash_amount) || 0
+          const walletPortion = Math.max(0, Math.round((total - cashPortion) * 100) / 100)
+          if (walletPortion > 0) {
+            const debitRes = await debitWallet(
+              customerId,
+              walletPortion,
+              `Split payment (Wallet portion) for Invoice #${invoiceNumber}`,
+              invoice.id
+            )
+            if (!debitRes.success) {
+              console.warn("Split wallet debit warning:", debitRes.error)
+            }
+          }
+        } catch (walletErr) {
+          console.error("Failed to debit split wallet during checkout:", walletErr)
+        }
+      }
+
+      // -------------------------------------------------------------
+      // REFERRAL LINKING & REWARD (First-Time Checkout Logic)
+      // -------------------------------------------------------------
+      if (input.referral_code) {
+        try {
+          const cleanRef = input.referral_code.trim().toUpperCase()
+          const refRows = await sql`
+            SELECT id FROM customers
+            WHERE tenant_id = ${tenantId}
+              AND (
+                ('REF' || LPAD(id::text, 4, '0') || RIGHT(phone_number, 4)) = ${cleanRef}
+                OR ('REF' || id::text) = ${cleanRef}
+                OR referral_code = ${cleanRef}
+              )
+            LIMIT 1
+          `.catch(() => [])
+          if (refRows.length > 0) {
+            const referrerId = refRows[0].id
+            if (Number(referrerId) !== Number(customerId)) {
+              await sql`
+                UPDATE customers
+                SET referred_by_customer_id = ${referrerId}
+                WHERE id = ${customerId} AND tenant_id = ${tenantId} AND (referred_by_customer_id IS NULL)
+              `.catch(() => {})
+            }
+          }
+        } catch (refErr) {
+          console.error("Failed to link referral during checkout:", refErr)
+        }
+      }
+
       try {
         const { processFirstTimeReferralOnCheckout } = await import("@/app/actions/referrals")
         await processFirstTimeReferralOnCheckout({
