@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from '@/lib/db'
 import { createHash } from 'crypto'
 import { getTenantWhatsAppConfig, DEFAULT_HANVA_WABA_NUMBER } from '@/lib/whatsapp-automations'
+import { sendFonadaCustomerOtp } from '@/lib/fonada-ai'
 
 export const dynamic = 'force-dynamic'
 
@@ -117,9 +118,43 @@ export async function POST(req: NextRequest) {
     let fonadaError = ''
     let sentMsgCandidate = ''
     let sentMsgId: string | null = null
-    let successfulWaba = ''
+    let successfulWaba = '917965373459'
 
-    if (waConfig.enabled && waConfig.userid && waConfig.password) {
+    // 1. Primary Engine: Fonada AI WhatsApp Platform with approved Meta template `customer_login_otp`
+    try {
+      const fonadaAiRes = await sendFonadaCustomerOtp({
+        phone: canonicalPhone,
+        otp,
+        salonName,
+      })
+
+      if (fonadaAiRes.success) {
+        sendSuccess = true
+        sentMsgId = fonadaAiRes.campaign_id || null
+        sentMsgCandidate = `*${otp}* is your verification code. For your security, do not share this code.`
+
+        console.log(`[Customer OTP] ✅ SUCCESS via Fonada AI Campaign! Campaign ID: ${sentMsgId}`)
+
+        // Record in whatsapp_messages table
+        try {
+          await sql`
+            INSERT INTO whatsapp_messages (
+              tenant_id, phone_number, message_type, message_content, direction, status, msg_id, created_at
+            ) VALUES (
+              ${String(internalTenantId)}, ${canonicalPhone}, 'text', ${sentMsgCandidate}, 'outbound', 'sent', ${sentMsgId}, NOW()
+            )
+          `.catch(() => {})
+        } catch {}
+      } else {
+        console.warn(`[Customer OTP] Fonada AI Campaign attempt: ${fonadaAiRes.error}`)
+        fonadaError = fonadaAiRes.error || ''
+      }
+    } catch (aiErr: any) {
+      console.error(`[Customer OTP] Error calling Fonada AI Campaign:`, aiErr)
+    }
+
+    // 2. Legacy Engine Fallback if AI campaign didn't deliver
+    if (!sendSuccess && waConfig.enabled && waConfig.userid && waConfig.password) {
       // Multiple template candidate formats to ensure compatibility with whichever Meta template was approved
       const candidateMessages = [
         `*${otp}* is your verification code. For your security, do not share this code.`,
