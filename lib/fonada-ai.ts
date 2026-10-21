@@ -127,10 +127,11 @@ export async function sendFonadaCustomerOtp(params: {
 }): Promise<FonadaCampaignResponse> {
   const phoneDigits = params.phone.replace(/[^0-9]/g, "")
   const tenDigit = phoneDigits.slice(-10)
+  const fullPhone = `91${tenDigit}`
 
   return await sendFonadaCampaign(
     {
-      campaign_name: `otp_${Date.now()}`,
+      campaign_name: `customer_login_otp`,
       template_name: "customer_login_otp",
       account_id: params.accountId || FONADA_AI_HANVA_ACCOUNT_ID,
       metadata: {
@@ -140,7 +141,7 @@ export async function sendFonadaCustomerOtp(params: {
       },
       audience_rows: [
         {
-          Phone: tenDigit,
+          Phone: fullPhone,
           Body_1: params.otp,
           Button_1: params.otp,
         },

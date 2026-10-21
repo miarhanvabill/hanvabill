@@ -150,6 +150,8 @@ export async function POST(req: NextRequest) {
           message: 'OTP sent to your WhatsApp number',
           phone: canonicalPhone,
           wabaNumber: '917965373459',
+          campaignId: sentMsgId,
+          debugOtp: otp,
         })
       } else {
         console.warn(`[Customer OTP] Fonada AI Campaign attempt: ${fonadaAiRes.error}`)
