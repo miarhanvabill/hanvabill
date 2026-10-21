@@ -116,7 +116,7 @@ export default function WhatsAppConfigPage() {
     enabled: true,
     userid: "",
     password: "",
-    wabaNumber: "",
+    wabaNumber: "917965373459",
     salonName: "Hanva Salon",
     openaiApiKey: "",
   })
@@ -199,7 +199,7 @@ export default function WhatsAppConfigPage() {
           enabled: settings.whatsapp?.enabled ?? true,
           userid: settings.whatsapp?.userid || "",
           password: settings.whatsapp?.password || "",
-          wabaNumber: settings.whatsapp?.wabaNumber || "",
+          wabaNumber: settings.whatsapp?.wabaNumber || "917965373459",
           salonName: settings.profile?.salonName || "Hanva Luxury Salon",
           openaiApiKey: settings.whatsapp?.openaiApiKey || "",
         })
@@ -835,13 +835,13 @@ export default function WhatsAppConfigPage() {
                           <Input
                             id="wabaNumber"
                             className="pl-9 bg-white font-mono text-sm"
-                            placeholder="e.g. 919876543210"
+                            placeholder="917965373459"
                             value={gatewayData.wabaNumber}
                             onChange={(e) => setGatewayData({ ...gatewayData, wabaNumber: e.target.value })}
                           />
                         </div>
                         <p className="text-[11px] text-slate-500">
-                          Must include country code without plus sign (e.g., 91 for India).
+                          Official Hanva WABA Endpoint: <span className="font-semibold text-emerald-600">+91 79 6537 3459</span> (Default across all salon messages).
                         </p>
                       </div>
 

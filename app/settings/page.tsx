@@ -2128,8 +2128,8 @@ export default function SettingsPage() {
                     <div className="space-y-2">
                       <Label>Hanva WABA Number</Label>
                       <Input 
-                        placeholder="e.g. 1029384756"
-                        value={settings.whatsapp?.wabaNumber || ""}
+                        placeholder="917965373459"
+                        value={settings.whatsapp?.wabaNumber || "917965373459"}
                         onChange={(e) =>
                           setSettings({
                             ...settings,
@@ -2137,6 +2137,7 @@ export default function SettingsPage() {
                           })
                         }
                       />
+                      <p className="text-xs text-gray-500">Official Hanva WABA Endpoint: +91 79 6537 3459.</p>
                     </div>
                   </div>
 

@@ -1,5 +1,7 @@
 import { sql as baseSql } from "@/lib/db";
-import { getTenantWhatsAppConfig } from "@/lib/whatsapp-automations";
+import { getTenantWhatsAppConfig, DEFAULT_HANVA_WABA_NUMBER } from "@/lib/whatsapp-automations";
+
+export { DEFAULT_HANVA_WABA_NUMBER };
 
 export interface WhatsAppInvoiceData {
   bookingNumber: string;
@@ -16,7 +18,10 @@ export async function sendViaHanvaOldApi(creds: any, phone: string, text: string
   const formData = new FormData();
   formData.append("userid", creds.userid || "");
   formData.append("password", creds.password || "");
-  formData.append("wabaNumber", creds.wabaNumber || "");
+  
+  const rawWaba = creds.wabaNumber || DEFAULT_HANVA_WABA_NUMBER;
+  const cleanWaba = String(rawWaba).replace(/[^0-9]/g, "") || DEFAULT_HANVA_WABA_NUMBER;
+  formData.append("wabaNumber", cleanWaba);
 
   let safePhone = phone.replace(/^\+/, '');
   if (safePhone.length === 10) safePhone = `91${safePhone}`;

@@ -90,14 +90,18 @@ export async function POST(req: NextRequest) {
     const waSettings: Record<string, string> = {}
     waConfig.forEach((r: any) => { waSettings[r.setting_key] = r.setting_value })
 
-    const message = `Your OTP for ${salonName} is: *${otp}*\n\nValid for 10 minutes. Do not share this code with anyone.`
+    const defaultHanvaWaba = "917965373459"
+    const activeWabaNumber = (waSettings['whatsapp.wabaNumber'] || defaultHanvaWaba).replace(/[^0-9]/g, "") || defaultHanvaWaba
 
-    if (waSettings['whatsapp.enabled'] === 'true' && waSettings['whatsapp.userid'] && waSettings['whatsapp.wabaNumber']) {
+    // Exact Meta-approved WhatsApp Authentication template body
+    const message = `${otp} is your verification code. For your security, do not share this code.\n\nExpires in 10 minutes.`
+
+    if (waSettings['whatsapp.enabled'] === 'true' && waSettings['whatsapp.userid']) {
       try {
         const formData = new FormData()
         formData.append('userid', waSettings['whatsapp.userid'])
         formData.append('password', waSettings['whatsapp.password'] || '')
-        formData.append('wabaNumber', waSettings['whatsapp.wabaNumber'])
+        formData.append('wabaNumber', activeWabaNumber)
         let safePhone = normalizedPhone
         if (safePhone.length === 10) safePhone = `91${safePhone}`
         formData.append('mobile', safePhone)

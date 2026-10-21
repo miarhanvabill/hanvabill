@@ -2,6 +2,8 @@
 import { sql as defaultSql } from "@/lib/db"
 import { sendViaHanvaOldApi } from "@/lib/whatsapp"
 
+export const DEFAULT_HANVA_WABA_NUMBER = "917965373459" // Official Hanva WABA Endpoint (+91 79 6537 3459)
+
 export type WhatsAppEventType =
   | "booking_created"
   | "booking_confirmation"
@@ -328,7 +330,7 @@ export async function getTenantWhatsAppConfig(sql: any, tenantId: string) {
       enabled: false,
       userid: "",
       password: "",
-      wabaNumber: "",
+      wabaNumber: DEFAULT_HANVA_WABA_NUMBER,
       salonName: "Hanva Salon",
       googleMyBusinessUrl: "",
       currency: "₹",
@@ -342,12 +344,15 @@ export async function getTenantWhatsAppConfig(sql: any, tenantId: string) {
         if (key === "whatsapp.enabled") config.enabled = val === "true" || val === true
         if (key === "whatsapp.userid") config.userid = val || ""
         if (key === "whatsapp.password") config.password = val || ""
-        if (key === "whatsapp.wabaNumber") config.wabaNumber = val || ""
+        if (key === "whatsapp.wabaNumber") config.wabaNumber = (val ? String(val).replace(/[^0-9]/g, "") : "") || DEFAULT_HANVA_WABA_NUMBER
         if (key === "profile.salonName") config.salonName = val || config.salonName
         if (key === "profile.googleMyBusinessUrl") config.googleMyBusinessUrl = val || ""
         if (key === "business.currency") config.currency = val || config.currency
       }
     }
+
+    // Ensure wabaNumber is always guaranteed to be Hanva's official number
+    if (!config.wabaNumber) config.wabaNumber = DEFAULT_HANVA_WABA_NUMBER
 
     return config
   } catch (error) {
@@ -356,7 +361,7 @@ export async function getTenantWhatsAppConfig(sql: any, tenantId: string) {
       enabled: false,
       userid: "",
       password: "",
-      wabaNumber: "",
+      wabaNumber: DEFAULT_HANVA_WABA_NUMBER,
       salonName: "Hanva Salon",
       googleMyBusinessUrl: "",
       currency: "₹",
