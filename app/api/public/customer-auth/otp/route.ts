@@ -129,7 +129,6 @@ export async function POST(req: NextRequest) {
       })
 
       if (fonadaAiRes.success) {
-        sendSuccess = true
         sentMsgId = fonadaAiRes.campaign_id || null
         sentMsgCandidate = `*${otp}* is your verification code. For your security, do not share this code.`
 
@@ -145,6 +144,13 @@ export async function POST(req: NextRequest) {
             )
           `.catch(() => {})
         } catch {}
+
+        return NextResponse.json({
+          success: true,
+          message: 'OTP sent to your WhatsApp number',
+          phone: canonicalPhone,
+          wabaNumber: '917965373459',
+        })
       } else {
         console.warn(`[Customer OTP] Fonada AI Campaign attempt: ${fonadaAiRes.error}`)
         fonadaError = fonadaAiRes.error || ''
@@ -250,20 +256,26 @@ export async function POST(req: NextRequest) {
       if (!sendSuccess) {
         console.error(`[Customer OTP] All candidate WABA formats failed for ${canonicalPhone}. Tested: ${candidateWabas.join(', ')}. Last error: ${fonadaError}`)
       }
-    } else {
-      console.warn(`[Customer OTP] No WhatsApp credentials configured for tenant ${internalTenantId}. Simulated OTP: ${otp} for ${canonicalPhone}`)
     }
 
-    if (!sendSuccess && fonadaError) {
+    if (sendSuccess) {
+      return NextResponse.json({
+        success: true,
+        message: 'OTP sent to your WhatsApp number',
+        phone: canonicalPhone,
+        wabaNumber: successfulWaba,
+      })
+    }
+
+    if (fonadaError) {
       return NextResponse.json({
         success: false,
-        error: `WhatsApp Gateway rejected sender number: ${fonadaError}. Tested: ${candidateWabas.join(', ')}`,
-        gatewayUserid: waConfig.userid || 'none',
+        error: `WhatsApp Gateway failed: ${fonadaError}`,
         phone: canonicalPhone,
-        debugOtp: otp, // Allow instant testing even if Fonada gateway rejects
       }, { status: 400 })
     }
 
+    console.warn(`[Customer OTP] No WhatsApp credentials configured for tenant ${internalTenantId}. Simulated OTP: ${otp} for ${canonicalPhone}`)
     return NextResponse.json({
       success: true,
       message: 'OTP sent to your WhatsApp number',

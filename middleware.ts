@@ -24,7 +24,6 @@ const isPublicRoute = createRouteMatcher([
   "/inv/(.*)",
   "/login",
   "/api/webhooks(.*)",
-  "/api/ivr-obd(.*)",
   "/api/public/(.*)",
   "/test-forms(.*)",
   "/manifest(.*)",
@@ -41,9 +40,8 @@ const clerkMw = clerkMiddleware(async (auth, req) => {
     return NextResponse.next();
   }
 
-  // Always allow IVR OBD dialer webhooks and public endpoints
+  // Always allow public endpoints and webhooks
   if (
-    pathname.startsWith("/api/ivr-obd") ||
     pathname.startsWith("/api/public") ||
     pathname.startsWith("/api/webhooks")
   ) {
