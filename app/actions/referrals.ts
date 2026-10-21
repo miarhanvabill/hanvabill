@@ -91,7 +91,7 @@ export async function ensureReferralSchema(sql: any, tenantId: string) {
         referee_discount_amount NUMERIC DEFAULT 250,
         minimum_order_amount NUMERIC DEFAULT 700,
         validity_days INTEGER DEFAULT 45,
-        share_message_template TEXT DEFAULT 'Hey! 🌸 I love my salon {salon_name}. Use my link to get ₹{discount} off your first visit: {link}',
+        share_message_template TEXT DEFAULT 'Hey! 🌸 I love my salon *{salon_name}*. Use my link to get *₹{discount} OFF* on your first visit: {link}',
         first_time_only BOOLEAN DEFAULT true,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -106,7 +106,7 @@ export async function ensureReferralSchema(sql: any, tenantId: string) {
     await sql`ALTER TABLE referral_settings ADD COLUMN IF NOT EXISTS referee_discount_amount NUMERIC DEFAULT 250`.catch(() => {})
     await sql`ALTER TABLE referral_settings ADD COLUMN IF NOT EXISTS minimum_order_amount NUMERIC DEFAULT 700`.catch(() => {})
     await sql`ALTER TABLE referral_settings ADD COLUMN IF NOT EXISTS validity_days INTEGER DEFAULT 45`.catch(() => {})
-    await sql`ALTER TABLE referral_settings ADD COLUMN IF NOT EXISTS share_message_template TEXT DEFAULT 'Hey! 🌸 I love my salon {salon_name}. Use my link to get ₹{discount} off your first visit: {link}'`.catch(() => {})
+    await sql`ALTER TABLE referral_settings ADD COLUMN IF NOT EXISTS share_message_template TEXT DEFAULT 'Hey! 🌸 I love my salon *{salon_name}*. Use my link to get *₹{discount} OFF* on your first visit: {link}'`.catch(() => {})
     await sql`ALTER TABLE referral_settings ADD COLUMN IF NOT EXISTS first_time_only BOOLEAN DEFAULT true`.catch(() => {})
 
     // 2. Referral Records Table
@@ -203,7 +203,7 @@ export async function getReferralSettings(tenantId?: string): Promise<ReferralSe
         referee_discount_amount: 250,
         minimum_order_amount: 700,
         validity_days: 45,
-        share_message_template: `Hey! 🌸 I love my salon ${salonName}. Use my link to get ₹250 off your first visit: {link}`,
+        share_message_template: `Hey! 🌸 I love my salon *${salonName}*. Use my link to get *₹250 OFF* on your first visit: {link}`,
         first_time_only: true,
         salon_name: salonName,
       }

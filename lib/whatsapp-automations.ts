@@ -102,57 +102,57 @@ export const CANONICAL_EVENT_TYPES: Record<string, string> = {
 
 export const DEFAULT_AUTOMATION_TEMPLATES: Record<string, { template: string; delay_minutes: number; send_time: string }> = {
   booking_created: {
-    template: "Hello {{customer_name}}, your appointment at {{business_name}} for {{service_name}} is confirmed for {{booking_date}} at {{booking_time}} with {{staff_name}}. We look forward to seeing you!",
+    template: "Hello *{{customer_name}}*! ✨\n\nYour appointment at *{{business_name}}* is confirmed:\n\n💇‍♀️ *Service:* {{service_name}}\n📅 *Date:* {{booking_date}}\n⏰ *Time:* {{booking_time}}\n👤 *Stylist:* {{staff_name}}\n\nWe look forward to pampering you! See you soon. 🌸",
     delay_minutes: 0,
     send_time: "09:00",
   },
   reminder_24h: {
-    template: "Hi {{customer_name}}, this is a friendly reminder for your upcoming appointment at {{business_name}} tomorrow, {{booking_date}} at {{booking_time}} for {{service_name}} with {{staff_name}}. See you soon!",
+    template: "Hi *{{customer_name}}*! 🌸\n\nThis is a friendly reminder for your upcoming appointment at *{{business_name}}* tomorrow:\n\n📅 *Date:* {{booking_date}}\n⏰ *Time:* {{booking_time}}\n💇‍♀️ *Service:* {{service_name}}\n👤 *Stylist:* {{staff_name}}\n\nSee you tomorrow! Please let us know if you need to reschedule. ✨",
     delay_minutes: 0,
     send_time: "09:00",
   },
   reminder_2h: {
-    template: "Hi {{customer_name}}, your appointment at {{business_name}} is coming up in 2 hours at {{booking_time}} today for {{service_name}}. We are getting everything ready for you!",
+    template: "Hi *{{customer_name}}*! ⏰\n\nYour appointment at *{{business_name}}* is in *2 hours* today at *{{booking_time}}* for *{{service_name}}*.\n\nWe are getting everything ready for you! ✨",
     delay_minutes: 0,
     send_time: "09:00",
   },
   invoice_receipt: {
-    template: "Hello {{customer_name}}, thank you for visiting {{business_name}}! Your invoice for ₹{{total_amount}} is ready. View & download: {{invoice_url}}. Have a wonderful day!",
+    template: "Hello *{{customer_name}}*! ✨\n\nThank you for visiting *{{business_name}}*! Your invoice amounting to *₹{{total_amount}}* is ready.\n\n🧾 *View & Download Digital Receipt:*\n{{invoice_url}}\n\nHave a wonderful day ahead! 🌸",
     delay_minutes: 0,
     send_time: "09:00",
   },
   review_request: {
-    template: "Dear {{customer_name}}, thank you for choosing {{business_name}} today! We would love to hear your feedback. Please take a moment to rate us on Google: {{gmb_url}}",
+    template: "Dear *{{customer_name}}*! 🌟\n\nThank you for choosing *{{business_name}}* today! We hope you loved your experience.\n\nPlease take a quick moment to rate us on Google:\n⭐ {{gmb_url}}\n\nYour feedback helps us serve you even better! ❤️",
     delay_minutes: 30,
     send_time: "09:00",
   },
   birthday: {
-    template: "Happy Birthday {{customer_name}}! 🎂🎉 Wishing you a fabulous year ahead from all of us at {{business_name}}. Visit us this week to enjoy a special birthday treat!",
+    template: "Happy Birthday *{{customer_name}}*! 🎂🎉\n\nWishing you a fabulous year filled with beauty and joy from all of us at *{{business_name}}*!\n\nVisit us this week to enjoy an exclusive birthday treat with code *{{coupon_code}}*. We look forward to celebrating with you! ✨",
     delay_minutes: 0,
     send_time: "09:00",
   },
   anniversary: {
-    template: "Happy Anniversary {{customer_name}}! 💐 Wishing you celebrating love and joy today from the {{business_name}} team. Pamper yourself with us today!",
+    template: "Happy Anniversary *{{customer_name}}*! 💐🥂\n\nWishing you celebration, love, and happiness today from the team at *{{business_name}}*!\n\nCelebrate your special milestone with us and enjoy an exclusive anniversary discount with code *{{coupon_code}}*. ✨",
     delay_minutes: 0,
     send_time: "09:00",
   },
   we_miss_you: {
-    template: "Hi {{customer_name}}, we miss seeing you at {{business_name}}! It has been a while since your last visit. Book your next pampering session today!",
+    template: "Hi *{{customer_name}}*! 💛\n\nWe miss seeing you at *{{business_name}}*! It has been a while since your last visit.\n\nTreat yourself to some well-deserved self-care this week and enjoy a special welcome-back privilege with code *{{coupon_code}}*.\n\nBook your pampering session today! 🌸",
     delay_minutes: 0,
     send_time: "10:00",
   },
   loyalty_update: {
-    template: "Hi {{customer_name}}, your loyalty reward balance at {{business_name}} has been updated! You currently have {{points}} reward points available. Redeem them on your next visit!",
+    template: "Hi *{{customer_name}}*! 🎁\n\nYour loyalty reward points at *{{business_name}}* have been updated! You currently have *{{points}} reward points* available.\n\nRedeem them for instant discounts on your next visit! ✨",
     delay_minutes: 0,
     send_time: "09:00",
   },
   referral_reward: {
-    template: "Hey {{customer_name}}! 🎉 Great news! Your friend {{referee_name}} just completed their first visit at {{business_name}}. We've credited ₹{{reward_amount}} to your wallet! Your new wallet balance is ₹{{new_balance}}.",
+    template: "Hey *{{customer_name}}*! 🎉\n\nGreat news! Your friend *{{referee_name}}* just completed their first visit at *{{business_name}}*.\n\nWe have credited *₹{{reward_amount}}* directly to your salon wallet! Your new wallet balance is *₹{{new_balance}}*.\n\nKeep referring & keep earning! ✨",
     delay_minutes: 0,
     send_time: "09:00",
   },
   referral_reward_earned: {
-    template: "Congratulations {{referrer_name}}! 🎉 Your friend {{friend_name}} just completed their first visit at {{business_name}}. We've credited ₹{{reward_amount}} to your salon wallet! Use it on your next visit.",
+    template: "Congratulations *{{referrer_name}}*! 🎉\n\nYour friend *{{friend_name}}* just completed their first visit at *{{business_name}}*.\n\nWe have credited *₹{{reward_amount}}* directly to your salon wallet! Use it on your next visit. ✨",
     delay_minutes: 0,
     send_time: "09:00",
   },

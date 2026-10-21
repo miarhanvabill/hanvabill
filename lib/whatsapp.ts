@@ -55,7 +55,7 @@ export async function sendWhatsAppInvoice(tenantId: string, phone: string, data:
     const currency = config.currency || "₹";
     const salonName = config.salonName || "Hanva Salon";
     const invoiceUrl = `https://biz.hanva.in/inv/${data.shareToken || data.bookingNumber}`;
-    const textMessage = `Hello ${data.customerName}! ✨\n\nThank you for visiting ${salonName}! Your invoice for Booking #${data.bookingNumber} amounting to ${currency}${data.amount} is ready.\n\nYou can view and download your digital receipt here:\n${invoiceUrl}\n\nWe look forward to seeing you again soon!`;
+    const textMessage = `Hello *${data.customerName}*! ✨\n\nThank you for visiting *${salonName}*! Your invoice for Booking *#${data.bookingNumber}* amounting to *${currency}${data.amount}* is ready.\n\n🧾 *View & Download Digital Receipt:*\n${invoiceUrl}\n\nWe look forward to seeing you again soon! 🌸`;
 
     console.log(`[WhatsApp Service] Sending Invoice to ${phone} via Hanva`);
     

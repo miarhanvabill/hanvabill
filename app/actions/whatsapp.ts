@@ -446,7 +446,7 @@ export async function sendCustomerQuickAction(data: {
         const slug = tenantInfo[0]?.slug || tenantId
         const bookUrl = `https://biz.hanva.in/book/${slug}`
         
-        const textMessage = `Hi! Ready for your next pampering session at ${salonName}? 🌟 View our real-time stylist availability and easily reserve your preferred slot here:\n\n${bookUrl}\n\nWe look forward to seeing you!`
+        const textMessage = `Hi! Ready for your next pampering session at *${salonName}*? 🌟\n\nView our real-time stylist availability and easily reserve your preferred slot here:\n🔗 ${bookUrl}\n\nWe look forward to seeing you! ✨`
 
         
         return await sendWhatsAppMessage({
