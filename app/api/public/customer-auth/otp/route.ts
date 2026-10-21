@@ -223,6 +223,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         success: false,
         error: `WhatsApp Gateway rejected sender number: ${fonadaError}. Tested: ${candidateWabas.join(', ')}`,
+        gatewayUserid: waConfig.userid || 'none',
         phone: canonicalPhone,
         debugOtp: otp, // Allow instant testing even if Fonada gateway rejects
       }, { status: 400 })
