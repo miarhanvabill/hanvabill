@@ -644,18 +644,47 @@ END:VCALENDAR`
   }
 
   
+const formatPhoneForDisplay = (p: string) => {
+  const digits = (p || '').replace(/[^0-9]/g, '')
+  if (digits.length === 10) {
+    return `+91 ${digits.slice(0, 5)} ${digits.slice(5)}`
+  }
+  if (digits.length === 12 && digits.startsWith('91')) {
+    const num = digits.slice(2)
+    return `+91 ${num.slice(0, 5)} ${num.slice(5)}`
+  }
+  if (digits.length === 11 && digits.startsWith('0')) {
+    const num = digits.slice(1)
+    return `+91 ${num.slice(0, 5)} ${num.slice(5)}`
+  }
+  return digits ? `+${digits}` : ''
+}
+
+const getCanonicalPhone = (p: string) => {
+  const digits = (p || '').replace(/[^0-9]/g, '')
+  if (digits.length === 11 && digits.startsWith('0')) {
+    return `91${digits.slice(1)}`
+  }
+  if (digits.length === 10) {
+    return `91${digits}`
+  }
+  return digits
+}
+
 const handleSendOTP = async () => {
-  if (!loginPhone || loginPhone.replace(/[^0-9]/g, '').length < 10) {
-    setLoginError('Please enter a valid 10-digit phone number')
+  const digits = loginPhone.replace(/[^0-9]/g, '')
+  if (!digits || digits.length < 10) {
+    setLoginError('Please enter a valid 10-digit mobile number')
     return
   }
+  const phoneToSend = getCanonicalPhone(loginPhone)
   setLoginLoading(true)
   setLoginError('')
   try {
     const res = await fetch('/api/public/customer-auth/otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenantId, phone: loginPhone.replace(/[^0-9]/g, '') })
+      body: JSON.stringify({ tenantId, phone: phoneToSend })
     })
     const data = await res.json()
     if (!res.ok || !data.success) throw new Error(data.error || 'Failed to send OTP')
@@ -669,17 +698,18 @@ const handleSendOTP = async () => {
 }
 
 const handleVerifyOTP = async () => {
-  if (!loginOTP || loginOTP.length !== 6) {
+  if (!loginOTP || loginOTP.trim().length !== 6) {
     setLoginError('Please enter the 6-digit OTP')
     return
   }
+  const phoneToSend = getCanonicalPhone(loginPhone)
   setLoginLoading(true)
   setLoginError('')
   try {
     const res = await fetch('/api/public/customer-auth/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tenantId, phone: loginPhone.replace(/[^0-9]/g, ''), otp: loginOTP })
+      body: JSON.stringify({ tenantId, phone: phoneToSend, otp: loginOTP.trim() })
     })
     const data = await res.json()
     if (!res.ok || !data.success) throw new Error(data.error || 'Invalid OTP')
@@ -1143,52 +1173,73 @@ const LoginModal = () => (
           <span className="text-white text-2xl">👤</span>
         </div>
         <h2 className="text-2xl font-black">Customer Login</h2>
-        <p className="text-gray-500 text-sm mt-1">{loginStep === 'phone' ? 'Enter your phone to receive an OTP on WhatsApp' : `OTP sent to +${loginPhone.replace(/[^0-9]/g,'')}`}</p>
+        <p className="text-gray-500 text-sm mt-1">
+          {loginStep === 'phone' ? (
+            'Enter your phone number to receive an instant OTP on WhatsApp'
+          ) : (
+            <span>
+              OTP sent to WhatsApp <span className="font-bold text-gray-900">{formatPhoneForDisplay(loginPhone)}</span>
+            </span>
+          )}
+        </p>
       </div>
 
-      {loginError && <div className="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-2xl mb-4">{loginError}</div>}
+      {loginError && <div className="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-2xl mb-4 font-medium">{loginError}</div>}
 
       {loginStep === 'phone' ? (
         <div className="space-y-4">
           <div>
-            <Label className="font-semibold">Phone Number</Label>
-            <Input
-              type="tel"
-              placeholder="Enter 10-digit mobile number"
-              value={loginPhone}
-              onChange={e => setLoginPhone(e.target.value)}
-              className="mt-1 h-12 rounded-2xl text-base"
-              onKeyDown={e => e.key === 'Enter' && handleSendOTP()}
-              autoFocus
-            />
+            <Label className="font-semibold text-sm text-gray-700">Mobile Number (WhatsApp)</Label>
+            <div className="relative mt-1 flex items-center">
+              <span className="absolute left-3.5 flex items-center gap-1 text-sm font-bold text-gray-600 bg-gray-100 px-2 py-1 rounded-lg select-none pointer-events-none">
+                🇮🇳 +91
+              </span>
+              <Input
+                type="tel"
+                placeholder="84237 11043"
+                value={loginPhone}
+                onChange={e => setLoginPhone(e.target.value)}
+                className="h-12 pl-20 rounded-2xl text-base font-medium tracking-wide"
+                onKeyDown={e => e.key === 'Enter' && handleSendOTP()}
+                autoFocus
+              />
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1 pl-1">We will send a 6-digit verification code to your WhatsApp</p>
           </div>
-          <Button onClick={handleSendOTP} disabled={loginLoading} className="w-full h-12 rounded-2xl bg-black hover:bg-gray-800 text-base font-bold">
-            {loginLoading ? 'Sending OTP...' : 'Send OTP on WhatsApp 📲'}
+          <Button onClick={handleSendOTP} disabled={loginLoading} className="w-full h-12 rounded-2xl bg-black hover:bg-gray-800 text-base font-bold shadow-sm transition-all active:scale-[0.99]">
+            {loginLoading ? 'Sending OTP on WhatsApp...' : 'Send OTP on WhatsApp 📲'}
           </Button>
         </div>
       ) : (
         <div className="space-y-4">
           <div>
-            <Label className="font-semibold">Enter OTP</Label>
+            <Label className="font-semibold text-sm text-gray-700">Enter 6-Digit OTP</Label>
             <Input
-              type="number"
-              placeholder="6-digit OTP"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={6}
+              placeholder="••••••"
               value={loginOTP}
-              onChange={e => setLoginOTP(e.target.value.slice(0, 6))}
-              className="mt-1 h-14 text-2xl text-center tracking-widest rounded-2xl font-mono"
+              onChange={e => setLoginOTP(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+              className="mt-1 h-14 text-2xl text-center tracking-widest rounded-2xl font-mono font-bold"
               onKeyDown={e => e.key === 'Enter' && handleVerifyOTP()}
               autoFocus
             />
           </div>
-          <Button onClick={handleVerifyOTP} disabled={loginLoading} className="w-full h-12 rounded-2xl bg-black hover:bg-gray-800 text-base font-bold">
+          <Button onClick={handleVerifyOTP} disabled={loginLoading} className="w-full h-12 rounded-2xl bg-black hover:bg-gray-800 text-base font-bold shadow-sm transition-all active:scale-[0.99]">
             {loginLoading ? 'Verifying...' : 'Verify & Login ✓'}
           </Button>
-          <div className="text-center text-sm text-gray-500">
+          <div className="text-center text-sm text-gray-500 pt-1">
             {otpCountdown > 0 ? (
-              <span>Resend OTP in {otpCountdown}s</span>
+              <span className="text-xs text-gray-400">Resend OTP in <span className="font-semibold text-gray-700">{otpCountdown}s</span></span>
             ) : (
-              <button onClick={() => { setLoginStep('phone'); setLoginOTP(''); setLoginError('') }} className="text-black font-semibold underline">
-                Change number or resend
+              <button 
+                type="button"
+                onClick={() => { setLoginStep('phone'); setLoginOTP(''); setLoginError('') }} 
+                className="text-black font-semibold underline text-xs hover:text-gray-700"
+              >
+                Change number or resend OTP
               </button>
             )}
           </div>

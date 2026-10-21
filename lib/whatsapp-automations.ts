@@ -351,6 +351,54 @@ export async function getTenantWhatsAppConfig(sql: any, tenantId: string) {
       }
     }
 
+    // 1. If this tenant has no custom credentials, fall back to master tenant ('1') or ANY tenant with configured credentials
+    if (!config.userid) {
+      try {
+        const masterRows = await sql`
+          SELECT setting_key, setting_value 
+          FROM store_settings 
+          WHERE setting_key IN ('whatsapp.enabled', 'whatsapp.userid', 'whatsapp.password', 'whatsapp.wabaNumber')
+            AND setting_value IS NOT NULL AND setting_value != ''
+          ORDER BY (tenant_id = '1' OR tenant_id = 1) DESC
+          LIMIT 10
+        `.catch(() => [])
+
+        if (Array.isArray(masterRows)) {
+          for (const row of masterRows) {
+            if (row.setting_key === "whatsapp.userid" && !config.userid) config.userid = row.setting_value
+            if (row.setting_key === "whatsapp.password" && !config.password) config.password = row.setting_value
+            if (row.setting_key === "whatsapp.wabaNumber" && config.wabaNumber === DEFAULT_HANVA_WABA_NUMBER && row.setting_value) {
+              config.wabaNumber = String(row.setting_value).replace(/[^0-9]/g, "") || DEFAULT_HANVA_WABA_NUMBER
+            }
+            if (row.setting_key === "whatsapp.enabled" && !config.enabled) {
+              config.enabled = row.setting_value === "true" || row.setting_value === true
+            }
+          }
+        }
+      } catch (masterErr) {
+        console.warn(`[WhatsApp Automations] Master credentials lookup error:`, masterErr)
+      }
+    }
+
+    // 2. Also check environment variables fallback
+    if (!config.userid) {
+      config.userid = process.env.FONADA_USERID || process.env.WHATSAPP_USERID || ""
+    }
+    if (!config.password) {
+      config.password = process.env.FONADA_PASSWORD || process.env.WHATSAPP_PASSWORD || ""
+    }
+    if (config.wabaNumber === DEFAULT_HANVA_WABA_NUMBER && (process.env.FONADA_WABA_NUMBER || process.env.WHATSAPP_WABA_NUMBER)) {
+      config.wabaNumber = String(process.env.FONADA_WABA_NUMBER || process.env.WHATSAPP_WABA_NUMBER).replace(/[^0-9]/g, "") || DEFAULT_HANVA_WABA_NUMBER
+    }
+
+    // 3. If credentials exist, default enabled to true unless explicitly disabled for this specific tenant
+    if (config.userid && config.password) {
+      const explicitDisable = Array.isArray(rows) && rows.some((r: any) => r.setting_key === "whatsapp.enabled" && (r.setting_value === "false" || r.setting_value === false))
+      if (!explicitDisable) {
+        config.enabled = true
+      }
+    }
+
     // Ensure wabaNumber is always guaranteed to be Hanva's official number
     if (!config.wabaNumber) config.wabaNumber = DEFAULT_HANVA_WABA_NUMBER
 

@@ -29,14 +29,31 @@ export async function POST(req: NextRequest) {
     }
     const internalTenantId = Number(tenant[0].id)
 
-    const normalizedPhone = String(phone).replace(/[^0-9]/g, '')
-    const otpHash = hashOTP(String(otp))
+    // Canonical Phone Normalization
+    const rawDigits = String(phone).replace(/[^0-9]/g, '')
+    let canonicalPhone = rawDigits
+    if (canonicalPhone.startsWith('0') && canonicalPhone.length === 11) {
+      canonicalPhone = canonicalPhone.slice(1)
+    }
+    if (canonicalPhone.length === 10) {
+      canonicalPhone = `91${canonicalPhone}`
+    }
+    const phoneShort = canonicalPhone.slice(-10)
 
-    // Find valid, unverified OTP record
+    const otpHash = hashOTP(String(otp).trim())
+
+    // Find valid, unverified OTP record matching any compatible phone representation
     const otpRecord = await sql`
-      SELECT id, attempts FROM customer_otps
-      WHERE (tenant_id = ${internalTenantId} OR tenant_id::text = ${String(tenantId)})
-        AND phone = ${normalizedPhone}
+      SELECT id, attempts, otp_hash FROM customer_otps
+      WHERE (tenant_id = ${internalTenantId} OR tenant_id::text = ${String(internalTenantId)} OR tenant_id::text = ${String(tenantId)})
+        AND (
+          phone = ${canonicalPhone}
+          OR phone = ${rawDigits}
+          OR phone = ${phoneShort}
+          OR phone = ${'91' + phoneShort}
+          OR phone = ${'+91' + phoneShort}
+          OR phone LIKE ${'%' + phoneShort}
+        )
         AND expires_at > NOW()
         AND verified = FALSE
       ORDER BY created_at DESC
@@ -57,28 +74,25 @@ export async function POST(req: NextRequest) {
     await sql`UPDATE customer_otps SET attempts = attempts + 1 WHERE id = ${record.id}`.catch(() => {})
 
     // Verify the hash matches
-    const matched = await sql`
-      SELECT id FROM customer_otps WHERE id = ${record.id} AND otp_hash = ${otpHash}
-    `.catch(() => [])
-
-    if (matched.length === 0) {
-      return NextResponse.json({ error: 'Invalid OTP. Please try again.' }, { status: 400 })
+    if (record.otp_hash !== otpHash) {
+      return NextResponse.json({ error: 'Invalid OTP. Please check your WhatsApp and try again.' }, { status: 400 })
     }
 
     // Mark as verified
     await sql`UPDATE customer_otps SET verified = TRUE WHERE id = ${record.id}`.catch(() => {})
 
-    // Look up customer by phone (try multiple formats)
-    const phoneShort = normalizedPhone.slice(-10)
+    // Look up customer by phone (try multiple standard formats)
     const customerRows = await sql`
       SELECT id, full_name, phone_number, email, date_of_birth, date_of_anniversary, gender
       FROM customers
-      WHERE tenant_id = ${internalTenantId}
+      WHERE (tenant_id = ${internalTenantId} OR tenant_id::text = ${String(internalTenantId)} OR tenant_id::text = ${String(tenantId)})
         AND (
-          phone_number = ${normalizedPhone}
-          OR phone_number = ${'+' + normalizedPhone}
-          OR phone_number = ${'91' + phoneShort}
+          phone_number = ${canonicalPhone}
+          OR phone_number = ${'+' + canonicalPhone}
+          OR phone_number = ${rawDigits}
+          OR phone_number = ${phoneShort}
           OR phone_number = ${'+91' + phoneShort}
+          OR phone_number = ${'91' + phoneShort}
           OR phone_number LIKE ${'%' + phoneShort}
         )
       LIMIT 1
@@ -87,10 +101,10 @@ export async function POST(req: NextRequest) {
     let customer: any
 
     if (customerRows.length === 0) {
-      // New customer — create record
+      // New customer — create record with canonical phone
       const newCustomer = await sql`
         INSERT INTO customers (tenant_id, phone_number, full_name, created_at)
-        VALUES (${internalTenantId}, ${normalizedPhone}, ${'Customer'}, NOW())
+        VALUES (${internalTenantId}, ${canonicalPhone}, ${'Customer'}, NOW())
         RETURNING id, full_name, phone_number, email, date_of_birth, date_of_anniversary, gender
       `.catch(() => [])
       customer = newCustomer[0]
@@ -106,7 +120,7 @@ export async function POST(req: NextRequest) {
     const token = signCustomerToken({
       customerId: Number(customer.id),
       tenantId: internalTenantId,
-      phone: normalizedPhone,
+      phone: canonicalPhone,
       name: customer.full_name || 'Customer'
     })
 

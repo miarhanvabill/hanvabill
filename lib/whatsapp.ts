@@ -23,7 +23,10 @@ export async function sendViaHanvaOldApi(creds: any, phone: string, text: string
   const cleanWaba = String(rawWaba).replace(/[^0-9]/g, "") || DEFAULT_HANVA_WABA_NUMBER;
   formData.append("wabaNumber", cleanWaba);
 
-  let safePhone = phone.replace(/^\+/, '');
+  let safePhone = String(phone).replace(/[^0-9]/g, '');
+  if (safePhone.startsWith('0') && safePhone.length === 11) {
+    safePhone = safePhone.slice(1);
+  }
   if (safePhone.length === 10) safePhone = `91${safePhone}`;
   formData.append("mobile", safePhone); 
   
