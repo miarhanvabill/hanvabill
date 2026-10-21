@@ -143,7 +143,6 @@ export async function sendFonadaCustomerOtp(params: {
         {
           Phone: fullPhone,
           Body_1: params.otp,
-          Button_1: params.otp,
         },
       ],
     },
