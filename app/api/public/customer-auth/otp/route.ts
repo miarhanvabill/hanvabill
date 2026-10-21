@@ -95,20 +95,23 @@ export async function POST(req: NextRequest) {
     const waConfig = await getTenantWhatsAppConfig(sql, String(internalTenantId))
 
     // Build candidate WABA numbers
+    const officialHanvaTen = "7965373459"
     const rawConfigWaba = String(waConfig.wabaNumber || DEFAULT_HANVA_WABA_NUMBER).trim()
     const rawDigitsWaba = rawConfigWaba.replace(/[^0-9]/g, '')
-    const tenDigitsWaba = rawDigitsWaba.slice(-10)
+    const tenDigitsWaba = rawDigitsWaba.length >= 10 ? rawDigitsWaba.slice(-10) : officialHanvaTen
 
     const candidateWabas: string[] = [
-      rawConfigWaba,                          // Raw from store_settings (if user typed something specific)
-      tenDigitsWaba,                          // "7965373459" (10-digit number without country code)
-      `+91${tenDigitsWaba}`,                  // "+917965373459"
-      `+91 79 6537 3459`,                     // Format exactly as given by user in chat
-      `0${tenDigitsWaba}`,                    // "07965373459" (Domestic Ahmedabad landline prefix)
-      `91 79 6537 3459`,                     // Without plus, with spaces
-      `079 6537 3459`,                        // Domestic with space
-      `91${tenDigitsWaba}`,                   // "917965373459"
-    ].filter((v, i, a) => Boolean(v) && a.indexOf(v) === i)
+      `91${officialHanvaTen}`,                // "917965373459" (Standard Fonada format: Country code + 10 digits)
+      officialHanvaTen,                       // "7965373459" (10-digit national number)
+      `+91${officialHanvaTen}`,               // "+917965373459" (E.164 with plus)
+      `0${officialHanvaTen}`,                 // "07965373459" (Domestic STD prefix)
+      `+91 79 6537 3459`,                     // Official user format
+      `91 79 6537 3459`,
+      `079 6537 3459`,
+      rawConfigWaba,                          // Custom tenant configuration if valid
+      tenDigitsWaba !== officialHanvaTen ? `91${tenDigitsWaba}` : '',
+      tenDigitsWaba !== officialHanvaTen ? tenDigitsWaba : '',
+    ].filter((v, i, a) => Boolean(v) && !v.includes("78543347642") && a.indexOf(v) === i)
 
     let sendSuccess = false
     let fonadaError = ''
@@ -119,11 +122,14 @@ export async function POST(req: NextRequest) {
     if (waConfig.enabled && waConfig.userid && waConfig.password) {
       // Multiple template candidate formats to ensure compatibility with whichever Meta template was approved
       const candidateMessages = [
-        `Your verification code for *${salonName}* is *${otp}*.\n\nValid for 10 minutes. Please do not share this code with anyone.`,
         `*${otp}* is your verification code. For your security, do not share this code.`,
         `${otp} is your verification code. For your security, do not share this code.`,
+        `Your verification code for *${salonName}* is *${otp}*.\n\nValid for 10 minutes. Please do not share this code with anyone.`,
+        `Your verification code for ${salonName} is ${otp}.\n\nValid for 10 minutes. Please do not share this code with anyone.`,
         `${otp} is your verification code. For your security, do not share this code.\n\nExpires in 10 minutes.`,
-        `Your OTP for ${salonName} is: *${otp}*\n\nValid for 10 minutes. Do not share this code with anyone.`
+        `Your OTP for ${salonName} is: *${otp}*\n\nValid for 10 minutes. Do not share this code with anyone.`,
+        `*${otp}* is your verification code for ${salonName}. Do not share this OTP with anyone.`,
+        `Your verification code is ${otp}.`,
       ]
 
       wabaLoop: for (const testWaba of candidateWabas) {

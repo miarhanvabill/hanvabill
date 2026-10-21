@@ -344,7 +344,20 @@ export async function getTenantWhatsAppConfig(sql: any, tenantId: string) {
         if (key === "whatsapp.enabled") config.enabled = val === "true" || val === true
         if (key === "whatsapp.userid") config.userid = val || ""
         if (key === "whatsapp.password") config.password = val || ""
-        if (key === "whatsapp.wabaNumber") config.wabaNumber = (val ? String(val).trim() : "") || DEFAULT_HANVA_WABA_NUMBER
+        if (key === "whatsapp.wabaNumber") {
+          const clean = val ? String(val).trim() : ""
+          if (clean.includes("78543347642") || !clean) {
+            config.wabaNumber = DEFAULT_HANVA_WABA_NUMBER
+            try {
+              sql`
+                UPDATE store_settings SET setting_value = ${DEFAULT_HANVA_WABA_NUMBER}, updated_at = NOW()
+                WHERE setting_key = 'whatsapp.wabaNumber' AND setting_value LIKE '%78543347642%'
+              `.catch(() => {})
+            } catch {}
+          } else {
+            config.wabaNumber = clean
+          }
+        }
         if (key === "profile.salonName") config.salonName = val || config.salonName
         if (key === "profile.googleMyBusinessUrl") config.googleMyBusinessUrl = val || ""
         if (key === "business.currency") config.currency = val || config.currency
@@ -367,8 +380,11 @@ export async function getTenantWhatsAppConfig(sql: any, tenantId: string) {
           for (const row of masterRows) {
             if (row.setting_key === "whatsapp.userid" && !config.userid) config.userid = row.setting_value
             if (row.setting_key === "whatsapp.password" && !config.password) config.password = row.setting_value
-            if (row.setting_key === "whatsapp.wabaNumber" && config.wabaNumber === DEFAULT_HANVA_WABA_NUMBER && row.setting_value) {
-              config.wabaNumber = String(row.setting_value).trim() || DEFAULT_HANVA_WABA_NUMBER
+            if (row.setting_key === "whatsapp.wabaNumber" && row.setting_value) {
+              const clean = String(row.setting_value).trim()
+              if (!clean.includes("78543347642") && clean) {
+                config.wabaNumber = clean
+              }
             }
             if (row.setting_key === "whatsapp.enabled" && !config.enabled) {
               config.enabled = row.setting_value === "true" || row.setting_value === true
@@ -387,8 +403,11 @@ export async function getTenantWhatsAppConfig(sql: any, tenantId: string) {
     if (!config.password) {
       config.password = process.env.FONADA_PASSWORD || process.env.WHATSAPP_PASSWORD || ""
     }
-    if (config.wabaNumber === DEFAULT_HANVA_WABA_NUMBER && (process.env.FONADA_WABA_NUMBER || process.env.WHATSAPP_WABA_NUMBER)) {
-      config.wabaNumber = String(process.env.FONADA_WABA_NUMBER || process.env.WHATSAPP_WABA_NUMBER).trim() || DEFAULT_HANVA_WABA_NUMBER
+    if (process.env.FONADA_WABA_NUMBER || process.env.WHATSAPP_WABA_NUMBER) {
+      const envWaba = String(process.env.FONADA_WABA_NUMBER || process.env.WHATSAPP_WABA_NUMBER).trim()
+      if (!envWaba.includes("78543347642") && envWaba) {
+        config.wabaNumber = envWaba
+      }
     }
 
     // 3. If credentials exist, default enabled to true unless explicitly disabled for this specific tenant

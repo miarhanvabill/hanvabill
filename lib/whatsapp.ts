@@ -25,19 +25,23 @@ export async function sendViaHanvaOldApi(creds: any, phone: string, text: string
   }
   if (safePhone.length === 10) safePhone = `91${safePhone}`;
 
+  const officialHanvaTen = "7965373459";
   const rawConfigWaba = String(creds.wabaNumber || DEFAULT_HANVA_WABA_NUMBER).trim();
   const rawDigits = rawConfigWaba.replace(/[^0-9]/g, '');
-  const tenDigits = rawDigits.slice(-10);
+  const tenDigits = rawDigits.length >= 10 ? rawDigits.slice(-10) : officialHanvaTen;
 
   const candidateWabas = [
-    rawConfigWaba,
-    tenDigits,
-    `+91${tenDigits}`,
-    `+91 79 6537 3459`,
-    `0${tenDigits}`,
+    `91${officialHanvaTen}`,                // "917965373459" (Standard Fonada format: Country code + 10 digits)
+    officialHanvaTen,                       // "7965373459" (10-digit national number)
+    `+91${officialHanvaTen}`,               // "+917965373459" (E.164 with plus)
+    `0${officialHanvaTen}`,                 // "07965373459" (Domestic STD prefix)
+    `+91 79 6537 3459`,                     // Official format with spaces
     `91 79 6537 3459`,
-    `91${tenDigits}`,
-  ].filter((v, i, a) => Boolean(v) && a.indexOf(v) === i);
+    `079 6537 3459`,
+    rawConfigWaba,
+    tenDigits !== officialHanvaTen ? `91${tenDigits}` : '',
+    tenDigits !== officialHanvaTen ? tenDigits : '',
+  ].filter((v, i, a) => Boolean(v) && !v.includes("78543347642") && a.indexOf(v) === i);
 
   let lastError: any = null;
 
@@ -64,6 +68,16 @@ export async function sendViaHanvaOldApi(creds: any, phone: string, text: string
           continue;
         }
         throw lastError;
+      }
+
+      // If testWaba succeeded, persist it so future sends are instantaneous
+      if (testWaba && testWaba !== creds.wabaNumber) {
+        try {
+          baseSql`
+            UPDATE store_settings SET setting_value = ${testWaba}, updated_at = NOW()
+            WHERE setting_key = 'whatsapp.wabaNumber'
+          `.catch(() => {});
+        } catch {}
       }
 
       return { safePhone, msgId: data.msgId || null, wabaNumber: testWaba };
