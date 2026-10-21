@@ -41,6 +41,15 @@ const clerkMw = clerkMiddleware(async (auth, req) => {
     return NextResponse.next();
   }
 
+  // Always allow IVR OBD dialer webhooks and public endpoints
+  if (
+    pathname.startsWith("/api/ivr-obd") ||
+    pathname.startsWith("/api/public") ||
+    pathname.startsWith("/api/webhooks")
+  ) {
+    return NextResponse.next();
+  }
+
   // 1) Allow public routes
   if (isPublicRoute(req)) {
     return NextResponse.next();
