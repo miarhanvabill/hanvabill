@@ -51,14 +51,15 @@ export async function sendFonadaCampaign(
   const accountId = payload.account_id || FONADA_AI_HANVA_ACCOUNT_ID
 
   const normalizedRows = (payload.audience_rows || []).map((row) => {
-    let cleanPhone = String(row.Phone || "").replace(/[^0-9]/g, "")
-    // Keep 10 digits or 12 digits (without leading plus/spaces)
-    if (cleanPhone.startsWith("0") && cleanPhone.length === 11) {
-      cleanPhone = cleanPhone.slice(1)
-    }
+    const rawPhone = String(row.phone || row.Phone || "").replace(/[^0-9]/g, "")
+    const tenDigit = rawPhone.slice(-10)
+    const fullPhone = `91${tenDigit}`
+    const bodyVal = row.BODY_1 || row.Body_1 || row.body_1 || ""
     return {
-      ...row,
-      Phone: cleanPhone,
+      phone: fullPhone,
+      Phone: fullPhone,
+      BODY_1: bodyVal,
+      Body_1: bodyVal,
     }
   })
 
@@ -128,10 +129,11 @@ export async function sendFonadaCustomerOtp(params: {
   const phoneDigits = params.phone.replace(/[^0-9]/g, "")
   const tenDigit = phoneDigits.slice(-10)
   const fullPhone = `91${tenDigit}`
+  const uniqueCampaignName = `otp_${tenDigit}_${Date.now()}`
 
   return await sendFonadaCampaign(
     {
-      campaign_name: `customer_login_otp`,
+      campaign_name: uniqueCampaignName,
       template_name: "customer_login_otp",
       account_id: params.accountId || FONADA_AI_HANVA_ACCOUNT_ID,
       metadata: {
@@ -141,7 +143,9 @@ export async function sendFonadaCustomerOtp(params: {
       },
       audience_rows: [
         {
+          phone: fullPhone,
           Phone: fullPhone,
+          BODY_1: params.otp,
           Body_1: params.otp,
         },
       ],

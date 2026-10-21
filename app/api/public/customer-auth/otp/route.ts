@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       )
     `.catch(() => {})
 
-    // Rate limit: max 6 OTPs per phone per 10 minutes
+    // Rate limit: max 25 OTPs per phone per 10 minutes (generous for testing)
     const recentOTPs = await sql`
       SELECT COUNT(*) as count FROM customer_otps
       WHERE (tenant_id = ${internalTenantId} OR tenant_id::text = ${String(internalTenantId)})
@@ -71,8 +71,8 @@ export async function POST(req: NextRequest) {
       return [{ count: 0 }]
     })
 
-    if (Number(recentOTPs[0]?.count) >= 6) {
-      return NextResponse.json({ error: 'Too many OTP requests. Please wait 10 minutes.' }, { status: 429 })
+    if (Number(recentOTPs[0]?.count) >= 25) {
+      return NextResponse.json({ error: 'Too many OTP requests. Please wait a few minutes.' }, { status: 429 })
     }
 
     // Generate 6-digit OTP
