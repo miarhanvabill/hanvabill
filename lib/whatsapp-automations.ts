@@ -344,7 +344,7 @@ export async function getTenantWhatsAppConfig(sql: any, tenantId: string) {
         if (key === "whatsapp.enabled") config.enabled = val === "true" || val === true
         if (key === "whatsapp.userid") config.userid = val || ""
         if (key === "whatsapp.password") config.password = val || ""
-        if (key === "whatsapp.wabaNumber") config.wabaNumber = (val ? String(val).replace(/[^0-9]/g, "") : "") || DEFAULT_HANVA_WABA_NUMBER
+        if (key === "whatsapp.wabaNumber") config.wabaNumber = (val ? String(val).trim() : "") || DEFAULT_HANVA_WABA_NUMBER
         if (key === "profile.salonName") config.salonName = val || config.salonName
         if (key === "profile.googleMyBusinessUrl") config.googleMyBusinessUrl = val || ""
         if (key === "business.currency") config.currency = val || config.currency
@@ -368,7 +368,7 @@ export async function getTenantWhatsAppConfig(sql: any, tenantId: string) {
             if (row.setting_key === "whatsapp.userid" && !config.userid) config.userid = row.setting_value
             if (row.setting_key === "whatsapp.password" && !config.password) config.password = row.setting_value
             if (row.setting_key === "whatsapp.wabaNumber" && config.wabaNumber === DEFAULT_HANVA_WABA_NUMBER && row.setting_value) {
-              config.wabaNumber = String(row.setting_value).replace(/[^0-9]/g, "") || DEFAULT_HANVA_WABA_NUMBER
+              config.wabaNumber = String(row.setting_value).trim() || DEFAULT_HANVA_WABA_NUMBER
             }
             if (row.setting_key === "whatsapp.enabled" && !config.enabled) {
               config.enabled = row.setting_value === "true" || row.setting_value === true
@@ -388,7 +388,7 @@ export async function getTenantWhatsAppConfig(sql: any, tenantId: string) {
       config.password = process.env.FONADA_PASSWORD || process.env.WHATSAPP_PASSWORD || ""
     }
     if (config.wabaNumber === DEFAULT_HANVA_WABA_NUMBER && (process.env.FONADA_WABA_NUMBER || process.env.WHATSAPP_WABA_NUMBER)) {
-      config.wabaNumber = String(process.env.FONADA_WABA_NUMBER || process.env.WHATSAPP_WABA_NUMBER).replace(/[^0-9]/g, "") || DEFAULT_HANVA_WABA_NUMBER
+      config.wabaNumber = String(process.env.FONADA_WABA_NUMBER || process.env.WHATSAPP_WABA_NUMBER).trim() || DEFAULT_HANVA_WABA_NUMBER
     }
 
     // 3. If credentials exist, default enabled to true unless explicitly disabled for this specific tenant

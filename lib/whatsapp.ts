@@ -19,29 +19,64 @@ export async function sendViaHanvaOldApi(creds: any, phone: string, text: string
   formData.append("userid", creds.userid || "");
   formData.append("password", creds.password || "");
   
-  const rawWaba = creds.wabaNumber || DEFAULT_HANVA_WABA_NUMBER;
-  const cleanWaba = String(rawWaba).replace(/[^0-9]/g, "") || DEFAULT_HANVA_WABA_NUMBER;
-  formData.append("wabaNumber", cleanWaba);
-
   let safePhone = String(phone).replace(/[^0-9]/g, '');
   if (safePhone.startsWith('0') && safePhone.length === 11) {
     safePhone = safePhone.slice(1);
   }
   if (safePhone.length === 10) safePhone = `91${safePhone}`;
-  formData.append("mobile", safePhone); 
-  
-  formData.append("msg", text);
-  formData.append("msgType", "text");
-  formData.append("sendMethod", "quick");
-  formData.append("output", "json");
 
-  const res = await fetch(apiUrl, { method: "POST", body: formData });
-  const data = await res.json();
+  const rawConfigWaba = String(creds.wabaNumber || DEFAULT_HANVA_WABA_NUMBER).trim();
+  const rawDigits = rawConfigWaba.replace(/[^0-9]/g, '');
+  const tenDigits = rawDigits.slice(-10);
 
-  if (data.status === "error" || data.error) {
-    throw new Error(data.message || data.error || "Hanva API Error");
+  const candidateWabas = [
+    rawConfigWaba,
+    tenDigits,
+    `+91${tenDigits}`,
+    `+91 79 6537 3459`,
+    `0${tenDigits}`,
+    `91 79 6537 3459`,
+    `91${tenDigits}`,
+  ].filter((v, i, a) => Boolean(v) && a.indexOf(v) === i);
+
+  let lastError: any = null;
+
+  for (const testWaba of candidateWabas) {
+    const formData = new FormData();
+    formData.append("userid", creds.userid || "");
+    formData.append("password", creds.password || "");
+    formData.append("wabaNumber", testWaba);
+    formData.append("mobile", safePhone); 
+    formData.append("msg", text);
+    formData.append("msgType", "text");
+    formData.append("sendMethod", "quick");
+    formData.append("output", "json");
+
+    try {
+      const res = await fetch(apiUrl, { method: "POST", body: formData });
+      const data = await res.json();
+
+      if (data.status === "error" || data.error || data.status === false) {
+        lastError = new Error(data.message || data.error || "Hanva API Error");
+        const lowerErr = String(data.error || data.message || "").toLowerCase();
+        if (lowerErr.includes("wabanumber") || lowerErr.includes("waba number")) {
+          console.warn(`[Fonada API] wabaNumber "${testWaba}" rejected as incorrect. Trying next candidate...`);
+          continue;
+        }
+        throw lastError;
+      }
+
+      return { safePhone, msgId: data.msgId || null, wabaNumber: testWaba };
+    } catch (err: any) {
+      lastError = err;
+      if (String(err.message).toLowerCase().includes("wabanumber")) {
+        continue;
+      }
+      throw err;
+    }
   }
-  return { safePhone, msgId: data.msgId || null };
+
+  throw lastError || new Error("Failed to send message via Fonada");
 }
 
 export async function sendWhatsAppInvoice(tenantId: string, phone: string, data: WhatsAppInvoiceData, sqlClient?: any) {

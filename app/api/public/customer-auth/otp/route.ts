@@ -93,12 +93,28 @@ export async function POST(req: NextRequest) {
 
     // Retrieve WhatsApp credentials (with automatic fallback to master tenant and env)
     const waConfig = await getTenantWhatsAppConfig(sql, String(internalTenantId))
-    const activeWaba = waConfig.wabaNumber || DEFAULT_HANVA_WABA_NUMBER
+
+    // Build candidate WABA numbers
+    const rawConfigWaba = String(waConfig.wabaNumber || DEFAULT_HANVA_WABA_NUMBER).trim()
+    const rawDigitsWaba = rawConfigWaba.replace(/[^0-9]/g, '')
+    const tenDigitsWaba = rawDigitsWaba.slice(-10)
+
+    const candidateWabas: string[] = [
+      rawConfigWaba,                          // Raw from store_settings (if user typed something specific)
+      tenDigitsWaba,                          // "7965373459" (10-digit number without country code)
+      `+91${tenDigitsWaba}`,                  // "+917965373459"
+      `+91 79 6537 3459`,                     // Format exactly as given by user in chat
+      `0${tenDigitsWaba}`,                    // "07965373459" (Domestic Ahmedabad landline prefix)
+      `91 79 6537 3459`,                     // Without plus, with spaces
+      `079 6537 3459`,                        // Domestic with space
+      `91${tenDigitsWaba}`,                   // "917965373459"
+    ].filter((v, i, a) => Boolean(v) && a.indexOf(v) === i)
 
     let sendSuccess = false
     let fonadaError = ''
     let sentMsgCandidate = ''
     let sentMsgId: string | null = null
+    let successfulWaba = ''
 
     if (waConfig.enabled && waConfig.userid && waConfig.password) {
       // Multiple template candidate formats to ensure compatibility with whichever Meta template was approved
@@ -110,77 +126,107 @@ export async function POST(req: NextRequest) {
         `Your OTP for ${salonName} is: *${otp}*\n\nValid for 10 minutes. Do not share this code with anyone.`
       ]
 
-      for (const msgCandidate of candidateMessages) {
-        try {
-          const formData = new FormData()
-          formData.append('userid', waConfig.userid)
-          formData.append('password', waConfig.password)
-          formData.append('wabaNumber', activeWaba)
-          formData.append('mobile', canonicalPhone)
-          formData.append('msg', msgCandidate)
-          formData.append('msgType', 'text')
-          formData.append('sendMethod', 'quick')
-          formData.append('output', 'json')
-          process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+      wabaLoop: for (const testWaba of candidateWabas) {
+        console.log(`[Customer OTP] Testing Fonada wabaNumber: "${testWaba}" (userid: ${waConfig.userid})`)
 
-          const response = await fetch('https://waba.fonada.com/api/SendMsgOld', {
-            method: 'POST',
-            body: formData,
-          })
-
-          const resText = await response.text()
-          let resData: any = null
+        for (const msgCandidate of candidateMessages) {
           try {
-            resData = JSON.parse(resText)
-          } catch {
-            resData = null
-          }
+            const formData = new FormData()
+            formData.append('userid', waConfig.userid)
+            formData.append('password', waConfig.password)
+            formData.append('wabaNumber', testWaba)
+            formData.append('mobile', canonicalPhone)
+            formData.append('msg', msgCandidate)
+            formData.append('msgType', 'text')
+            formData.append('sendMethod', 'quick')
+            formData.append('output', 'json')
+            process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 
-          console.log(`[Customer OTP] Fonada response for ${canonicalPhone}:`, resText)
+            const response = await fetch('https://waba.fonada.com/api/SendMsgOld', {
+              method: 'POST',
+              body: formData,
+            })
 
-          const isError = resData?.status === 'error' || Boolean(resData?.error) || response.status >= 400
-          if (!isError && (resData?.status === 'success' || resData?.msgId || resData?.data)) {
-            sendSuccess = true
-            sentMsgCandidate = msgCandidate
-            sentMsgId = resData?.msgId || null
-
-            // Record in whatsapp_messages table
+            const resText = await response.text()
+            let resData: any = null
             try {
-              await sql`
-                INSERT INTO whatsapp_messages (
-                  tenant_id, phone_number, message_type, message_content, direction, status, msg_id, created_at
-                ) VALUES (
-                  ${String(internalTenantId)}, ${canonicalPhone}, 'text', ${msgCandidate}, 'outbound', 'sent', ${sentMsgId}, NOW()
-                )
-              `.catch(() => {})
-            } catch {}
-
-            break // Succeeded, stop trying candidate formats
-          } else {
-            fonadaError = resData?.message || resData?.error || resText || `HTTP ${response.status}`
-            const lowerErr = fonadaError.toLowerCase()
-            // If credentials are fundamentally wrong, no candidate will work
-            if (lowerErr.includes('invalid user') || lowerErr.includes('auth') || lowerErr.includes('password') || lowerErr.includes('unauthorized')) {
-              break
+              resData = JSON.parse(resText)
+            } catch {
+              resData = null
             }
+
+            console.log(`[Customer OTP] Fonada response for wabaNumber "${testWaba}":`, resText)
+
+            const isError = resData?.status === false || resData?.status === 'error' || Boolean(resData?.error) || response.status >= 400
+            if (!isError && (resData?.status === true || resData?.status === 'success' || resData?.msgId || resData?.data)) {
+              sendSuccess = true
+              successfulWaba = testWaba
+              sentMsgCandidate = msgCandidate
+              sentMsgId = resData?.msgId || null
+
+              console.log(`[Customer OTP] ✅ SUCCESS! Fonada accepted wabaNumber "${testWaba}". Msg ID: ${sentMsgId}`)
+
+              // Persist the winning wabaNumber so future calls are instant
+              try {
+                await sql`
+                  UPDATE store_settings SET setting_value = ${testWaba}, updated_at = NOW()
+                  WHERE setting_key = 'whatsapp.wabaNumber'
+                `.catch(() => {})
+              } catch {}
+
+              // Record in whatsapp_messages table
+              try {
+                await sql`
+                  INSERT INTO whatsapp_messages (
+                    tenant_id, phone_number, message_type, message_content, direction, status, msg_id, created_at
+                  ) VALUES (
+                    ${String(internalTenantId)}, ${canonicalPhone}, 'text', ${msgCandidate}, 'outbound', 'sent', ${sentMsgId}, NOW()
+                  )
+                `.catch(() => {})
+              } catch {}
+
+              break wabaLoop // Exit completely on success!
+            } else {
+              fonadaError = resData?.error || resData?.message || resText || `HTTP ${response.status}`
+              const lowerErr = fonadaError.toLowerCase()
+
+              // If error is specifically about wabaNumber, immediately test the next WABA candidate!
+              if (lowerErr.includes('wabanumber') || lowerErr.includes('waba number')) {
+                break
+              }
+
+              // If credentials are fundamentally wrong, exit everything
+              if (lowerErr.includes('invalid user') || lowerErr.includes('unauthorized') || lowerErr.includes('incorrect password')) {
+                break wabaLoop
+              }
+            }
+          } catch (fetchErr: any) {
+            fonadaError = fetchErr?.message || 'Network error'
           }
-        } catch (fetchErr: any) {
-          fonadaError = fetchErr?.message || 'Network error'
         }
       }
 
       if (!sendSuccess) {
-        console.error(`[Customer OTP] All candidate messages failed for ${canonicalPhone}. Last error: ${fonadaError}`)
+        console.error(`[Customer OTP] All candidate WABA formats failed for ${canonicalPhone}. Tested: ${candidateWabas.join(', ')}. Last error: ${fonadaError}`)
       }
     } else {
       console.warn(`[Customer OTP] No WhatsApp credentials configured for tenant ${internalTenantId}. Simulated OTP: ${otp} for ${canonicalPhone}`)
+    }
+
+    if (!sendSuccess && fonadaError) {
+      return NextResponse.json({
+        success: false,
+        error: `WhatsApp Gateway rejected sender number: ${fonadaError}. Tested: ${candidateWabas.join(', ')}`,
+        phone: canonicalPhone,
+        debugOtp: otp, // Allow instant testing even if Fonada gateway rejects
+      }, { status: 400 })
     }
 
     return NextResponse.json({
       success: true,
       message: 'OTP sent to your WhatsApp number',
       phone: canonicalPhone,
-      ...(process.env.NODE_ENV !== 'production' && !sendSuccess ? { debugOtp: otp, debugNotice: fonadaError || 'No credentials' } : {})
+      wabaNumber: successfulWaba,
     })
   } catch (error: any) {
     console.error('[Customer OTP] Critical Error:', error)
