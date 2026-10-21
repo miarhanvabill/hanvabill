@@ -24,6 +24,7 @@ const isPublicRoute = createRouteMatcher([
   "/inv/(.*)",
   "/login",
   "/api/webhooks(.*)",
+  "/api/ivr-obd(.*)",
   "/api/public/(.*)",
   "/test-forms(.*)",
   "/manifest(.*)",
