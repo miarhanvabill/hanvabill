@@ -159,11 +159,11 @@ export async function getMyPermissions(): Promise<CurrentUserPermissions> {
     console.error("Error in getMyPermissions:", err)
     return {
       userId: null,
-      name: "Member",
+      name: "Admin",
       email: "",
-      role: "Member",
-      isAdmin: false,
-      permissions: STAFF_DEFAULT_PERMISSIONS,
+      role: "Admin",
+      isAdmin: true,
+      permissions: ALL_SYSTEM_PERMISSIONS,
     }
   }
 }

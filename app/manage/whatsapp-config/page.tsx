@@ -114,7 +114,7 @@ import {
   convertToMetaTemplateFormat,
   type SmartCampaignRuleDraft,
   type CampaignTriggerType,
-} from "@/lib/ai-campaign-parser"
+} from "@/lib/ai-campaign-types"
 import {
   testAiEngineAction,
   generateAiTemplateAction,
@@ -261,12 +261,12 @@ export default function WhatsAppConfigPage() {
     setLoading(true)
     try {
       const [settings, fetchedRules, fetchedAnalytics, smartRulesRes, fetchedAfterHours, fetchedTemplates] = await Promise.all([
-        getBusinessSettings(),
-        getAutomationRules(),
-        getWhatsAppAnalytics(),
-        getSmartCampaignRules(),
-        getAfterHoursSettings(),
-        fetchMetaTemplates(),
+        getBusinessSettings().catch((err) => { console.warn("[loadAllData] settings error:", err); return null; }),
+        getAutomationRules().catch((err) => { console.warn("[loadAllData] rules error:", err); return []; }),
+        getWhatsAppAnalytics().catch((err) => { console.warn("[loadAllData] analytics error:", err); return null; }),
+        getSmartCampaignRules().catch((err) => { console.warn("[loadAllData] smart rules error:", err); return null; }),
+        getAfterHoursSettings().catch((err) => { console.warn("[loadAllData] after hours error:", err); return null; }),
+        fetchMetaTemplates().catch((err) => { console.warn("[loadAllData] templates error:", err); return []; }),
       ])
 
       if (smartRulesRes?.success && smartRulesRes?.data) {

@@ -36,7 +36,6 @@ export type {
   CreateTemplateInput,
   AfterHoursSettings,
 }
-export { DEFAULT_AFTER_HOURS_SETTINGS }
 
 /**
  * 1. fetchMetaTemplates(status?: string, category?: string)

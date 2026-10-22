@@ -83,13 +83,10 @@ export async function ensureSmartCampaignTables(sql: any) {
       )
     `;
 
-    // Ensure columns exist on existing table
-    await sql`
-      ALTER TABLE smart_campaign_rules
-      ADD COLUMN IF NOT EXISTS meta_template_name VARCHAR(100),
-      ADD COLUMN IF NOT EXISTS meta_template_id VARCHAR(100),
-      ADD COLUMN IF NOT EXISTS meta_template_status VARCHAR(50) DEFAULT 'APPROVED'
-    `.catch(() => {});
+    // Ensure columns exist on existing table safely one by one
+    await sql`ALTER TABLE smart_campaign_rules ADD COLUMN IF NOT EXISTS meta_template_name VARCHAR(100)`.catch(() => {});
+    await sql`ALTER TABLE smart_campaign_rules ADD COLUMN IF NOT EXISTS meta_template_id VARCHAR(100)`.catch(() => {});
+    await sql`ALTER TABLE smart_campaign_rules ADD COLUMN IF NOT EXISTS meta_template_status VARCHAR(50) DEFAULT 'APPROVED'`.catch(() => {});
 
     await sql`
       CREATE INDEX IF NOT EXISTS idx_smart_campaign_rules_tenant 
@@ -129,34 +126,64 @@ export async function getSmartCampaignRules() {
     try {
       await ensureSmartCampaignTables(sql);
 
-      const rows = await sql`
-        SELECT 
-          id,
-          tenant_id,
-          name,
-          prompt_input,
-          trigger_type,
-          trigger_days,
-          service_names,
-          category_name,
-          min_spend,
-          message_template,
-          coupon_code,
-          send_time,
-          cooldown_days,
-          exclude_active_bookings,
-          is_enabled,
-          meta_template_name,
-          meta_template_id,
-          meta_template_status,
-          total_sent,
-          last_run_at,
-          created_at,
-          updated_at
-        FROM smart_campaign_rules
-        WHERE tenant_id = ${tenantId}
-        ORDER BY created_at DESC
-      `;
+      let rows: any[] = [];
+      try {
+        rows = await sql`
+          SELECT 
+            id,
+            tenant_id,
+            name,
+            prompt_input,
+            trigger_type,
+            trigger_days,
+            service_names,
+            category_name,
+            min_spend,
+            message_template,
+            coupon_code,
+            send_time,
+            cooldown_days,
+            exclude_active_bookings,
+            is_enabled,
+            meta_template_name,
+            meta_template_id,
+            meta_template_status,
+            total_sent,
+            last_run_at,
+            created_at,
+            updated_at
+          FROM smart_campaign_rules
+          WHERE tenant_id = ${tenantId}
+          ORDER BY created_at DESC
+        `;
+      } catch (colErr) {
+        // Fallback without newer meta_template columns
+        rows = await sql`
+          SELECT 
+            id,
+            tenant_id,
+            name,
+            prompt_input,
+            trigger_type,
+            trigger_days,
+            service_names,
+            category_name,
+            min_spend,
+            message_template,
+            coupon_code,
+            send_time,
+            cooldown_days,
+            exclude_active_bookings,
+            is_enabled,
+            total_sent,
+            last_run_at,
+            created_at,
+            updated_at
+          FROM smart_campaign_rules
+          WHERE tenant_id = ${tenantId}
+          ORDER BY created_at DESC
+        `.catch(() => []);
+      }
 
       const parsed: SmartCampaignRule[] = rows.map((r: any) => ({
         id: String(r.id),

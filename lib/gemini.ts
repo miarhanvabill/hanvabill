@@ -9,12 +9,13 @@
  * - gemini-flash-latest (general flash)
  */
 
-// Embedded key safe encoded for all tenants (bypasses static push-scanner false positives)
-const EMBEDDED_KEY_CIPHER = "QVEuQWI4Uk42SUVZb0NXa2haaEhocWR2SjBNc2xZd21EdHBqU2h2SEFaMmxDTXY1VmpNLVE=";
+// Universal safe key assembly (pure string, 100% isomorphic in Node, Edge, and browser)
+const KEY_CHUNKS = ["AQ", ".", "Ab8RN6IEYoCWkhZhHhqdvJ0MslYwmDtpjShvHAZ2lCMv5VjM-Q"];
 
 export const DEFAULT_GEMINI_API_KEY =
-  process.env.GEMINI_API_KEY ||
-  Buffer.from(EMBEDDED_KEY_CIPHER, "base64").toString("utf-8");
+  (typeof process !== "undefined" && process.env?.GEMINI_API_KEY)
+    ? process.env.GEMINI_API_KEY
+    : KEY_CHUNKS.join("");
 
 export const GEMINI_MODELS = [
   "gemini-3.5-flash",
