@@ -22,7 +22,6 @@ export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const mode = url.searchParams.get("hub.mode");
-    const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
 
     // Meta webhook verification handshake
@@ -59,11 +58,18 @@ export async function POST(req: Request) {
       payload = {};
     }
 
-    console.log("[WhatsApp Webhook] Received payload:", { type, tenantId, payloadKeys: Object.keys(payload) });
+    // Always log the full payload for complete visibility in production
+    console.log("[WhatsApp Webhook] Received webhook payload:\n", JSON.stringify(payload, null, 2));
 
-    // Fallback tenant resolution: check payload or default to '1'
+    // Fallback tenant resolution: check metadata, payload, or default to '1'
     if (!tenantId) {
-      tenantId = payload.tenant_id || payload.tenantId || payload.account_id || "1";
+      tenantId =
+        payload.metadata?.tenant_id ||
+        payload.metadata?.tenantId ||
+        payload.tenant_id ||
+        payload.tenantId ||
+        payload.account_id ||
+        "1";
     }
 
     const { sql, tenantId: internalTenantId, tenantKey } = await getAuthenticatedSql(String(tenantId));
@@ -103,7 +109,11 @@ export async function POST(req: Request) {
     const updateDLR = async (msgId: string, rawStatus: string) => {
       try {
         let incomingStatus = (rawStatus || "").toLowerCase();
-        if (incomingStatus === "seen") incomingStatus = "read";
+        if (incomingStatus.includes("seen") || incomingStatus.includes("read")) incomingStatus = "read";
+        else if (incomingStatus.includes("deliver")) incomingStatus = "delivered";
+        else if (incomingStatus.includes("sent")) incomingStatus = "sent";
+        else if (incomingStatus.includes("fail") || incomingStatus.includes("error")) incomingStatus = "failed";
+
         const newStatus = ["sent", "delivered", "read", "failed"].includes(incomingStatus)
           ? incomingStatus
           : "delivered";
@@ -119,7 +129,17 @@ export async function POST(req: Request) {
       }
     };
 
-    // 1. Meta Cloud API native format
+    // 1. Fonada Test Webhook Ping
+    if (payload._test === true || String(payload.event_type || "").toLowerCase().includes("test")) {
+      console.log("[WhatsApp Webhook] Fonada test webhook ping received and verified successfully!");
+      return NextResponse.json({
+        success: true,
+        test: true,
+        message: "Fonada webhook connection active and verified",
+      });
+    }
+
+    // 2. Meta Cloud API native format
     if (payload.object === "whatsapp_business_account" && Array.isArray(payload.entry)) {
       for (const entry of payload.entry) {
         for (const change of entry.changes || []) {
@@ -157,46 +177,82 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true });
     }
 
-    // 2. Fonada Format: Inbound Message (MO)
-    const isMo =
+    // 3. Fonada AI Modern Payload Wrapper (event_type, data, customer_data)
+    const eventType = String(payload.event_type || payload.event || type || "").toLowerCase();
+    const dataObj = typeof payload.data === "object" && payload.data !== null ? payload.data : {};
+    const customerObj = typeof payload.customer_data === "object" && payload.customer_data !== null ? payload.customer_data : {};
+
+    // Extract phone from customer_data, data, or top-level payload
+    const phone = (
+      customerObj.phone ||
+      customerObj.phone_number ||
+      customerObj.mobile ||
+      customerObj.wa_id ||
+      dataObj.from ||
+      dataObj.phone ||
+      dataObj.sender ||
+      dataObj.mobile ||
+      payload.from ||
+      payload.phone ||
+      payload.sender ||
+      payload.mobile
+    )?.toString();
+
+    // Extract message content
+    let content =
+      dataObj.text?.body ||
+      dataObj.text ||
+      dataObj.message ||
+      dataObj.msg ||
+      dataObj.body ||
+      dataObj.content ||
+      payload.msg ||
+      payload.message ||
+      payload.text ||
+      payload.content ||
+      "";
+
+    if (dataObj.msgType === "IMAGE" || dataObj.type === "image") content = dataObj.imageUrl || dataObj.url || "📷 Image";
+    if (dataObj.msgType === "VIDEO" || dataObj.type === "video") content = dataObj.videoUrl || dataObj.url || "🎥 Video";
+    if (dataObj.msgType === "DOCUMENT" || dataObj.type === "document") content = dataObj.documentUrl || dataObj.url || "📄 Document";
+    if (dataObj.msgType === "AUDIO" || dataObj.type === "audio") content = dataObj.audioUrl || dataObj.url || "🎵 Audio";
+
+    const msgId = dataObj.id || dataObj.msgId || dataObj.msg_id || dataObj.message_id || payload.msgId || payload.id;
+    const msgType = dataObj.msgType || dataObj.type || payload.msgType || payload.type || "text";
+
+    // Inbound message detection
+    const isInbound =
+      eventType.includes("inbound") ||
+      eventType.includes("receive") ||
+      eventType.includes("incoming") ||
+      eventType.includes("message") ||
       type === "mo" ||
       payload.direction === "INBOUND" ||
-      payload.event === "INBOUND" ||
-      (payload.from && !payload.status) ||
-      (payload.phone && payload.msg);
+      (phone && !payload.status && !dataObj.status);
 
-    if (isMo) {
-      const phone = (payload.from || payload.phone || payload.sender || payload.mobile)?.toString();
-      let content = payload.msg || payload.message || payload.text || payload.content || "";
-      if (payload.msgType === "IMAGE") content = payload.imageUrl || "📷 Image";
-      if (payload.msgType === "VIDEO") content = payload.videoUrl || "🎥 Video";
-      if (payload.msgType === "DOCUMENT") content = payload.documentUrl || "📄 Document";
-      if (payload.msgType === "AUDIO") content = payload.audioUrl || "🎵 Audio";
-      if (payload.msgType === "BUTTON" || payload.msgType === "INTERACTIVE") {
-        content = payload.buttonsPayload?.title || payload.msg || "Button Clicked";
-      }
-
-      const msgType = payload.msgType || payload.type || "text";
-      const msgId = payload.msgId || payload.id;
-
-      if (phone) {
-        await saveInbound(phone, msgType, content, msgId);
-      }
-      return NextResponse.json({ success: true });
+    if (isInbound && phone && (content || msgType !== "text")) {
+      await saveInbound(phone, msgType, content, msgId);
+      return NextResponse.json({ success: true, processed: "inbound" });
     }
 
-    // 3. Fonada Format: Delivery Report (DLR)
-    const isDlr = type === "dlr" || payload.status || payload.event === "DLR";
-    if (isDlr) {
-      const msgId = payload.msgId || payload.message_id || payload.id;
-      const status = payload.status || payload.event;
-      if (msgId) {
-        await updateDLR(msgId, status);
-      }
-      return NextResponse.json({ success: true });
+    // Status / Delivery Report detection
+    const isStatusUpdate =
+      eventType.includes("status") ||
+      eventType.includes("dlr") ||
+      eventType.includes("deliver") ||
+      eventType.includes("read") ||
+      eventType.includes("sent") ||
+      type === "dlr" ||
+      dataObj.status ||
+      payload.status;
+
+    if (isStatusUpdate && msgId) {
+      const statusValue = dataObj.status || payload.status || eventType;
+      await updateDLR(msgId, statusValue);
+      return NextResponse.json({ success: true, processed: "dlr" });
     }
 
-    return NextResponse.json({ success: true, note: "Unhandled or ping event" });
+    return NextResponse.json({ success: true, note: "Webhook received" });
   } catch (error) {
     console.error("[WhatsApp Webhook] Fatal Error:", error);
     return NextResponse.json({ success: false, error: "Internal Server Error" }, { status: 500 });
