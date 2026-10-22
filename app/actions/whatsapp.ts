@@ -485,8 +485,9 @@ export async function getCustomerChatSidebarData(phoneNumber: string): Promise<C
 
       // 3. Fetch upcoming/recent bookings
       let upcomingBookings: any[] = []
+      let bookingRows: any[] = []
       try {
-        const bookingRows = await sql`
+        bookingRows = await sql`
           SELECT 
             b.id,
             b.booking_number,
@@ -494,14 +495,25 @@ export async function getCustomerChatSidebarData(phoneNumber: string): Promise<C
             b.booking_time,
             b.total_amount,
             b.status,
-            COALESCE(s.name, 'Stylist') as staff_name,
-            COALESCE(srv.name, 'Hair & Spa Service') as service_name
+            COALESCE(st.name, 'Stylist') as staff_name,
+            COALESCE(
+              (
+                SELECT s.name 
+                FROM booking_services bs 
+                JOIN services s ON bs.service_id = s.id 
+                WHERE bs.booking_id = b.id 
+                LIMIT 1
+              ),
+              b.notes,
+              'Salon Service'
+            ) as service_name
           FROM bookings b
-          LEFT JOIN staff s ON b.staff_id = s.id
-          LEFT JOIN services srv ON b.service_id = srv.id
-          WHERE b.customer_id = ${customerId} AND b.tenant_id = ${tenantId}
-          ORDER BY b.booking_date DESC, b.booking_time DESC
-          LIMIT 3
+          LEFT JOIN staff st ON b.staff_id = st.id
+          WHERE (b.customer_id = ${customerId} OR b.customer_id IN (
+            SELECT id FROM customers WHERE phone_number LIKE ${'%' + cleanPhone} AND tenant_id = ${tenantId}
+          )) AND b.tenant_id = ${tenantId}
+          ORDER BY b.booking_date DESC, b.booking_time DESC, b.id DESC
+          LIMIT 5
         `
         upcomingBookings = bookingRows.map((b: any) => ({
           id: Number(b.id),
@@ -510,36 +522,86 @@ export async function getCustomerChatSidebarData(phoneNumber: string): Promise<C
           staff_name: b.staff_name || "Specialist",
           booking_date: b.booking_date ? new Date(b.booking_date).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" }) : "Upcoming",
           booking_time: b.booking_time || "11:00 AM",
-          total_amount: Number(b.total_amount) || 1200,
+          total_amount: Number(b.total_amount) || 0,
           status: b.status || "confirmed",
         }))
-      } catch {}
+      } catch (bkgErr) {
+        console.error("Error fetching bookings in WhatsApp sidebar:", bkgErr)
+      }
 
       // 4. Fetch recent invoices
       let recentInvoices: any[] = []
       try {
         const invoiceRows = await sql`
           SELECT 
-            id,
-            invoice_number,
-            amount,
-            invoice_date,
-            share_token,
-            coupon_code
-          FROM invoices
-          WHERE customer_id = ${customerId} AND tenant_id = ${tenantId}
-          ORDER BY created_at DESC
-          LIMIT 3
-        `
-        recentInvoices = invoiceRows.map((inv: any) => ({
-          id: String(inv.id),
-          invoice_number: inv.invoice_number || `INV-${inv.id}`,
-          amount: Number(inv.amount) || 1500,
-          invoice_date: inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString("en-IN", { month: "short", day: "numeric" }) : "Recent",
-          share_token: inv.share_token,
-          coupon_code: inv.coupon_code || "",
-        }))
-      } catch {}
+            i.id,
+            i.invoice_number,
+            i.amount,
+            i.invoice_date,
+            i.share_token,
+            i.booking_id
+          FROM invoices i
+          WHERE (i.customer_id = ${customerId} OR i.booking_id IN (
+            SELECT id FROM bookings WHERE customer_id = ${customerId} AND tenant_id = ${tenantId}
+          ) OR i.customer_id IN (
+            SELECT id FROM customers WHERE phone_number LIKE ${'%' + cleanPhone} AND tenant_id = ${tenantId}
+          )) AND i.tenant_id = ${tenantId}
+          ORDER BY i.created_at DESC
+          LIMIT 5
+        `.catch(() => [])
+
+        // If no invoices recorded in invoices table yet, check if customer has completed/confirmed bookings
+        if (invoiceRows.length === 0 && bookingRows.length > 0) {
+          const eligibleBooking = bookingRows.find((b: any) => b.status === "completed" || b.status === "confirmed") || bookingRows[0]
+          if (eligibleBooking) {
+            const invNum = eligibleBooking.booking_number || `BK${eligibleBooking.id}`
+            const token = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)
+
+            try {
+              const inserted = await sql`
+                INSERT INTO invoices (
+                  tenant_id, invoice_number, customer_id, booking_id, amount, subtotal,
+                  payment_method, invoice_date, due_date, share_token, status, created_at, updated_at
+                ) VALUES (
+                  ${tenantId}, ${invNum}, ${customerId}, ${eligibleBooking.id},
+                  ${Number(eligibleBooking.total_amount) || 0}, ${Number(eligibleBooking.total_amount) || 0},
+                  'cash', ${eligibleBooking.booking_date || new Date().toISOString().split("T")[0]},
+                  ${eligibleBooking.booking_date || new Date().toISOString().split("T")[0]},
+                  ${token}, 'paid', NOW(), NOW()
+                )
+                ON CONFLICT (invoice_number) DO UPDATE SET share_token = COALESCE(invoices.share_token, EXCLUDED.share_token)
+                RETURNING id, invoice_number, amount, invoice_date, share_token
+              `.catch(() => [])
+
+              if (inserted && inserted.length > 0) {
+                invoiceRows.push(inserted[0])
+              }
+            } catch (syncErr) {
+              console.error("Auto-sync invoice for completed booking error:", syncErr)
+            }
+          }
+        }
+
+        recentInvoices = await Promise.all(
+          invoiceRows.map(async (inv: any) => {
+            let token = inv.share_token
+            if (!token) {
+              token = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)
+              await sql`UPDATE invoices SET share_token = ${token} WHERE id = ${inv.id} AND tenant_id = ${tenantId}`.catch(() => {})
+            }
+            return {
+              id: String(inv.id),
+              invoice_number: inv.invoice_number || `INV-${inv.id}`,
+              amount: Number(inv.amount) || 0,
+              invoice_date: inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" }) : "Recent",
+              share_token: token,
+              coupon_code: "",
+            }
+          })
+        )
+      } catch (invErr) {
+        console.error("Error fetching invoices in WhatsApp sidebar:", invErr)
+      }
 
       return {
         id: customerId,
@@ -547,8 +609,8 @@ export async function getCustomerChatSidebarData(phoneNumber: string): Promise<C
         phone_number: customer.phone_number || customer.phone || phoneNumber,
         email: customer.email || undefined,
         notes: customer.notes || undefined,
-        total_spent: Number(customer.total_spent_amount || customer.total_spent) || 3450,
-        total_bookings: Number(customer.total_bookings_count || customer.total_bookings) || (upcomingBookings.length || 2),
+        total_spent: Number(customer.total_spent_amount || customer.total_spent) || (recentInvoices[0]?.amount || 0),
+        total_bookings: Number(customer.total_bookings_count || customer.total_bookings) || (upcomingBookings.length || 0),
         loyalty_points: loyaltyPoints,
         wallet_balance: Math.round(loyaltyPoints * 0.5),
         windowStatus,
@@ -919,15 +981,81 @@ export async function sendCustomerQuickAction(data: {
       let variables: any = {}
 
       if (data.actionType === "invoice") {
-        if (!data.metadata?.invoiceNumber) {
-          return { success: false, message: "No recent invoice found to send." }
+        let invNumber = data.metadata?.invoiceNumber
+        let amount = data.metadata?.amount
+        let shareToken = data.metadata?.shareToken
+        let couponCode = data.metadata?.couponCode || ""
+
+        if (!invNumber) {
+          const cleanPhone = data.phoneNumber.replace(/^\+/, "").slice(-10)
+
+          // 1. Try invoices table
+          const invRows = await sql`
+            SELECT i.id, i.invoice_number, i.amount, i.share_token
+            FROM invoices i
+            LEFT JOIN customers c ON i.customer_id = c.id
+            WHERE (i.customer_id = ${data.customerId || 0} OR c.phone_number LIKE ${'%' + cleanPhone})
+              AND i.tenant_id = ${tenantId}
+            ORDER BY i.created_at DESC
+            LIMIT 1
+          `.catch(() => [])
+
+          if (invRows.length > 0) {
+            invNumber = invRows[0].invoice_number
+            amount = invRows[0].amount
+            shareToken = invRows[0].share_token
+          } else {
+            // 2. Try bookings table for customer's completed/confirmed booking
+            const bkgRows = await sql`
+              SELECT b.id, b.booking_number, b.total_amount, b.booking_date
+              FROM bookings b
+              LEFT JOIN customers c ON b.customer_id = c.id
+              WHERE (b.customer_id = ${data.customerId || 0} OR c.phone_number LIKE ${'%' + cleanPhone})
+                AND b.tenant_id = ${tenantId}
+                AND b.status IN ('completed', 'confirmed')
+              ORDER BY b.booking_date DESC, b.booking_time DESC, b.id DESC
+              LIMIT 1
+            `.catch(() => [])
+
+            if (bkgRows.length > 0) {
+              const b = bkgRows[0]
+              invNumber = b.booking_number || `BK${b.id}`
+              amount = b.total_amount
+              shareToken = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)
+
+              // Auto-persist in invoices table
+              await sql`
+                INSERT INTO invoices (
+                  tenant_id, invoice_number, customer_id, booking_id, amount, subtotal,
+                  payment_method, invoice_date, due_date, share_token, status, created_at, updated_at
+                ) VALUES (
+                  ${tenantId}, ${invNumber}, ${data.customerId || null}, ${b.id},
+                  ${Number(amount) || 0}, ${Number(amount) || 0}, 'cash',
+                  ${b.booking_date || new Date().toISOString().split("T")[0]},
+                  ${b.booking_date || new Date().toISOString().split("T")[0]},
+                  ${shareToken}, 'paid', NOW(), NOW()
+                )
+                ON CONFLICT (invoice_number) DO UPDATE SET share_token = COALESCE(invoices.share_token, EXCLUDED.share_token)
+              `.catch(() => {})
+            }
+          }
         }
+
+        if (!invNumber) {
+          return { success: false, message: "No recent invoice or completed booking found to send." }
+        }
+
+        if (!shareToken) {
+          shareToken = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)
+          await sql`UPDATE invoices SET share_token = ${shareToken} WHERE invoice_number = ${invNumber} AND tenant_id = ${tenantId}`.catch(() => {})
+        }
+
         eventType = "invoice_receipt"
         variables = {
-          booking_number: data.metadata.invoiceNumber,
-          total_amount: data.metadata.amount,
-          invoice_url: `https://biz.hanva.in/inv/${data.metadata.shareToken}`,
-          coupon_code: data.metadata.couponCode || "",
+          booking_number: invNumber,
+          total_amount: amount,
+          invoice_url: `https://biz.hanva.in/inv/${shareToken}`,
+          coupon_code: couponCode,
         }
       } else if (data.actionType === "review") {
         eventType = "review_request"

@@ -153,6 +153,27 @@ export async function getInvoiceById(id: string) {
         WHERE i.id = ${id} AND i.tenant_id = ${tenantId}
       `
       if (result.length === 0) return { success: false, message: "Invoice not found" }
+    
+    // If service_details is missing or empty, but booking_id exists, hydrate from booking_services
+    if ((!result[0].service_details || result[0].service_details.length === 0 || result[0].service_details === '[]') && result[0].booking_id) {
+      try {
+        const bsRows = await sql`
+          SELECT s.name, bs.quantity, bs.price, st.name as staff_name
+          FROM booking_services bs
+          LEFT JOIN services s ON bs.service_id = s.id
+          LEFT JOIN staff st ON bs.staff_id = st.id
+          WHERE bs.booking_id = ${result[0].booking_id}
+        `.catch(() => [])
+        if (bsRows && bsRows.length > 0) {
+          result[0].service_details = bsRows.map((bs: any) => ({
+            name: bs.name || "Salon Service",
+            quantity: Number(bs.quantity) || 1,
+            price: Number(bs.price) || 0,
+            staff_name: bs.staff_name || "",
+          }))
+        }
+      } catch {}
+    }
       return { success: true, invoice: result[0] }
     } catch (error) {
       console.error("Error fetching invoice:", error)
@@ -175,6 +196,27 @@ export async function getInvoiceByShareToken(token: string) {
       LIMIT 1
     `
     if (result.length === 0) return { success: false, message: "Invoice not found" }
+    
+    // If service_details is missing or empty, but booking_id exists, hydrate from booking_services
+    if ((!result[0].service_details || result[0].service_details.length === 0 || result[0].service_details === '[]') && result[0].booking_id) {
+      try {
+        const bsRows = await sql`
+          SELECT s.name, bs.quantity, bs.price, st.name as staff_name
+          FROM booking_services bs
+          LEFT JOIN services s ON bs.service_id = s.id
+          LEFT JOIN staff st ON bs.staff_id = st.id
+          WHERE bs.booking_id = ${result[0].booking_id}
+        `.catch(() => [])
+        if (bsRows && bsRows.length > 0) {
+          result[0].service_details = bsRows.map((bs: any) => ({
+            name: bs.name || "Salon Service",
+            quantity: Number(bs.quantity) || 1,
+            price: Number(bs.price) || 0,
+            staff_name: bs.staff_name || "",
+          }))
+        }
+      } catch {}
+    }
     
     // Ensure referral code is assigned and saved to customer record if missing
     let customerReferralCode = result[0].customer_referral_code;
