@@ -107,6 +107,22 @@ export async function getWhatsAppMessages(phoneNumber?: string): Promise<WhatsAp
           `
         } catch {}
 
+        // Automatically sync delivery/read ticks: if customer has replied, all earlier outbound messages were read
+        try {
+          await sql`
+            UPDATE whatsapp_messages 
+            SET status = 'read'
+            WHERE phone_number LIKE ${'%' + cleanPhone} 
+              AND direction = 'outbound' 
+              AND status != 'read'
+              AND created_at <= (
+                SELECT COALESCE(MAX(created_at), NOW()) 
+                FROM whatsapp_messages 
+                WHERE phone_number LIKE ${'%' + cleanPhone} AND direction = 'inbound'
+              )
+          `
+        } catch {}
+
         messages = await sql`
           SELECT DISTINCT ON (w.id)
             w.*,

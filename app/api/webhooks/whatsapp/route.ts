@@ -169,24 +169,70 @@ export async function POST(req: Request) {
     };
 
     // Helper: Update delivery status
-    const updateDLR = async (msgId: string, rawStatus: string) => {
+    const updateDLR = async (
+      rawStatus: string,
+      opts: { msgId?: string; waid?: string; recipientPhone?: string; correlationId?: string }
+    ) => {
       try {
         let incomingStatus = (rawStatus || "").toLowerCase();
-        if (incomingStatus.includes("seen") || incomingStatus.includes("read")) incomingStatus = "read";
-        else if (incomingStatus.includes("deliver")) incomingStatus = "delivered";
-        else if (incomingStatus.includes("sent")) incomingStatus = "sent";
-        else if (incomingStatus.includes("fail") || incomingStatus.includes("error")) incomingStatus = "failed";
+        let newStatus = "delivered";
+        if (incomingStatus.includes("seen") || incomingStatus.includes("read")) newStatus = "read";
+        else if (incomingStatus.includes("deliver")) newStatus = "delivered";
+        else if (incomingStatus.includes("sent")) newStatus = "sent";
+        else if (incomingStatus.includes("fail") || incomingStatus.includes("reject") || incomingStatus.includes("error")) newStatus = "failed";
 
-        const newStatus = ["sent", "delivered", "read", "failed"].includes(incomingStatus)
-          ? incomingStatus
-          : "delivered";
+        const cleanPhone = (opts.recipientPhone || "").replace(/[^0-9]/g, "");
+        const tenDigit = cleanPhone.slice(-10);
 
-        await sql`
-          UPDATE whatsapp_messages 
-          SET status = ${newStatus}
-          WHERE msg_id = ${msgId} AND tenant_id = ${internalTenantId}
-        `;
-        console.log(`[WhatsApp Webhook] DLR updated msgId ${msgId} → ${newStatus}`);
+        console.log(`[WhatsApp Webhook] Processing DLR update: status=${newStatus}, waid=${opts.waid}, msgId=${opts.msgId}, phone=${tenDigit}`);
+
+        // 1. Try matching by specific message ID / waid / correlationId
+        if (opts.msgId || opts.waid || opts.correlationId) {
+          await sql`
+            UPDATE whatsapp_messages 
+            SET status = ${newStatus}
+            WHERE (
+              (${opts.msgId ? sql`msg_id = ${opts.msgId}` : sql`false`})
+              OR (${opts.waid ? sql`msg_id = ${opts.waid}` : sql`false`})
+              OR (${opts.correlationId ? sql`msg_id LIKE ${"%" + opts.correlationId}` : sql`false`})
+            )
+          `.catch(() => {});
+        }
+
+        // 2. Cascade status to outbound messages for this recipient phone
+        if (tenDigit) {
+          if (newStatus === "read") {
+            const res = await sql`
+              UPDATE whatsapp_messages 
+              SET status = 'read'
+              WHERE phone_number LIKE ${"%" + tenDigit} 
+                AND direction = 'outbound'
+                AND status != 'read'
+            `;
+            console.log(`[WhatsApp Webhook] Marked ${res.count || 0} outbound messages as READ for phone ${tenDigit}`);
+          } else if (newStatus === "delivered") {
+            const res = await sql`
+              UPDATE whatsapp_messages 
+              SET status = 'delivered'
+              WHERE phone_number LIKE ${"%" + tenDigit} 
+                AND direction = 'outbound'
+                AND status = 'sent'
+            `;
+            console.log(`[WhatsApp Webhook] Marked ${res.count || 0} outbound messages as DELIVERED for phone ${tenDigit}`);
+          } else if (newStatus === "failed") {
+            await sql`
+              UPDATE whatsapp_messages 
+              SET status = 'failed'
+              WHERE id = (
+                SELECT id FROM whatsapp_messages 
+                WHERE phone_number LIKE ${"%" + tenDigit} AND direction = 'outbound'
+                ORDER BY created_at DESC LIMIT 1
+              )
+            `.catch(() => {});
+          }
+        }
+
+        console.log(`[WhatsApp Webhook] DLR processed successfully → ${newStatus}`);
       } catch (e) {
         console.error("[WhatsApp Webhook] Error updating DLR:", e);
       }
@@ -231,7 +277,10 @@ export async function POST(req: Request) {
           if (Array.isArray(val.statuses)) {
             for (const st of val.statuses) {
               if (st.id) {
-                await updateDLR(st.id, st.status);
+                await updateDLR(st.status, {
+                  msgId: st.id,
+                  recipientPhone: st.recipient_id,
+                });
               }
             }
           }
@@ -309,9 +358,20 @@ export async function POST(req: Request) {
       dataObj.status ||
       payload.status;
 
-    if (isStatusUpdate && msgId) {
+    if (isStatusUpdate) {
       const statusValue = dataObj.status || payload.status || eventType;
-      await updateDLR(msgId, statusValue);
+      const waid = dataObj.waid || dataObj.id || payload.waid;
+      const msgId = dataObj.id || dataObj.msgId || dataObj.msg_id || dataObj.message_id || payload.msgId || payload.id;
+      const recipientPhone = dataObj.recipient_id || dataObj.to || customerObj.phone || customerObj.phone_number || phone;
+      const correlationId = customerObj.correlation_id || payload.correlation_id;
+
+      await updateDLR(statusValue, {
+        msgId,
+        waid,
+        recipientPhone,
+        correlationId,
+      });
+
       return NextResponse.json({ success: true, processed: "dlr" });
     }
 
