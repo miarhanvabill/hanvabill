@@ -96,6 +96,32 @@ export default function WhatsAppPage() {
     }
   }, [selectedPhone])
 
+  // Periodic live inbox sync every 4 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (selectedPhone) {
+        getWhatsAppMessages(selectedPhone).then((msgs) => {
+          if (msgs) {
+            const seen = new Set<number>()
+            const unique = msgs.filter((m) => {
+              if (seen.has(m.id)) return false
+              seen.add(m.id)
+              return true
+            })
+            setMessages(unique)
+          }
+        }).catch(() => {})
+      }
+      getChatConversations().then((convos) => {
+        if (convos && convos.length > 0) {
+          setConversations(convos)
+        }
+      }).catch(() => {})
+    }, 4000)
+
+    return () => clearInterval(timer)
+  }, [selectedPhone])
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])

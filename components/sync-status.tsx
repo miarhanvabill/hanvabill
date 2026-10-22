@@ -14,20 +14,22 @@ export function SyncStatus() {
   useEffect(() => {
     setMounted(true)
     
-    // Simulate sync status changes
-    const interval = setInterval(() => {
-      const random = Math.random()
-      if (random > 0.9) {
-        setStatus("error")
-      } else if (random > 0.8) {
-        setStatus("syncing")
-      } else {
-        setStatus("synced")
-        setLastSync(new Date())
-      }
-    }, 5000)
+    // Check real browser online / offline state
+    const handleOnline = () => setStatus("synced")
+    const handleOffline = () => setStatus("error")
 
-    return () => clearInterval(interval)
+    if (typeof window !== "undefined") {
+      setStatus(navigator.onLine ? "synced" : "error")
+      window.addEventListener("online", handleOnline)
+      window.addEventListener("offline", handleOffline)
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("online", handleOnline)
+        window.removeEventListener("offline", handleOffline)
+      }
+    }
   }, [])
 
   const getStatusConfig = () => {
