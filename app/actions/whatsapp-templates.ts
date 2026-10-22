@@ -29,13 +29,7 @@ import {
   CANONICAL_SALON_TEMPLATES,
 } from "@/lib/whatsapp-templates-constants"
 
-export type {
-  MetaTemplateComponentButton,
-  MetaTemplateComponent,
-  MetaTemplate,
-  CreateTemplateInput,
-  AfterHoursSettings,
-}
+
 
 /**
  * 1. fetchMetaTemplates(status?: string, category?: string)

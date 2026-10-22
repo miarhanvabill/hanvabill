@@ -27,10 +27,12 @@ import {
   toggleRuleStatus,
   getAvailableServices,
   getAvailableProducts,
-  type AutoConsumptionRule,
-  type ConsumptionLog,
-  type ConsumptionStats,
 } from "@/app/actions/auto-consumption"
+import type {
+  AutoConsumptionRule,
+  ConsumptionLog,
+  ConsumptionStats,
+} from "@/types/auto-consumption"
 
 export default function AutoConsumptionPage() {
   const [rules, setRules] = useState<AutoConsumptionRule[]>([])

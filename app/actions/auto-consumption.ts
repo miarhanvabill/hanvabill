@@ -1,7 +1,6 @@
 "use server"
 
 import { withTenantAuth } from "@/lib/withTenantAuth"
-export type { AutoConsumptionRule, ConsumptionLog, ConsumptionStats } from "@/types/auto-consumption"
 import type { AutoConsumptionRule, ConsumptionLog, ConsumptionStats } from "@/types/auto-consumption"
 
 let autoConsumptionSchemaEnsured = false

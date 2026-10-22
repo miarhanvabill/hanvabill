@@ -669,7 +669,4 @@ export async function getWhatsAppAnalytics(): Promise<WhatsAppAnalyticsData> {
   })
 }
 
-export {
-  type WhatsAppAutomationRule,
-  type WhatsAppAutomationLog,
-}
+

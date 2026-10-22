@@ -20,7 +20,7 @@ export interface LoyaltyStats {
   total_cashback_given: number
   active_members: number
 }
-export type CustomerLoyaltyRow = {
+export interface CustomerLoyaltyRow {
   customer_id: number
   current_points: number
   total_redeemed: number // using sum(amount) of earned txns as lifetime spend proxy
