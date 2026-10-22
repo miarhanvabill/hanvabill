@@ -20,6 +20,7 @@ export interface FonadaAudienceRow {
   Body_4?: string
   Body_5?: string
   Button_1?: string
+  check_duplicate?: string
   [key: string]: string | undefined
 }
 
@@ -27,6 +28,7 @@ export interface FonadaCampaignPayload {
   campaign_name: string
   template_name: string
   account_id?: string
+  check_duplicate?: string
   metadata?: Record<string, any>
   audience_rows: FonadaAudienceRow[]
 }
@@ -49,6 +51,7 @@ export async function sendFonadaCampaign(
   apiToken: string = FONADA_AI_DEFAULT_TOKEN
 ): Promise<FonadaCampaignResponse> {
   const accountId = payload.account_id || FONADA_AI_HANVA_ACCOUNT_ID
+  const checkDuplicate = payload.check_duplicate || "pause"
 
   const normalizedRows = (payload.audience_rows || []).map((row) => {
     const rawPhone = String(row.phone || row.Phone || "").replace(/[^0-9]/g, "")
@@ -60,6 +63,7 @@ export async function sendFonadaCampaign(
       Phone: fullPhone,
       BODY_1: bodyVal,
       Body_1: bodyVal,
+      check_duplicate: checkDuplicate,
     }
   })
 
@@ -67,15 +71,20 @@ export async function sendFonadaCampaign(
     campaign_name: payload.campaign_name || `camp_${Date.now()}`,
     template_name: payload.template_name,
     account_id: accountId,
+    check_duplicate: checkDuplicate,
     metadata: {
       account_id: accountId,
+      check_duplicate: checkDuplicate,
       ...(payload.metadata || {}),
     },
     audience_rows: normalizedRows,
   }
 
+  const apiUrl = new URL(FONADA_AI_API_URL)
+  apiUrl.searchParams.set("check_duplicate", checkDuplicate)
+
   try {
-    const res = await fetch(FONADA_AI_API_URL, {
+    const res = await fetch(apiUrl.toString(), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiToken}`,
@@ -125,21 +134,25 @@ export async function sendFonadaCustomerOtp(params: {
   salonName?: string
   apiToken?: string
   accountId?: string
+  checkDuplicate?: string
 }): Promise<FonadaCampaignResponse> {
   const phoneDigits = params.phone.replace(/[^0-9]/g, "")
   const tenDigit = phoneDigits.slice(-10)
   const fullPhone = `91${tenDigit}`
   const uniqueCampaignName = `otp_${tenDigit}_${Date.now()}`
+  const checkDuplicate = params.checkDuplicate || "pause"
 
   return await sendFonadaCampaign(
     {
       campaign_name: uniqueCampaignName,
       template_name: "customer_login_otp",
       account_id: params.accountId || FONADA_AI_HANVA_ACCOUNT_ID,
+      check_duplicate: checkDuplicate,
       metadata: {
         account_id: params.accountId || FONADA_AI_HANVA_ACCOUNT_ID,
         type: "customer_login_otp",
         salon_name: params.salonName || "Hanva Salon",
+        check_duplicate: checkDuplicate,
       },
       audience_rows: [
         {
@@ -147,6 +160,7 @@ export async function sendFonadaCustomerOtp(params: {
           Phone: fullPhone,
           BODY_1: params.otp,
           Body_1: params.otp,
+          check_duplicate: checkDuplicate,
         },
       ],
     },
