@@ -195,11 +195,10 @@ export function Header({ onMenuToggle }: HeaderProps) {
                   size="sm" 
                   onClick={async () => {
                     try {
+                      await fetch("/api/notifications/mark-all-read", { method: "POST" })
                       const { markAllAsRead } = await import("@/app/actions/notifications");
-                      const result = await markAllAsRead();
-                      if (result.success) {
-                        setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-                      }
+                      await markAllAsRead().catch(() => {});
+                      setNotifications([]);
                     } catch (error) {
                       console.error("Error marking all as read:", error);
                     }
@@ -211,29 +210,31 @@ export function Header({ onMenuToggle }: HeaderProps) {
               )}
             </div>
             <DropdownMenuSeparator />
-            {loading ? (
-              <DropdownMenuItem className="text-center text-gray-500">Loading notifications...</DropdownMenuItem>
-            ) : error ? (
-              <DropdownMenuItem className="text-center text-red-500">Failed to load notifications</DropdownMenuItem>
-            ) : notifications.length === 0 ? (
-              <DropdownMenuItem className="text-center text-gray-500">No notifications</DropdownMenuItem>
-            ) : (
-              notifications.map((notification) => (
-                <DropdownMenuItem
-                  key={notification.id}
-                  className="flex flex-col items-start gap-1 p-3 cursor-pointer"
-                  onClick={() => markAsRead(notification.id)}
-                >
-                  <div className="flex items-center gap-2 w-full">
-                    <span className={`text-sm ${!notification.is_read ? "font-medium" : ""}`}>
-                      {notification.message}
-                    </span>
-                    {!notification.is_read && <div className="h-2 w-2 bg-blue-600 rounded-full" />}
-                  </div>
-                  <span className="text-xs text-gray-500">{formatRelativeTime(notification.created_at)}</span>
-                </DropdownMenuItem>
-              ))
-            )}
+            <div className="max-h-80 overflow-y-auto">
+              {loading ? (
+                <DropdownMenuItem className="text-center text-gray-500">Loading notifications...</DropdownMenuItem>
+              ) : error ? (
+                <DropdownMenuItem className="text-center text-red-500">Failed to load notifications</DropdownMenuItem>
+              ) : notifications.length === 0 ? (
+                <DropdownMenuItem className="text-center text-gray-500">No notifications</DropdownMenuItem>
+              ) : (
+                notifications.map((notification) => (
+                  <DropdownMenuItem
+                    key={notification.id}
+                    className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                    onClick={() => markAsRead(notification.id)}
+                  >
+                    <div className="flex items-center gap-2 w-full">
+                      <span className={`text-sm ${!notification.is_read ? "font-medium" : ""}`}>
+                        {notification.message}
+                      </span>
+                      {!notification.is_read && <div className="h-2 w-2 bg-blue-600 rounded-full" />}
+                    </div>
+                    <span className="text-xs text-gray-500">{formatRelativeTime(notification.created_at)}</span>
+                  </DropdownMenuItem>
+                ))
+              )}
+            </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link href="/notifications" className="text-center w-full">
@@ -255,7 +256,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
           </div>
         )}
         {isLoaded && isSignedIn && (
-          <UserButton afterSignOutUrl="/" />
+          <UserButton />
         )}
       </div>
     </header>
