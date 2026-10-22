@@ -23,6 +23,7 @@ import { Plus, Search, Eye, FileText, TrendingUp, Package, CheckCircle2, XCircle
 import { toast } from "@/components/ui/use-toast"
 import { getReceipts, createReceipt, getVendors, getProducts, receiveReceipt, cancelReceipt } from "@/app/actions/receipts"
 import { formatCurrency } from "@/lib/currency"
+import { PageHeader } from "@/components/page-header"
 
 interface Receipt {
   id: number
@@ -213,10 +214,13 @@ export default function ReceiptsPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Inventory Receipts</h1>
-          <p className="text-muted-foreground">Track incoming inventory from vendors</p>
-        </div>
+        <PageHeader
+          title="Inventory Receipts"
+          subtitle="Track incoming inventory from vendors"
+          showBackButton
+          backHref="/manage"
+          className="mb-0"
+        />
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={resetForm}>

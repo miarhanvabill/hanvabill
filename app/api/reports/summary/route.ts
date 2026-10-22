@@ -1,33 +1,16 @@
 import { NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
+import { parseReportDates } from "@/lib/report-dates"
 
 export async function GET(request: Request) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const { searchParams } = new URL(request.url)
       const dateRange = searchParams.get("dateRange") || "This Month"
+      const startDateParam = searchParams.get("startDate")
+      const endDateParam = searchParams.get("endDate")
 
-      // Calculate date range
-      const startDate = new Date()
-      switch (dateRange) {
-        case "Today":
-          startDate.setHours(0, 0, 0, 0)
-          break
-        case "Yesterday":
-          startDate.setDate(startDate.getDate() - 1)
-          startDate.setHours(0, 0, 0, 0)
-          break
-        case "This Week":
-          startDate.setDate(startDate.getDate() - startDate.getDay())
-          break
-        case "This Month":
-          startDate.setDate(1)
-          break
-        case "Last 3 Months":
-          startDate.setMonth(startDate.getMonth() - 3)
-          break
-      }
-      const startIso = startDate.toISOString().split("T")[0]
+      const { startIso, endIso } = parseReportDates(dateRange, startDateParam, endDateParam)
 
       // Get bookings & revenue data
       const bookingData = await sql`
@@ -38,6 +21,7 @@ export async function GET(request: Request) {
           COALESCE(SUM(CASE WHEN status IN ('completed', 'confirmed') THEN total_amount ELSE 0 END), 0) as total_revenue
         FROM bookings 
         WHERE booking_date >= ${startIso}
+          AND booking_date <= ${endIso}
           AND tenant_id = ${tenantId}
       `
 
@@ -45,7 +29,7 @@ export async function GET(request: Request) {
       const customerData = await sql`
         SELECT 
           COUNT(*) as total_customers,
-          COUNT(CASE WHEN created_at >= ${startIso} THEN 1 END) as new_customers
+          COUNT(CASE WHEN created_at >= ${startIso + ' 00:00:00'} AND created_at <= ${endIso + ' 23:59:59'} THEN 1 END) as new_customers
         FROM customers
         WHERE tenant_id = ${tenantId}
       `
@@ -91,6 +75,7 @@ export async function GET(request: Request) {
         FROM expenses
         WHERE tenant_id = ${tenantId}
           AND date >= ${startIso}
+          AND date <= ${endIso}
       `.catch(() => [{ total_expenses: 0 }]);
 
       // Calculations

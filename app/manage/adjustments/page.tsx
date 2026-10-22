@@ -22,6 +22,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus, Search, TrendingUp, TrendingDown, AlertCircle } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
+import { PageHeader } from "@/components/page-header"
 import { getAdjustments, createAdjustment, getProducts } from "@/app/actions/adjustments"
 
 interface Adjustment {
@@ -151,10 +152,13 @@ export default function AdjustmentsPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Inventory Adjustments</h1>
-          <p className="text-muted-foreground">Track and manage inventory corrections</p>
-        </div>
+        <PageHeader
+          title="Inventory Adjustments"
+          subtitle="Track and manage inventory corrections"
+          showBackButton
+          backHref="/manage"
+          className="mb-0"
+        />
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={resetForm}>

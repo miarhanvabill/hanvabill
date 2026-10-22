@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
+import { parseReportDates } from "@/lib/report-dates"
 
 export async function GET(request: Request) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
@@ -8,18 +9,12 @@ export async function GET(request: Request) {
 
       const { searchParams } = new URL(request.url)
       const dateRange = searchParams.get("dateRange") || "This Month"
+      const startDateParam = searchParams.get("startDate")
+      const endDateParam = searchParams.get("endDate")
 
-      // Calculate date range
-      let days = 30
-      if (dateRange === "This Week") days = 7
-      else if (dateRange === "This Month") days = 30
-      else if (dateRange === "Last 3 Months") days = 90
+      const { startIso, endIso, days } = parseReportDates(dateRange, startDateParam, endDateParam)
 
-      const startDate = new Date()
-      startDate.setDate(startDate.getDate() - days)
-      const startIso = startDate.toISOString().split("T")[0]
-
-      console.log("[v0] Fetching staff productivity for date range:", dateRange, "days:", days)
+      console.log("[v0] Fetching staff productivity for date range:", dateRange, "startIso:", startIso, "endIso:", endIso)
 
       // Guarantee required tables exist
       await sql`
@@ -46,6 +41,7 @@ export async function GET(request: Request) {
           FROM bookings b
           WHERE b.tenant_id = ${tenantId}
             AND b.booking_date >= ${startIso}
+            AND b.booking_date <= ${endIso}
             AND b.status IN ('completed', 'confirmed')
           GROUP BY b.staff_id
         ),
@@ -57,6 +53,7 @@ export async function GET(request: Request) {
           JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
           WHERE b.tenant_id = ${tenantId}
             AND b.booking_date >= ${startIso}
+            AND b.booking_date <= ${endIso}
             AND b.status IN ('completed', 'confirmed')
           GROUP BY b.staff_id
         ),
@@ -85,6 +82,7 @@ export async function GET(request: Request) {
           FROM attendance a
           WHERE a.tenant_id = ${tenantId}
             AND a.date >= ${startIso}::date
+            AND a.date <= ${endIso}::date
             AND LOWER(a.status) IN ('present', 'half_day', 'late')
           GROUP BY a.staff_id
         )

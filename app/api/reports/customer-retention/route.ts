@@ -1,16 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
+import { parseReportDates } from "@/lib/report-dates"
 
 export async function GET(request: NextRequest) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const { searchParams } = new URL(request.url)
       const dateRange = searchParams.get("dateRange") || "Last 6 Months"
+      const startDateParam = searchParams.get("startDate")
+      const endDateParam = searchParams.get("endDate")
 
-      // Calculate date range
-      const months = dateRange === "Last 3 Months" ? 3 : dateRange === "Last 12 Months" ? 12 : 6
-      const startDate = new Date()
-      startDate.setMonth(startDate.getMonth() - months)
+      const { startIso, endIso } = parseReportDates(dateRange, startDateParam, endDateParam)
 
       console.log(`[v0] Fetching customer retention data for: ${dateRange}`)
 
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
               DATE_TRUNC('month', created_at) as month,
               COUNT(*) as new_customers
             FROM customers 
-            WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '12 months')
+            WHERE created_at >= ${startIso}::date AND created_at <= ${endIso}::date
             AND tenant_id = ${tenantId}
             GROUP BY DATE_TRUNC('month', created_at)
             ORDER BY month

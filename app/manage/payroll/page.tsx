@@ -12,6 +12,7 @@ import { toast } from "@/hooks/use-toast"
 import { ArrowLeft, Play, Eye, Edit2 } from "lucide-react"
 import { generatePayrollRun, getPayrollRuns, getPayrollRunDetails, updatePayrollEntry, finalizePayrollRun } from "@/app/actions/payroll"
 import { formatCurrency } from "@/lib/currency"
+import { PageHeader } from "@/components/page-header"
 
 export default function PayrollPage() {
   const [runs, setRuns] = useState<any[]>([])
@@ -250,7 +251,13 @@ export default function PayrollPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Payroll Processing</h1>
+        <PageHeader
+          title="Payroll Processing"
+          subtitle="Generate monthly payroll runs, calculate staff commissions, and track payouts"
+          showBackButton
+          backHref="/manage"
+          className="mb-0"
+        />
         <Dialog open={isNewRunOpen} onOpenChange={setIsNewRunOpen}>
           <DialogTrigger asChild>
             <Button><Play className="mr-2 h-4 w-4" /> Run Payroll</Button>

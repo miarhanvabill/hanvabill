@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
+import { parseReportDates } from "@/lib/report-dates"
 
 export async function GET(request: Request) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
@@ -7,28 +8,10 @@ export async function GET(request: Request) {
       const { searchParams } = new URL(request.url)
       const dateRange = searchParams.get("dateRange") || "This Month"
       const categoryFilter = searchParams.get("category") || "all"
+      const startDateParam = searchParams.get("startDate")
+      const endDateParam = searchParams.get("endDate")
 
-      // Calculate date range
-      const startDate = new Date()
-      switch (dateRange) {
-        case "Today":
-          startDate.setHours(0, 0, 0, 0)
-          break
-        case "Yesterday":
-          startDate.setDate(startDate.getDate() - 1)
-          startDate.setHours(0, 0, 0, 0)
-          break
-        case "This Week":
-          startDate.setDate(startDate.getDate() - startDate.getDay())
-          break
-        case "This Month":
-          startDate.setDate(1)
-          break
-        case "Last 3 Months":
-          startDate.setMonth(startDate.getMonth() - 3)
-          break
-      }
-      const startIso = startDate.toISOString().split("T")[0]
+      const { startIso, endIso } = parseReportDates(dateRange, startDateParam, endDateParam)
 
       // Get total sales count and revenue
       const salesSummary = await sql`
@@ -41,6 +24,7 @@ export async function GET(request: Request) {
         WHERE status = 'completed'
           AND tenant_id = ${tenantId}
           AND booking_date >= ${startIso}
+          AND booking_date <= ${endIso}
           ${categoryFilter !== 'all' ? sql`AND EXISTS (
             SELECT 1 FROM booking_services bs2 
             JOIN services s2 ON bs2.service_id = s2.id 
@@ -62,6 +46,7 @@ export async function GET(request: Request) {
           AND b.tenant_id = ${tenantId}
           AND s.tenant_id = ${tenantId}
           AND b.booking_date >= ${startIso}
+          AND b.booking_date <= ${endIso}
           ${categoryFilter !== 'all' ? sql`AND EXISTS (
             SELECT 1 FROM booking_services bs2 
             JOIN services s2 ON bs2.service_id = s2.id 
@@ -91,6 +76,7 @@ export async function GET(request: Request) {
         WHERE b.status = 'completed'
           AND b.tenant_id = ${tenantId}
           AND b.booking_date >= ${startIso}
+          AND b.booking_date <= ${endIso}
           ${categoryFilter !== 'all' ? sql`AND EXISTS (
             SELECT 1 FROM booking_services bs2 
             JOIN services s2 ON bs2.service_id = s2.id 

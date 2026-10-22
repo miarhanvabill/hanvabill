@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ReportDateSelector } from "@/components/reports/report-date-selector"
+import { getDefaultCustomDates } from "@/lib/report-dates"
 import { downloadCSV } from "@/lib/utils"
 import { Download, ArrowLeft, Star, Users } from "lucide-react"
 import Link from "next/link"
@@ -29,7 +30,10 @@ interface StaffPerformanceData {
 }
 
 // ── Split-revenue helpers ────────────────────────────────────────────────
-function dateRangeToDates(range: string): { startDate?: string; endDate?: string } {
+function dateRangeToDates(range: string, customStart?: string, customEnd?: string): { startDate?: string; endDate?: string } {
+  if (range === "Custom" && customStart && customEnd) {
+    return { startDate: customStart, endDate: customEnd }
+  }
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, "0")
   const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -53,6 +57,13 @@ function dateRangeToDates(range: string): { startDate?: string; endDate?: string
       const s = new Date(now); s.setMonth(s.getMonth() - 3)
       return { startDate: fmt(s), endDate: fmt(now) }
     }
+    case "Last 6 Months": {
+      const s = new Date(now); s.setMonth(s.getMonth() - 6)
+      return { startDate: fmt(s), endDate: fmt(now) }
+    }
+    case "This Year": {
+      return { startDate: `${now.getFullYear()}-01-01`, endDate: fmt(now) }
+    }
     default:
       return {}
   }
@@ -60,6 +71,9 @@ function dateRangeToDates(range: string): { startDate?: string; endDate?: string
 
 export default function StaffPerformancePage() {
   const [dateRange, setDateRange] = useState("Last 30 Days")
+  const defaultDates = getDefaultCustomDates()
+  const [customStartDate, setCustomStartDate] = useState(defaultDates.startDate)
+  const [customEndDate, setCustomEndDate] = useState(defaultDates.endDate)
   const [staffData, setStaffData] = useState<StaffPerformanceData[]>([])
   const [loading, setLoading] = useState(true)
   // Map of staff_id → revenue from splits
@@ -69,7 +83,7 @@ export default function StaffPerformancePage() {
   const fetchStaffPerformance = async () => {
     setLoading(true)
     try {
-      const { startDate, endDate } = dateRangeToDates(dateRange)
+      const { startDate, endDate } = dateRangeToDates(dateRange, customStartDate, customEndDate)
       const params = new URLSearchParams({ dateRange })
       if (startDate) params.set("startDate", startDate)
       if (endDate) params.set("endDate", endDate)
@@ -89,7 +103,7 @@ export default function StaffPerformancePage() {
   const fetchSplitRevenue = async () => {
     setSplitsLoading(true)
     try {
-      const { startDate, endDate } = dateRangeToDates(dateRange)
+      const { startDate, endDate } = dateRangeToDates(dateRange, customStartDate, customEndDate)
       const { getStaffCommissionSplits } = await import("@/app/actions/staff")
       const result = await getStaffCommissionSplits(startDate, endDate)
       if (result.success) {
@@ -114,7 +128,7 @@ export default function StaffPerformancePage() {
       fetchSplitRevenue()
     }, 60000) // Refresh every minute
     return () => clearInterval(interval)
-  }, [dateRange])
+  }, [dateRange, customStartDate, customEndDate])
 
   if (loading) {
     return (
@@ -181,18 +195,16 @@ export default function StaffPerformancePage() {
                   </Link>
                 </div>
                 <div className="flex items-center gap-4">
-                  <Select value={dateRange} onValueChange={setDateRange}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Today">Today</SelectItem>
-                      <SelectItem value="Yesterday">Yesterday</SelectItem>
-                      <SelectItem value="Last 7 Days">Last 7 Days</SelectItem>
-                      <SelectItem value="Last 30 Days">Last 30 Days</SelectItem>
-                      <SelectItem value="Last 3 Months">Last 3 Months</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <ReportDateSelector
+                    dateRange={dateRange}
+                    onDateRangeChange={setDateRange}
+                    customStartDate={customStartDate}
+                    customEndDate={customEndDate}
+                    onCustomDateChange={(s, e) => {
+                      setCustomStartDate(s)
+                      setCustomEndDate(e)
+                    }}
+                  />
                   <Button className="gap-2 bg-black text-white hover:bg-gray-800" onClick={handleExportCSV}>
                     <Download className="w-4 h-4" />
                     Download

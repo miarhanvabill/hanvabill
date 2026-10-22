@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-// import { PageHeader } from "@/components/page-header" // Removed as per previous request
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -251,14 +251,21 @@ export default function StaffManagePage() {
   return (
     <div className="flex-1 flex flex-col">
       {/* Header for Staff Page */}
-      <div className="flex items-center justify-between p-6 bg-white border-b">
-        <h1 className="text-3xl font-bold text-gray-900">Staff Management</h1>
-        <Link href="/staff/create">
-          <Button className="gap-2">
-            <Plus className="w-4 h-4" />
-            Add Staff Member
-          </Button>
-        </Link>
+      <div className="px-6 pt-6 bg-white border-b">
+        <PageHeader
+          title="Staff Management"
+          subtitle="Track employee details, schedules, and manage staff records"
+          showBackButton
+          backHref="/manage"
+          action={
+            <Link href="/staff/create">
+              <Button className="gap-2">
+                <Plus className="w-4 h-4" />
+                Add Staff Member
+              </Button>
+            </Link>
+          }
+        />
       </div>
 
       <main className="flex-1 p-6 bg-gray-50">

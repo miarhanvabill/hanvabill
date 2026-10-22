@@ -25,6 +25,7 @@ import {
   WifiOff,
 } from "lucide-react"
 import { formatCurrency } from "@/lib/currency"
+import { PageHeader } from "@/components/page-header"
 
 interface Coupon {
   id: number
@@ -382,7 +383,14 @@ export default function CouponsManagePage() {
 
   return (
     <div className="flex-1 flex flex-col">
-      {/* Header component has been removed from here */}
+      <div className="px-6 pt-6 bg-white border-b">
+        <PageHeader
+          title="Coupons"
+          subtitle="Create and manage discount coupons to boost sales and attract more clients"
+          showBackButton
+          backHref="/manage"
+        />
+      </div>
 
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-7xl mx-auto space-y-6">

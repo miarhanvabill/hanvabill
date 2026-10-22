@@ -1,33 +1,16 @@
 import { NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
+import { parseReportDates } from "@/lib/report-dates"
 
 export async function GET(request: Request) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const { searchParams } = new URL(request.url)
       const dateRange = searchParams.get("dateRange") || "This Month"
+      const startDateParam = searchParams.get("startDate")
+      const endDateParam = searchParams.get("endDate")
 
-      // Calculate date range
-      const startDate = new Date()
-      switch (dateRange) {
-        case "Today":
-          startDate.setHours(0, 0, 0, 0)
-          break
-        case "Yesterday":
-          startDate.setDate(startDate.getDate() - 1)
-          startDate.setHours(0, 0, 0, 0)
-          break
-        case "This Week":
-          startDate.setDate(startDate.getDate() - startDate.getDay())
-          break
-        case "This Month":
-          startDate.setDate(1)
-          break
-        case "Last 3 Months":
-          startDate.setMonth(startDate.getMonth() - 3)
-          break
-      }
-      const startIso = startDate.toISOString().split("T")[0]
+      const { startIso, endIso } = parseReportDates(dateRange, startDateParam, endDateParam)
 
       const paymentData = await sql`
         SELECT 
@@ -36,6 +19,7 @@ export async function GET(request: Request) {
           COALESCE(SUM(total_amount), 0) as amount
         FROM bookings 
         WHERE booking_date >= ${startIso}
+        AND booking_date <= ${endIso}
         AND status IN ('completed', 'confirmed')
         AND tenant_id = ${tenantId}
         GROUP BY payment_method

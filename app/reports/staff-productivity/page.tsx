@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ReportDateSelector } from "@/components/reports/report-date-selector"
+import { getDefaultCustomDates } from "@/lib/report-dates"
 import { downloadCSV } from "@/lib/utils"
 import { Download, ArrowLeft, Clock, Users, Target, Award } from "lucide-react"
 import Link from "next/link"
@@ -24,12 +25,20 @@ interface StaffProductivityData {
 export default function StaffProductivityPage() {
   const [staffData, setStaffData] = useState<StaffProductivityData[]>([])
   const [dateRange, setDateRange] = useState("This Month")
+  const defaultDates = getDefaultCustomDates()
+  const [customStartDate, setCustomStartDate] = useState(defaultDates.startDate)
+  const [customEndDate, setCustomEndDate] = useState(defaultDates.endDate)
   const [loading, setLoading] = useState(true)
 
   const fetchStaffProductivity = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/reports/staff-productivity?dateRange=${dateRange}`)
+      const params = new URLSearchParams({ dateRange })
+      if (dateRange === "Custom" && customStartDate && customEndDate) {
+        params.set("startDate", customStartDate)
+        params.set("endDate", customEndDate)
+      }
+      const response = await fetch(`/api/reports/staff-productivity?${params.toString()}`)
       if (response.ok) {
         const data = await response.json()
         setStaffData(data)
@@ -69,7 +78,7 @@ export default function StaffProductivityPage() {
 
   useEffect(() => {
     fetchStaffProductivity()
-  }, [dateRange])
+  }, [dateRange, customStartDate, customEndDate])
 
   const averageProductivity =
     staffData.length > 0 ? staffData.reduce((sum, staff) => sum + staff.productivity_score, 0) / staffData.length : 0
@@ -109,18 +118,16 @@ export default function StaffProductivityPage() {
                   </Link>
                 </div>
                 <div className="flex items-center gap-4">
-                  <Select value={dateRange} onValueChange={setDateRange}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Today">Today</SelectItem>
-                      <SelectItem value="Yesterday">Yesterday</SelectItem>
-                      <SelectItem value="This Week">This Week</SelectItem>
-                      <SelectItem value="This Month">This Month</SelectItem>
-                      <SelectItem value="Last 3 Months">Last 3 Months</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <ReportDateSelector
+                    dateRange={dateRange}
+                    onDateRangeChange={setDateRange}
+                    customStartDate={customStartDate}
+                    customEndDate={customEndDate}
+                    onCustomDateChange={(s, e) => {
+                      setCustomStartDate(s)
+                      setCustomEndDate(e)
+                    }}
+                  />
                   <Button className="gap-2 bg-black text-white hover:bg-gray-800" onClick={() => downloadCSV(staffData, 'staff-productivity-report.csv')}>
                     <Download className="w-4 h-4" />
                     Export

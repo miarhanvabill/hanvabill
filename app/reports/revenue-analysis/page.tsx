@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ReportDateSelector } from "@/components/reports/report-date-selector"
+import { getDefaultCustomDates } from "@/lib/report-dates"
 import { downloadCSV } from "@/lib/utils"
 import { Download, ArrowLeft, TrendingUp, TrendingDown, IndianRupee, CreditCard } from "lucide-react"
 import Link from "next/link"
@@ -30,12 +31,20 @@ export default function RevenueAnalysisPage() {
   const [revenueData, setRevenueData] = useState<RevenueData[]>([])
   const [stats, setStats] = useState<RevenueStats | null>(null)
   const [dateRange, setDateRange] = useState("Last 6 Months")
+  const defaultDates = getDefaultCustomDates()
+  const [customStartDate, setCustomStartDate] = useState(defaultDates.startDate)
+  const [customEndDate, setCustomEndDate] = useState(defaultDates.endDate)
   const [loading, setLoading] = useState(true)
 
   const fetchRevenueData = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/reports/revenue-analysis`, {
+      const params = new URLSearchParams({ dateRange })
+      if (dateRange === "Custom" && customStartDate && customEndDate) {
+        params.set("startDate", customStartDate)
+        params.set("endDate", customEndDate)
+      }
+      const response = await fetch(`/api/reports/revenue-analysis?${params.toString()}`, {
         headers: {
           "Cache-Control": "no-cache",
         },
@@ -111,7 +120,7 @@ export default function RevenueAnalysisPage() {
 
   useEffect(() => {
     fetchRevenueData()
-  }, [dateRange])
+  }, [dateRange, customStartDate, customEndDate])
 
   if (loading || !stats) {
     return (
@@ -148,18 +157,16 @@ export default function RevenueAnalysisPage() {
                   </Link>
                 </div>
                 <div className="flex items-center gap-4">
-                  <Select value={dateRange} onValueChange={setDateRange}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Today">Today</SelectItem>
-                      <SelectItem value="Yesterday">Yesterday</SelectItem>
-                      <SelectItem value="Last 3 Months">Last 3 Months</SelectItem>
-                      <SelectItem value="Last 6 Months">Last 6 Months</SelectItem>
-                      <SelectItem value="Last 12 Months">Last 12 Months</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <ReportDateSelector
+                    dateRange={dateRange}
+                    onDateRangeChange={setDateRange}
+                    customStartDate={customStartDate}
+                    customEndDate={customEndDate}
+                    onCustomDateChange={(s, e) => {
+                      setCustomStartDate(s)
+                      setCustomEndDate(e)
+                    }}
+                  />
                   <Button className="gap-2 bg-black text-white hover:bg-gray-800" onClick={() => downloadCSV(revenueData, 'revenue-analysis-report.csv')}>
                     <Download className="w-4 h-4" />
                     Export

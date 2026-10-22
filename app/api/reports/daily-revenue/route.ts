@@ -1,21 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
+import { parseReportDates } from "@/lib/report-dates"
 
 export async function GET(request: NextRequest) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const { searchParams } = new URL(request.url)
       const dateRange = searchParams.get("dateRange") || "Last 7 Days"
+      const startDateParam = searchParams.get("startDate")
+      const endDateParam = searchParams.get("endDate")
 
-      // Calculate days
-      let days = 30;
-      if (dateRange === "Today") days = 0;
-      else if (dateRange === "Yesterday") days = 1;
-      else if (dateRange === "Last 7 Days" || dateRange === "This Week") days = 7;
-      else if (dateRange === "Last 30 Days" || dateRange === "This Month") days = 30;
-      else if (dateRange === "Last 90 Days" || dateRange === "Last 3 Months") days = 90;
-      else if (dateRange === "Last 6 Months") days = 180;
-      else if (dateRange === "Last 12 Months" || dateRange === "This Year") days = 365;
+      const { startIso, endIso } = parseReportDates(dateRange, startDateParam, endDateParam)
       
       const dailyRevenue = await sql`
         SELECT 
@@ -28,7 +23,8 @@ export async function GET(request: NextRequest) {
         FROM bookings
         WHERE tenant_id = ${tenantId}
           AND status = 'completed'
-          AND booking_date::TIMESTAMP >= CURRENT_DATE - INTERVAL '1 day' * ${days}
+          AND booking_date >= ${startIso}
+          AND booking_date <= ${endIso}
         GROUP BY TO_CHAR(booking_date::TIMESTAMP, 'YYYY-MM-DD')
         ORDER BY date DESC
       `

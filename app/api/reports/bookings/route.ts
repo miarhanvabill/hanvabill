@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
+import { parseReportDates } from "@/lib/report-dates"
 
 export async function GET(request: Request) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
@@ -7,31 +8,10 @@ export async function GET(request: Request) {
       const { searchParams } = new URL(request.url)
       const dateRange = searchParams.get("dateRange") || "Last 7 Days"
       const status = searchParams.get("status") || "All"
+      const startDateParam = searchParams.get("startDate")
+      const endDateParam = searchParams.get("endDate")
 
-      // Calculate date range
-      let days = 30;
-      if (dateRange === "Today") days = 0;
-      else if (dateRange === "Yesterday") days = 1;
-      else if (dateRange === "Last 7 Days" || dateRange === "This Week") days = 7;
-      else if (dateRange === "Last 30 Days" || dateRange === "This Month") days = 30;
-      else if (dateRange === "Last 90 Days" || dateRange === "Last 3 Months") days = 90;
-      else if (dateRange === "Last 6 Months") days = 180;
-      else if (dateRange === "Last 12 Months" || dateRange === "This Year") days = 365;
-      let startIso: string
-      let endIso: string | null = null
-
-      if (dateRange === "Today") {
-        startIso = new Date().toISOString().split("T")[0]
-      } else if (dateRange === "Yesterday") {
-        const y = new Date()
-        y.setDate(y.getDate() - 1)
-        startIso = y.toISOString().split("T")[0]
-        endIso = new Date().toISOString().split("T")[0]
-      } else {
-        const startDate = new Date()
-        startDate.setDate(startDate.getDate() - days)
-        startIso = startDate.toISOString().split("T")[0]
-      }
+      const { startIso, endIso } = parseReportDates(dateRange, startDateParam, endDateParam)
 
       const bookings = await sql`
         SELECT 
@@ -55,7 +35,7 @@ export async function GET(request: Request) {
         LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
         LEFT JOIN staff s ON b.staff_id = s.id AND s.tenant_id = ${tenantId}
         WHERE b.booking_date >= ${startIso}
-        ${endIso ? sql`AND b.booking_date < ${endIso}` : sql``}
+        ${endIso ? sql`AND b.booking_date <= ${endIso}` : sql``}
         AND b.tenant_id = ${tenantId}
         ${status !== "All" ? sql`AND b.status = ${status}` : sql``}
         ORDER BY b.booking_date DESC, b.booking_time DESC

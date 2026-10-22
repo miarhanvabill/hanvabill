@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
+import { parseReportDates } from "@/lib/report-dates"
 
 export async function GET(request: Request) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
@@ -7,28 +8,10 @@ export async function GET(request: Request) {
       const { searchParams } = new URL(request.url)
       const dateRange = searchParams.get("dateRange") || "This Month"
       const status = searchParams.get("status") || "all"
+      const startDateParam = searchParams.get("startDate")
+      const endDateParam = searchParams.get("endDate")
 
-      // Calculate date range
-      const startDate = new Date()
-      switch (dateRange) {
-        case "Today":
-          startDate.setHours(0, 0, 0, 0)
-          break
-        case "Yesterday":
-          startDate.setDate(startDate.getDate() - 1)
-          startDate.setHours(0, 0, 0, 0)
-          break
-        case "This Week":
-          startDate.setDate(startDate.getDate() - startDate.getDay())
-          break
-        case "This Month":
-          startDate.setDate(1)
-          break
-        case "Last 3 Months":
-          startDate.setMonth(startDate.getMonth() - 3)
-          break
-      }
-      const startIso = startDate.toISOString().split("T")[0]
+      const { startIso, endIso } = parseReportDates(dateRange, startDateParam, endDateParam)
 
       const enquiries = await sql`
         SELECT 
@@ -41,6 +24,7 @@ export async function GET(request: Request) {
           SELECT c.full_name FROM customers c WHERE c.id = b.customer_id AND c.tenant_id = ${tenantId}
         ) AND b.booking_date >= e.inquiry_date::date
         WHERE e.inquiry_date >= ${startIso}
+        AND e.inquiry_date <= ${endIso}
         AND e.tenant_id = ${tenantId}
         ${status !== "all" ? sql`AND e.status = ${status}` : sql``}
         ORDER BY e.inquiry_date DESC

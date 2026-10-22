@@ -1,30 +1,22 @@
 import { NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
+import { parseReportDates } from "@/lib/report-dates"
 
 export async function GET(request: Request) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const { searchParams } = new URL(request.url)
       const dateRange = searchParams.get("dateRange") || "Last 30 Days"
+      const startDateParam = searchParams.get("startDate")
+      const endDateParam = searchParams.get("endDate")
 
-      // Calculate date range
-      let days = 30;
-      if (dateRange === "Today") days = 0;
-      else if (dateRange === "Yesterday") days = 1;
-      else if (dateRange === "Last 7 Days" || dateRange === "This Week") days = 7;
-      else if (dateRange === "Last 30 Days" || dateRange === "This Month") days = 30;
-      else if (dateRange === "Last 90 Days" || dateRange === "Last 3 Months") days = 90;
-      else if (dateRange === "Last 6 Months") days = 180;
-      else if (dateRange === "Last 12 Months" || dateRange === "This Year") days = 365;
-      const startDate = new Date()
-      startDate.setDate(startDate.getDate() - days)
-      const startIso = startDate.toISOString().split("T")[0]
+      const { startIso, endIso } = parseReportDates(dateRange, startDateParam, endDateParam)
 
       // Get customer counts
       const customerCounts = await sql`
         SELECT 
           COUNT(*) as total_customers,
-          COUNT(*) FILTER (WHERE created_at >= ${startIso}) as new_customers
+          COUNT(*) FILTER (WHERE created_at >= ${startIso + ' 00:00:00'} AND created_at <= ${endIso + ' 23:59:59'}) as new_customers
         FROM customers
         WHERE tenant_id = ${tenantId}
       `

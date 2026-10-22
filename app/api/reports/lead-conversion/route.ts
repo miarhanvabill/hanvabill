@@ -1,29 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
+import { parseReportDates } from "@/lib/report-dates"
 
 export async function GET(request: NextRequest) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const { searchParams } = new URL(request.url)
       const dateRange = searchParams.get("dateRange") || "This Month"
+      const startDateParam = searchParams.get("startDate")
+      const endDateParam = searchParams.get("endDate")
 
-      // Calculate date range
-      const now = new Date()
-      const startDate = new Date()
-
-      switch (dateRange) {
-        case "This Week":
-          startDate.setDate(now.getDate() - 7)
-          break
-        case "This Month":
-          startDate.setMonth(now.getMonth() - 1)
-          break
-        case "Last 3 Months":
-          startDate.setMonth(now.getMonth() - 3)
-          break
-        default:
-          startDate.setMonth(now.getMonth() - 1)
-      }
+      const { startIso, endIso } = parseReportDates(dateRange, startDateParam, endDateParam)
 
       // Query to get lead conversion data from bookings and customers
       const conversionData = await sql`
@@ -41,11 +28,11 @@ export async function GET(request: NextRequest) {
             COALESCE(b.total_amount, 0) as revenue
           FROM customers c
           LEFT JOIN bookings b ON c.id = b.customer_id 
-            AND b.created_at >= ${startDate.toISOString()}
-            AND b.created_at <= ${now.toISOString()}
+            AND DATE(b.created_at) >= ${startIso}
+            AND DATE(b.created_at) <= ${endIso}
             AND b.tenant_id = ${tenantId}
-          WHERE c.created_at >= ${startDate.toISOString()}
-            AND c.created_at <= ${now.toISOString()}
+          WHERE DATE(c.created_at) >= ${startIso}
+            AND DATE(c.created_at) <= ${endIso}
             AND c.tenant_id = ${tenantId}
         ),
         source_stats AS (

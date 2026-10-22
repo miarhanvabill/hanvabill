@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ReportDateSelector } from "@/components/reports/report-date-selector"
+import { getDefaultCustomDates } from "@/lib/report-dates"
 import { downloadCSV } from "@/lib/utils"
 import { Download, ArrowLeft, TrendingUp, TrendingDown, AlertCircle, RefreshCw } from "lucide-react"
 import Link from "next/link"
@@ -29,6 +31,9 @@ interface InventoryAdjustment {
 export default function InventoryAdjustmentsPage() {
   const [adjustments, setAdjustments] = useState<InventoryAdjustment[]>([])
   const [dateRange, setDateRange] = useState("Last 30 Days")
+  const defaultDates = getDefaultCustomDates()
+  const [customStartDate, setCustomStartDate] = useState(defaultDates.startDate)
+  const [customEndDate, setCustomEndDate] = useState(defaultDates.endDate)
   const [typeFilter, setTypeFilter] = useState("all")
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState(new Date())
@@ -37,7 +42,12 @@ export default function InventoryAdjustmentsPage() {
 
   const fetchAdjustments = async () => {
     try {
-      const response = await fetch(`/api/reports/inventory-adjustments?dateRange=${dateRange}&type=${typeFilter}`)
+      const params = new URLSearchParams({ dateRange, type: typeFilter })
+      if (dateRange === "Custom" && customStartDate && customEndDate) {
+        params.set("startDate", customStartDate)
+        params.set("endDate", customEndDate)
+      }
+      const response = await fetch(`/api/reports/inventory-adjustments?${params.toString()}`)
       if (response.ok) {
         const data = await response.json()
         setAdjustments(data)
@@ -100,7 +110,7 @@ export default function InventoryAdjustmentsPage() {
     fetchAdjustments()
     const interval = setInterval(fetchAdjustments, 10000) // Refresh every 10 seconds
     return () => clearInterval(interval)
-  }, [dateRange, typeFilter])
+  }, [dateRange, typeFilter, customStartDate, customEndDate])
 
   // Real-time updates
   useEffect(() => {
@@ -166,18 +176,16 @@ export default function InventoryAdjustmentsPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <Select value={dateRange} onValueChange={setDateRange}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Today">Today</SelectItem>
-                      <SelectItem value="Yesterday">Yesterday</SelectItem>
-                      <SelectItem value="Last 7 Days">Last 7 Days</SelectItem>
-                      <SelectItem value="Last 30 Days">Last 30 Days</SelectItem>
-                      <SelectItem value="Last 3 Months">Last 3 Months</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <ReportDateSelector
+                    dateRange={dateRange}
+                    onDateRangeChange={setDateRange}
+                    customStartDate={customStartDate}
+                    customEndDate={customEndDate}
+                    onCustomDateChange={(s, e) => {
+                      setCustomStartDate(s)
+                      setCustomEndDate(e)
+                    }}
+                  />
                   <Select value={typeFilter} onValueChange={setTypeFilter}>
                     <SelectTrigger className="w-32">
                       <SelectValue />

@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ReportDateSelector } from "@/components/reports/report-date-selector"
+import { getDefaultCustomDates } from "@/lib/report-dates"
 import { downloadCSV } from "@/lib/utils"
 import { Download, ArrowLeft, DollarSign, Wallet, Activity } from "lucide-react"
 import Link from "next/link"
@@ -37,7 +38,10 @@ interface SplitRow {
   created_at: string
 }
 
-function dateRangeToISO(range: string): { startDate?: string; endDate?: string } {
+function dateRangeToISO(range: string, customStart?: string, customEnd?: string): { startDate?: string; endDate?: string } {
+  if (range === "Custom" && customStart && customEnd) {
+    return { startDate: customStart, endDate: customEnd }
+  }
   const now = new Date()
   const pad = (n: number) => String(n).padStart(2, "0")
   const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -70,6 +74,16 @@ function dateRangeToISO(range: string): { startDate?: string; endDate?: string }
       s.setDate(s.getDate() - 29)
       return { startDate: fmt(s), endDate: fmt(now) }
     }
+    case "Last 3 Months": {
+      const s = new Date(now)
+      s.setMonth(s.getMonth() - 3)
+      return { startDate: fmt(s), endDate: fmt(now) }
+    }
+    case "Last 6 Months": {
+      const s = new Date(now)
+      s.setMonth(s.getMonth() - 6)
+      return { startDate: fmt(s), endDate: fmt(now) }
+    }
     case "This Year":
       return { startDate: `${now.getFullYear()}-01-01`, endDate: fmt(now) }
     default:
@@ -78,7 +92,7 @@ function dateRangeToISO(range: string): { startDate?: string; endDate?: string }
 }
 
 // ── Multi-Staff Split History component ───────────────────────────────────
-function MultiStaffSplitHistory({ dateRange }: { dateRange: string }) {
+function MultiStaffSplitHistory({ dateRange, customStartDate, customEndDate }: { dateRange: string; customStartDate?: string; customEndDate?: string }) {
   const [splits, setSplits] = useState<SplitRow[]>([])
   const [splitsLoading, setSplitsLoading] = useState(true)
 
@@ -86,7 +100,7 @@ function MultiStaffSplitHistory({ dateRange }: { dateRange: string }) {
     const load = async () => {
       setSplitsLoading(true)
       try {
-        const { startDate, endDate } = dateRangeToISO(dateRange)
+        const { startDate, endDate } = dateRangeToISO(dateRange, customStartDate, customEndDate)
         const { getStaffCommissionSplits } = await import("@/app/actions/staff")
         const result = await getStaffCommissionSplits(startDate, endDate)
         if (result.success) setSplits(result.data)
@@ -97,7 +111,7 @@ function MultiStaffSplitHistory({ dateRange }: { dateRange: string }) {
       }
     }
     load()
-  }, [dateRange])
+  }, [dateRange, customStartDate, customEndDate])
 
   // Aggregate per-staff totals from split rows
   const staffSummary = splits.reduce<Record<number, { name: string; total: number }>>(
@@ -223,6 +237,9 @@ function MultiStaffSplitHistory({ dateRange }: { dateRange: string }) {
 // ── Main page ─────────────────────────────────────────────────────────────
 export default function StaffCommissionPage() {
   const [dateRange, setDateRange] = useState("This Month")
+  const defaultDates = getDefaultCustomDates()
+  const [customStartDate, setCustomStartDate] = useState(defaultDates.startDate)
+  const [customEndDate, setCustomEndDate] = useState(defaultDates.endDate)
   const [data, setData] = useState<StaffCommission[]>([])
   const [summary, setSummary] = useState<Summary>({ totalRevenue: 0, totalCommission: 0 })
   const [loading, setLoading] = useState(true)
@@ -230,7 +247,12 @@ export default function StaffCommissionPage() {
   const fetchCommissions = async () => {
     try {
       setLoading(true)
-      const res = await fetch(`/api/reports/staff-commission?range=${dateRange}`)
+      const params = new URLSearchParams({ range: dateRange })
+      if (dateRange === "Custom" && customStartDate && customEndDate) {
+        params.set("startDate", customStartDate)
+        params.set("endDate", customEndDate)
+      }
+      const res = await fetch(`/api/reports/staff-commission?${params.toString()}`)
       if (!res.ok) throw new Error("Failed to fetch data")
       const result = await res.json()
       setData(result.staffCommissions)
@@ -245,7 +267,7 @@ export default function StaffCommissionPage() {
 
   useEffect(() => {
     fetchCommissions()
-  }, [dateRange])
+  }, [dateRange, customStartDate, customEndDate])
 
   const handleExport = () => {
     const csvData = [
@@ -277,20 +299,16 @@ export default function StaffCommissionPage() {
       </div>
 
       <div className="flex items-center justify-between">
-        <Select value={dateRange} onValueChange={setDateRange}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Select Date Range" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Today">Today</SelectItem>
-            <SelectItem value="Yesterday">Yesterday</SelectItem>
-            <SelectItem value="This Week">This Week</SelectItem>
-            <SelectItem value="Last 7 Days">Last 7 Days</SelectItem>
-            <SelectItem value="This Month">This Month</SelectItem>
-            <SelectItem value="Last 30 Days">Last 30 Days</SelectItem>
-            <SelectItem value="This Year">This Year</SelectItem>
-          </SelectContent>
-        </Select>
+        <ReportDateSelector
+          dateRange={dateRange}
+          onDateRangeChange={setDateRange}
+          customStartDate={customStartDate}
+          customEndDate={customEndDate}
+          onCustomDateChange={(s, e) => {
+            setCustomStartDate(s)
+            setCustomEndDate(e)
+          }}
+        />
 
         <Button onClick={handleExport} variant="outline" disabled={loading || data.length === 0}>
           <Download className="mr-2 h-4 w-4" /> Export CSV
@@ -394,7 +412,7 @@ export default function StaffCommissionPage() {
       </Card>
 
       {/* ── Multi-Staff Split History ──────────────────────────────────────── */}
-      <MultiStaffSplitHistory dateRange={dateRange} />
+      <MultiStaffSplitHistory dateRange={dateRange} customStartDate={customStartDate} customEndDate={customEndDate} />
     </div>
   )
 }

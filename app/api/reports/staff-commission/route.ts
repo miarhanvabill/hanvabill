@@ -1,45 +1,18 @@
 import { NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
-import { startOfDay, startOfWeek, startOfMonth, startOfYear, subDays, format } from "date-fns"
+import { parseReportDates } from "@/lib/report-dates"
 
 export async function GET(request: Request) {
   return withTenantAuth(async ({ sql, tenantId }) => {
     try {
       const { searchParams } = new URL(request.url)
-      const range = searchParams.get("range") || "This Month"
+      const range = searchParams.get("range") || searchParams.get("dateRange") || "This Month"
+      const startDateParam = searchParams.get("startDate")
+      const endDateParam = searchParams.get("endDate")
 
-      let startDate = new Date()
-      const endDate = new Date()
-
-      switch (range) {
-        case "Today":
-          startDate = startOfDay(new Date())
-          break
-        case "Yesterday":
-          startDate = startOfDay(subDays(new Date(), 1))
-          endDate.setTime(startDate.getTime() + 24 * 60 * 60 * 1000 - 1)
-          break
-        case "Last 7 Days":
-          startDate = subDays(new Date(), 7)
-          break
-        case "This Week":
-          startDate = startOfWeek(new Date(), { weekStartsOn: 1 })
-          break
-        case "This Month":
-          startDate = startOfMonth(new Date())
-          break
-        case "Last 30 Days":
-          startDate = subDays(new Date(), 30)
-          break
-        case "This Year":
-          startDate = startOfYear(new Date())
-          break
-        default:
-          startDate = startOfMonth(new Date())
-      }
-
-      const formattedStart = format(startDate, "yyyy-MM-dd HH:mm:ss")
-      const formattedEnd = format(endDate, "yyyy-MM-dd HH:mm:ss")
+      const { startIso, endIso } = parseReportDates(range, startDateParam, endDateParam)
+      const formattedStart = `${startIso} 00:00:00`
+      const formattedEnd = `${endIso} 23:59:59`
 
       const data = await sql`
         SELECT 

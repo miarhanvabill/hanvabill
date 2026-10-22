@@ -20,6 +20,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus, Search, Edit, Trash2, FolderOpen, Package } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
+import { PageHeader } from "@/components/page-header"
 import { getCategories, createCategory, updateCategory, deleteCategory } from "@/app/actions/categories"
 
 interface Category {
@@ -206,10 +207,13 @@ export default function CategoriesPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Categories</h1>
-          <p className="text-muted-foreground">Organize your products with categories</p>
-        </div>
+        <PageHeader
+          title="Categories"
+          subtitle="Organize your products with categories"
+          showBackButton
+          backHref="/manage"
+          className="mb-0"
+        />
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={resetForm}>

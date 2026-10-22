@@ -5,6 +5,8 @@ import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ReportDateSelector } from "@/components/reports/report-date-selector"
+import { getDefaultCustomDates } from "@/lib/report-dates"
 import { downloadCSV } from "@/lib/utils"
 import { Download, ArrowLeft, Filter } from "lucide-react"
 import Link from "next/link"
@@ -24,6 +26,9 @@ interface BookingData {
 
 export default function BookingReportPage() {
   const [dateRange, setDateRange] = useState("Last 7 Days")
+  const defaultDates = getDefaultCustomDates()
+  const [customStartDate, setCustomStartDate] = useState(defaultDates.startDate)
+  const [customEndDate, setCustomEndDate] = useState(defaultDates.endDate)
   const [statusFilter, setStatusFilter] = useState("All")
   const [bookings, setBookings] = useState<BookingData[]>([])
   const [loading, setLoading] = useState(true)
@@ -31,7 +36,12 @@ export default function BookingReportPage() {
   const fetchBookings = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/reports/bookings?dateRange=${dateRange}&status=${statusFilter}`)
+      const params = new URLSearchParams({ dateRange, status: statusFilter })
+      if (dateRange === "Custom" && customStartDate && customEndDate) {
+        params.set("startDate", customStartDate)
+        params.set("endDate", customEndDate)
+      }
+      const response = await fetch(`/api/reports/bookings?${params.toString()}`)
       if (response.ok) {
         const data = await response.json()
         setBookings(data)
@@ -47,7 +57,7 @@ export default function BookingReportPage() {
     fetchBookings()
     const interval = setInterval(fetchBookings, 30000) // Refresh every 30 seconds
     return () => clearInterval(interval)
-  }, [dateRange, statusFilter])
+  }, [dateRange, statusFilter, customStartDate, customEndDate])
 
   if (loading) {
     return (
@@ -86,18 +96,16 @@ export default function BookingReportPage() {
                   </Link>
                 </div>
                 <div className="flex items-center gap-4">
-                  <Select value={dateRange} onValueChange={setDateRange}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Today">Today</SelectItem>
-                      <SelectItem value="Yesterday">Yesterday</SelectItem>
-                      <SelectItem value="Last 7 Days">Last 7 Days</SelectItem>
-                      <SelectItem value="Last 30 Days">Last 30 Days</SelectItem>
-                      <SelectItem value="Last 3 Months">Last 3 Months</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <ReportDateSelector
+                    dateRange={dateRange}
+                    onDateRangeChange={setDateRange}
+                    customStartDate={customStartDate}
+                    customEndDate={customEndDate}
+                    onCustomDateChange={(s, e) => {
+                      setCustomStartDate(s)
+                      setCustomEndDate(e)
+                    }}
+                  />
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger className="w-32">
                       <SelectValue />

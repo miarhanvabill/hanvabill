@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ReportDateSelector } from "@/components/reports/report-date-selector"
+import { getDefaultCustomDates } from "@/lib/report-dates"
 import { downloadCSV } from "@/lib/utils"
 import { Download, ArrowLeft } from "lucide-react"
 import Link from "next/link"
@@ -20,13 +21,21 @@ interface DailyRevenueData {
 
 export default function DailyRevenuePage() {
   const [dateRange, setDateRange] = useState("Last 7 Days")
+  const defaultDates = getDefaultCustomDates()
+  const [customStartDate, setCustomStartDate] = useState(defaultDates.startDate)
+  const [customEndDate, setCustomEndDate] = useState(defaultDates.endDate)
   const [revenueData, setRevenueData] = useState<DailyRevenueData[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchRevenueData = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/reports/daily-revenue?dateRange=${dateRange}`)
+      const params = new URLSearchParams({ dateRange })
+      if (dateRange === "Custom" && customStartDate && customEndDate) {
+        params.set("startDate", customStartDate)
+        params.set("endDate", customEndDate)
+      }
+      const response = await fetch(`/api/reports/daily-revenue?${params.toString()}`)
       if (response.ok) {
         const data = await response.json()
         setRevenueData(data)
@@ -104,7 +113,7 @@ export default function DailyRevenuePage() {
     fetchRevenueData()
     const interval = setInterval(fetchRevenueData, 30000)
     return () => clearInterval(interval)
-  }, [dateRange])
+  }, [dateRange, customStartDate, customEndDate])
 
   const totals = revenueData.reduce(
     (acc, item) => ({
@@ -152,19 +161,16 @@ export default function DailyRevenuePage() {
                   </Link>
                 </div>
                 <div className="flex items-center gap-4">
-                  <Select value={dateRange} onValueChange={setDateRange}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Today">Today</SelectItem>
-                      <SelectItem value="Yesterday">Yesterday</SelectItem>
-                      <SelectItem value="Last 7 Days">Last 7 Days</SelectItem>
-                      <SelectItem value="Last 30 Days">Last 30 Days</SelectItem>
-                      <SelectItem value="Last 3 Months">Last 3 Months</SelectItem>
-                      <SelectItem value="Custom Range">Custom Range</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <ReportDateSelector
+                    dateRange={dateRange}
+                    onDateRangeChange={setDateRange}
+                    customStartDate={customStartDate}
+                    customEndDate={customEndDate}
+                    onCustomDateChange={(s, e) => {
+                      setCustomStartDate(s)
+                      setCustomEndDate(e)
+                    }}
+                  />
                   <Button className="gap-2 bg-black text-white hover:bg-gray-800" onClick={() => downloadCSV(revenueData, 'daily-revenue-report.csv')}>
                     <Download className="w-4 h-4" />
                     Download

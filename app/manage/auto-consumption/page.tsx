@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/hooks/use-toast"
 import { useRealTimeSync } from "@/lib/websocket"
 import { formatCurrency } from "@/lib/currency"
+import { PageHeader } from "@/components/page-header"
 import { Plus, Search, RefreshCw, Settings, CheckCircle, TrendingUp, Edit, Trash2, Eye, Activity } from "lucide-react"
 
 import {
@@ -303,13 +304,13 @@ export default function AutoConsumptionPage() {
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Settings className="h-8 w-8" />
-            Auto Consumption
-          </h1>
-          <p className="text-muted-foreground">Manage automatic product consumption rules with real-time updates</p>
-        </div>
+        <PageHeader
+          title="Auto Consumption"
+          subtitle="Manage automatic product consumption rules with real-time updates"
+          showBackButton
+          backHref="/manage"
+          className="mb-0"
+        />
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 text-sm">
             <div className={`h-2 w-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"}`} />

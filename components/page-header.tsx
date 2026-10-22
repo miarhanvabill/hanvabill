@@ -1,5 +1,8 @@
+"use client"
+
 import React from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -23,20 +26,34 @@ export function PageHeader({
   description,
   text,
   showBackButton,
-  backHref = "/reports",
+  backHref,
   action,
   children,
   className = "",
 }: PageHeaderProps) {
+  const pathname = usePathname()
   const displayTitle = title || heading || ""
   const displaySubtitle = subtitle || description || text
+
+  // Automatically detect if we are on a subpage of manage, billing, reports, or manage-linked pages
+  const isManageSubpage = pathname ? pathname.startsWith("/manage/") && pathname !== "/manage" : false
+  const isReportsSubpage = pathname ? pathname.startsWith("/reports/") && pathname !== "/reports" : false
+  const isBillingSubpage = pathname ? pathname.startsWith("/billing/") && pathname !== "/billing" : false
+  const isManageLinkedPage = pathname === "/user-management" || pathname === "/attendance"
+
+  // If showBackButton is explicitly passed (boolean), respect it; otherwise auto-enable for manage/reports/billing subpages
+  const shouldShowBack = showBackButton !== undefined ? showBackButton : (isManageSubpage || isReportsSubpage || isBillingSubpage || isManageLinkedPage)
+
+  // Resolve back URL: default to /manage for manage, billing, and manage-linked pages, /reports for reports subpages
+  const defaultBackHref = isManageSubpage || isBillingSubpage || isManageLinkedPage ? "/manage" : "/reports"
+  const resolvedBackHref = backHref || defaultBackHref
 
   return (
     <div className={`mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${className}`}>
       <div className="flex items-center gap-3">
-        {showBackButton && (
+        {shouldShowBack && (
           <Button variant="ghost" size="icon" asChild className="h-9 w-9 shrink-0">
-            <Link href={backHref} aria-label="Go back">
+            <Link href={resolvedBackHref} aria-label="Go back">
               <ArrowLeft className="h-5 w-5 text-gray-600 dark:text-gray-300" />
             </Link>
           </Button>
@@ -61,3 +78,4 @@ export function PageHeader({
     </div>
   )
 }
+

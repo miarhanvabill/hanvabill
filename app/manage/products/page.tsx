@@ -23,6 +23,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus, Search, Edit, Trash2, Package, AlertTriangle, TrendingUp } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
+import { PageHeader } from "@/components/page-header"
 import { getProducts, createProduct, updateProduct, deleteProduct, getCategories } from "@/app/actions/products"
 
 interface Product {
@@ -225,10 +226,13 @@ export default function ProductsPage() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Products</h1>
-          <p className="text-muted-foreground">Manage your product catalog and inventory</p>
-        </div>
+        <PageHeader
+          title="Products"
+          subtitle="Manage your product catalog and inventory"
+          showBackButton
+          backHref="/manage"
+          className="mb-0"
+        />
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={resetForm}>

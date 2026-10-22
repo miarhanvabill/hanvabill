@@ -1,13 +1,13 @@
 // app/customers/page.tsx
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Plus, Phone, Mail, Calendar, Edit, Trash2, User, Upload } from "lucide-react"
+import { Search, Plus, Phone, Mail, Calendar, Edit, Trash2, User, Upload, Loader2, X } from "lucide-react"
 import { deleteCustomer, bulkUploadCustomers, type Customer } from "@/app/actions/customers"
 import { getCustomersPaginated } from "@/app/actions/customers-paginated"
 import { formatCurrency } from "@/lib/currency"
@@ -20,48 +20,109 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [totalCustomers, setTotalCustomers] = useState(0)
   const [searchTerm, setSearchTerm] = useState("")
-  const [loading, setLoading] = useState(true)
+  const [initialLoading, setInitialLoading] = useState(true)
+  const [isSearching, setIsSearching] = useState(false)
   const [pageSize, setPageSize] = useState(50)
   const [currentPage, setCurrentPage] = useState(1)
   const [showBulkUpload, setShowBulkUpload] = useState(false)
 
+  // Track overall stats from initial/unfiltered load so top cards remain stable
+  const [overallStats, setOverallStats] = useState<{
+    total: number
+    newThisMonth: number
+    active: number
+    totalRevenue: number
+  } | null>(null)
+
+  // Request ID ref to prevent race conditions from out-of-order responses
+  const searchReqId = useRef(0)
+  const isFirstRender = useRef(true)
+
+  const loadCustomers = useCallback(
+    async (page: number, size: number, query: string, isInitial: boolean = false) => {
+      const reqId = ++searchReqId.current
+
+      try {
+        if (isInitial) {
+          setInitialLoading(true)
+        } else {
+          setIsSearching(true)
+        }
+
+        const offset = (page - 1) * size
+        const { data, total } = await getCustomersPaginated(query, offset, size)
+
+        // Ignore stale responses if a newer search/request has already been initiated
+        if (reqId !== searchReqId.current) return
+
+        setCustomers(data)
+        setTotalCustomers(total)
+
+        // Compute overall business stats when there is no active search filter
+        if (!query.trim()) {
+          const now = new Date()
+          const newMonthCount = data.filter((c) => {
+            const created = new Date(c.created_at)
+            return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear()
+          }).length
+          const activeCount = data.filter((c) => (c.total_bookings || 0) > 0).length
+          const revenue = data.reduce((sum, c) => sum + (c.total_spent || 0), 0)
+
+          setOverallStats({
+            total,
+            newThisMonth: newMonthCount,
+            active: activeCount,
+            totalRevenue: revenue,
+          })
+        }
+      } catch (error) {
+        if (reqId === searchReqId.current) {
+          console.error("Error loading customers:", error)
+          toast({
+            title: "Error",
+            description: "Failed to load customers",
+            variant: "destructive",
+          })
+        }
+      } finally {
+        if (reqId === searchReqId.current) {
+          if (isInitial) {
+            setInitialLoading(false)
+          }
+          setIsSearching(false)
+        }
+      }
+    },
+    [],
+  )
+
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false
+      loadCustomers(1, pageSize, "", true)
+      return
+    }
+
+    // Debounce search input (immediate if cleared, 300ms if typing)
+    const delay = searchTerm === "" ? 0 : 300
     const timer = setTimeout(() => {
       setCurrentPage(1)
-      loadCustomers(1, pageSize)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [searchTerm, pageSize])
+      loadCustomers(1, pageSize, searchTerm, false)
+    }, delay)
 
-  const loadCustomers = async (page: number, size: number) => {
-    try {
-      setLoading(true)
-      const offset = (page - 1) * size
-      const { data, total } = await getCustomersPaginated(searchTerm, offset, size)
-      setCustomers(data)
-      setTotalCustomers(total)
-    } catch (error) {
-      console.error("Error loading customers:", error)
-      toast({
-        title: "Error",
-        description: "Failed to load customers",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+    return () => clearTimeout(timer)
+  }, [searchTerm, pageSize, loadCustomers])
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    loadCustomers(page, pageSize)
+    loadCustomers(page, pageSize, searchTerm, false)
   }
 
   const handleDeleteCustomer = async (id: string) => {
     if (!confirm("Are you sure you want to delete this customer?")) return
     try {
       await deleteCustomer(id)
-      await loadCustomers(currentPage, pageSize)
+      await loadCustomers(currentPage, pageSize, searchTerm, false)
       toast({
         title: "Success",
         description: "Customer deleted successfully",
@@ -80,7 +141,7 @@ export default function CustomersPage() {
     const result = await bulkUploadCustomers(file)
     if (result.success) {
       // Reload customers after successful upload
-      await loadCustomers(currentPage, pageSize)
+      await loadCustomers(currentPage, pageSize, searchTerm, false)
       toast({
         title: "Success",
         description: result.message,
@@ -93,6 +154,11 @@ export default function CustomersPage() {
       })
     }
     return result
+  }
+
+  const handleClearSearch = () => {
+    setSearchTerm("")
+    setCurrentPage(1)
   }
 
   const getInitials = (name?: string | null) => {
@@ -114,7 +180,7 @@ export default function CustomersPage() {
     }
   }
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <div className="container mx-auto p-6">
         <div className="flex items-center justify-center h-64">
@@ -154,13 +220,35 @@ export default function CustomersPage() {
 
       {/* Search */}
       <div className="relative max-w-md">
-        <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder="Search customers..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="pl-8"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              setCurrentPage(1)
+              loadCustomers(1, pageSize, searchTerm, false)
+            }
+          }}
+          className="pl-8 pr-16"
         />
+        <div className="absolute right-2.5 top-2.5 flex items-center gap-1.5">
+          {isSearching && (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          )}
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              className="p-0.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Stats */}
@@ -171,7 +259,7 @@ export default function CustomersPage() {
             <User className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalCustomers}</div>
+            <div className="text-2xl font-bold">{overallStats?.total ?? totalCustomers}</div>
           </CardContent>
         </Card>
         <Card>
@@ -181,11 +269,12 @@ export default function CustomersPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {customers.filter((c) => {
-                const created = new Date(c.created_at)
-                const now = new Date()
-                return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear()
-              }).length}
+              {overallStats?.newThisMonth ??
+                customers.filter((c) => {
+                  const created = new Date(c.created_at)
+                  const now = new Date()
+                  return created.getMonth() === now.getMonth() && created.getFullYear() === now.getFullYear()
+                }).length}
             </div>
           </CardContent>
         </Card>
@@ -195,7 +284,9 @@ export default function CustomersPage() {
             <User className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{customers.filter((c) => (c.total_bookings || 0) > 0).length}</div>
+            <div className="text-2xl font-bold">
+              {overallStats?.active ?? customers.filter((c) => (c.total_bookings || 0) > 0).length}
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -205,14 +296,16 @@ export default function CustomersPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(customers.reduce((sum, c) => sum + (c.total_spent || 0), 0))}
+              {formatCurrency(
+                overallStats?.totalRevenue ?? customers.reduce((sum, c) => sum + (c.total_spent || 0), 0)
+              )}
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Customer List */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 transition-opacity duration-200 ${isSearching ? "opacity-60" : "opacity-100"}`}>
         {customers.map((customer) => (
           <Card key={customer.id} className="hover:shadow-md transition-shadow">
             <CardContent className="p-6">
@@ -317,7 +410,7 @@ export default function CustomersPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1 || loading}
+                disabled={currentPage === 1 || isSearching}
               >
                 {"<"}
               </Button>
@@ -332,7 +425,7 @@ export default function CustomersPage() {
                         size="sm"
                         className={p === currentPage ? "bg-slate-900 text-white hover:bg-slate-800" : ""}
                         onClick={() => handlePageChange(p)}
-                        disabled={loading}
+                        disabled={isSearching}
                       >
                         {p}
                       </Button>
@@ -343,7 +436,7 @@ export default function CustomersPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage >= Math.ceil(totalCustomers / pageSize) || loading}
+                disabled={currentPage >= Math.ceil(totalCustomers / pageSize) || isSearching}
               >
                 {">"}
               </Button>
@@ -352,7 +445,7 @@ export default function CustomersPage() {
         </div>
       )}
 
-      {customers.length === 0 && !loading && (
+      {customers.length === 0 && !isSearching && (
         <div className="text-center py-12">
           <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-semibold mb-2">No customers found</h3>
@@ -365,6 +458,13 @@ export default function CustomersPage() {
               Add Customer
             </Button>
           </Link>
+        </div>
+      )}
+
+      {customers.length === 0 && isSearching && (
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+          <Loader2 className="h-8 w-8 animate-spin mb-2 text-primary" />
+          <p className="text-sm">Searching customers...</p>
         </div>
       )}
     </div>

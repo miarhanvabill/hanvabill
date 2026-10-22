@@ -23,6 +23,7 @@ import {
 } from "@/app/actions/packages"
 import { getServices, type Service } from "@/app/actions/services"
 import { toast } from "@/hooks/use-toast"
+import { PageHeader } from "@/components/page-header"
 
 export default function PackagesPage() {
   const [packages, setPackages] = useState<ServicePackage[]>([])
@@ -209,10 +210,13 @@ export default function PackagesPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Service Packages</h1>
-          <p className="text-muted-foreground">Manage your service packages and bundles</p>
-        </div>
+        <PageHeader
+          title="Service Packages"
+          subtitle="Manage your service packages and bundles"
+          showBackButton
+          backHref="/manage"
+          className="mb-0"
+        />
         <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
           <DialogTrigger asChild>
             <Button onClick={resetForm}>

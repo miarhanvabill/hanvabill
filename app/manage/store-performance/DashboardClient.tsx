@@ -1,6 +1,7 @@
 "use client"
 
 import React from "react"
+import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DollarSign, Users, ShoppingBag, TrendingUp } from "lucide-react"
@@ -17,10 +18,12 @@ export default function DashboardClient({ initialData }: { initialData: any }) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Store Performance</h1>
-        <p className="text-muted-foreground">Comprehensive analytics and performance metrics.</p>
-      </div>
+      <PageHeader
+        title="Store Performance"
+        subtitle="Comprehensive analytics and performance metrics."
+        showBackButton
+        backHref="/manage"
+      />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>

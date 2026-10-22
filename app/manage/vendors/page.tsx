@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/hooks/use-toast"
 import { Truck, Plus, Phone, Mail, MapPin, Building, Edit, Trash2, User, Search } from "lucide-react"
+import { PageHeader } from "@/components/page-header"
 import { getVendors, createVendor, updateVendor, deleteVendor, type Vendor } from "@/app/actions/vendors"
 
 export default function VendorsPage() {
@@ -147,6 +148,14 @@ export default function VendorsPage() {
 
   return (
     <div className="flex-1 flex flex-col">
+      <div className="px-6 pt-6 bg-white border-b">
+        <PageHeader
+          title="Vendors & Suppliers"
+          subtitle="Manage your product suppliers, order contacts, and procurement"
+          showBackButton
+          backHref="/manage"
+        />
+      </div>
       <main className="flex-1 p-6 bg-gray-50">
         <div className="max-w-6xl mx-auto space-y-6">
           <Card>

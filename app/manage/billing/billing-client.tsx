@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { upgradePlan, type TenantSubscription, type BillingHistory } from "@/app/actions/tenant-billing"
 import { useToast } from "@/components/ui/use-toast"
+import { PageHeader } from "@/components/page-header"
 
 const PLANS = [
   {
@@ -64,12 +65,12 @@ export function BillingClient({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Plans & Billing</h2>
-        <p className="text-muted-foreground">
-          Manage your subscription, billing history, and payment methods.
-        </p>
-      </div>
+      <PageHeader
+        title="Plans & Billing"
+        subtitle="Manage your subscription, billing history, and payment methods."
+        showBackButton
+        backHref="/manage"
+      />
 
       <Tabs defaultValue="plans" className="space-y-4">
         <TabsList>

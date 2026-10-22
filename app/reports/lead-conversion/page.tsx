@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ReportDateSelector } from "@/components/reports/report-date-selector"
+import { getDefaultCustomDates } from "@/lib/report-dates"
 import { downloadCSV } from "@/lib/utils"
 import { Download, ArrowLeft, Target, TrendingUp, Users, Phone } from "lucide-react"
 import Link from "next/link"
@@ -22,12 +23,20 @@ interface LeadConversionData {
 export default function LeadConversionPage() {
   const [conversionData, setConversionData] = useState<LeadConversionData[]>([])
   const [dateRange, setDateRange] = useState("This Month")
+  const defaultDates = getDefaultCustomDates()
+  const [customStartDate, setCustomStartDate] = useState(defaultDates.startDate)
+  const [customEndDate, setCustomEndDate] = useState(defaultDates.endDate)
   const [loading, setLoading] = useState(true)
 
   const fetchConversionData = async () => {
     setLoading(true)
     try {
-      const response = await fetch(`/api/reports/lead-conversion?dateRange=${dateRange}`)
+      const params = new URLSearchParams({ dateRange })
+      if (dateRange === "Custom" && customStartDate && customEndDate) {
+        params.set("startDate", customStartDate)
+        params.set("endDate", customEndDate)
+      }
+      const response = await fetch(`/api/reports/lead-conversion?${params.toString()}`)
       if (response.ok) {
         const data = await response.json()
         setConversionData(data)
@@ -72,7 +81,7 @@ export default function LeadConversionPage() {
 
   useEffect(() => {
     fetchConversionData()
-  }, [dateRange])
+  }, [dateRange, customStartDate, customEndDate])
 
   const totalLeads = conversionData.reduce((sum, item) => sum + item.leads_generated, 0)
   const totalConverted = conversionData.reduce((sum, item) => sum + item.leads_converted, 0)
@@ -113,18 +122,16 @@ export default function LeadConversionPage() {
                   </Link>
                 </div>
                 <div className="flex items-center gap-4">
-                  <Select value={dateRange} onValueChange={setDateRange}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Today">Today</SelectItem>
-                      <SelectItem value="Yesterday">Yesterday</SelectItem>
-                      <SelectItem value="This Week">This Week</SelectItem>
-                      <SelectItem value="This Month">This Month</SelectItem>
-                      <SelectItem value="Last 3 Months">Last 3 Months</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <ReportDateSelector
+                    dateRange={dateRange}
+                    onDateRangeChange={setDateRange}
+                    customStartDate={customStartDate}
+                    customEndDate={customEndDate}
+                    onCustomDateChange={(s, e) => {
+                      setCustomStartDate(s)
+                      setCustomEndDate(e)
+                    }}
+                  />
                   <Button className="gap-2 bg-black text-white hover:bg-gray-800" onClick={() => downloadCSV(conversionData, 'lead-conversion-report.csv')}>
                     <Download className="w-4 h-4" />
                     Export

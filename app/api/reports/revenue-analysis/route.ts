@@ -1,24 +1,26 @@
 import { NextResponse } from "next/server"
 import { withTenantAuth } from "@/lib/withTenantAuth"
+import { parseReportDates } from "@/lib/report-dates"
 
-export async function GET() {
+export async function GET(request: Request) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      const { searchParams } = new URL(request.url)
+      const dateRange = searchParams.get("dateRange") || "Last 6 Months"
+      const startDateParam = searchParams.get("startDate")
+      const endDateParam = searchParams.get("endDate")
+
+      const { startIso, endIso, days } = parseReportDates(dateRange, startDateParam, endDateParam)
+
       // Get total revenue and growth
       const revenueOverview = await sql`
-        WITH current_month AS (
+        WITH period_revenue AS (
           SELECT COALESCE(SUM(total_amount), 0) as current_revenue
           FROM bookings 
           WHERE status = 'completed'
             AND tenant_id = ${tenantId}
-            AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
-        ),
-        previous_month AS (
-          SELECT COALESCE(SUM(total_amount), 0) as previous_revenue
-          FROM bookings 
-          WHERE status = 'completed'
-            AND tenant_id = ${tenantId}
-            AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+            AND DATE(created_at) >= ${startIso}
+            AND DATE(created_at) <= ${endIso}
         ),
         daily_avg AS (
           SELECT COALESCE(AVG(daily_revenue), 0) as avg_daily
@@ -27,20 +29,16 @@ export async function GET() {
             FROM bookings 
             WHERE status = 'completed'
               AND tenant_id = ${tenantId}
-              AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+              AND DATE(created_at) >= ${startIso}
+              AND DATE(created_at) <= ${endIso}
             GROUP BY DATE(created_at)
           ) daily_totals
         )
         SELECT 
-          cm.current_revenue,
-          pm.previous_revenue,
+          pr.current_revenue,
           da.avg_daily,
-          CASE 
-            WHEN pm.previous_revenue > 0 THEN 
-              ROUND(((cm.current_revenue - pm.previous_revenue) / pm.previous_revenue * 100)::numeric, 2)
-            ELSE 0 
-          END as growth_percentage
-        FROM current_month cm, previous_month pm, daily_avg da
+          0 as growth_percentage
+        FROM period_revenue pr, daily_avg da
       `
 
       // Get revenue by service
@@ -51,7 +49,8 @@ export async function GET() {
           JOIN bookings b ON bs.booking_id = b.id
           WHERE b.status = 'completed'
             AND b.tenant_id = ${tenantId}
-            AND b.created_at >= CURRENT_DATE - INTERVAL '30 days'
+            AND DATE(b.created_at) >= ${startIso}
+            AND DATE(b.created_at) <= ${endIso}
         )
         SELECT 
           s.name as service_name,
@@ -68,7 +67,8 @@ export async function GET() {
         WHERE b.status = 'completed'
           AND b.tenant_id = ${tenantId}
           AND s.tenant_id = ${tenantId}
-          AND b.created_at >= CURRENT_DATE - INTERVAL '30 days'
+          AND DATE(b.created_at) >= ${startIso}
+          AND DATE(b.created_at) <= ${endIso}
         GROUP BY s.id, s.name, tr.total
         ORDER BY revenue DESC
         LIMIT 10
@@ -81,7 +81,8 @@ export async function GET() {
           FROM bookings 
           WHERE status = 'completed'
             AND tenant_id = ${tenantId}
-            AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+            AND DATE(created_at) >= ${startIso}
+            AND DATE(created_at) <= ${endIso}
         )
         SELECT 
           COALESCE(payment_method, 'cash') as method,
@@ -95,7 +96,8 @@ export async function GET() {
         CROSS JOIN total_revenue tr
         WHERE b.status = 'completed'
           AND b.tenant_id = ${tenantId}
-          AND b.created_at >= CURRENT_DATE - INTERVAL '30 days'
+          AND DATE(b.created_at) >= ${startIso}
+          AND DATE(b.created_at) <= ${endIso}
         GROUP BY payment_method, tr.total
         ORDER BY amount DESC
       `
@@ -111,7 +113,8 @@ export async function GET() {
         WHERE b.status = 'completed'
           AND c.tenant_id = ${tenantId}
           AND b.tenant_id = ${tenantId}
-          AND b.created_at >= CURRENT_DATE - INTERVAL '90 days'
+          AND DATE(b.created_at) >= ${startIso}
+          AND DATE(b.created_at) <= ${endIso}
         GROUP BY c.id, c.full_name
         ORDER BY total_spent DESC
         LIMIT 10

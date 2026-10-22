@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ReportDateSelector } from "@/components/reports/report-date-selector"
+import { getDefaultCustomDates } from "@/lib/report-dates"
 import { downloadCSV } from "@/lib/utils"
 import { Download, ArrowLeft, TrendingUp, TrendingDown, IndianRupee, Users, Calendar, RefreshCw } from "lucide-react"
 import Link from "next/link"
@@ -52,6 +53,9 @@ interface SummaryData {
 export default function SummaryPage() {
   const [summaryData, setSummaryData] = useState<SummaryData | null>(null)
   const [dateRange, setDateRange] = useState("This Month")
+  const defaultDates = getDefaultCustomDates()
+  const [customStartDate, setCustomStartDate] = useState(defaultDates.startDate)
+  const [customEndDate, setCustomEndDate] = useState(defaultDates.endDate)
   const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState(new Date())
 
@@ -59,7 +63,12 @@ export default function SummaryPage() {
 
   const fetchSummaryData = async () => {
     try {
-      const response = await fetch(`/api/reports/summary?dateRange=${dateRange}`)
+      const params = new URLSearchParams({ dateRange })
+      if (dateRange === "Custom" && customStartDate && customEndDate) {
+        params.set("startDate", customStartDate)
+        params.set("endDate", customEndDate)
+      }
+      const response = await fetch(`/api/reports/summary?${params.toString()}`)
       if (response.ok) {
         const data = await response.json()
         setSummaryData(data)
@@ -117,7 +126,7 @@ export default function SummaryPage() {
     fetchSummaryData()
     const interval = setInterval(fetchSummaryData, 15000) // Refresh every 15 seconds
     return () => clearInterval(interval)
-  }, [dateRange])
+  }, [dateRange, customStartDate, customEndDate])
 
   // Real-time updates
   useEffect(() => {
@@ -167,19 +176,16 @@ export default function SummaryPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <Select value={dateRange} onValueChange={setDateRange}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Today">Today</SelectItem>
-                      <SelectItem value="Yesterday">Yesterday</SelectItem>
-                      <SelectItem value="Today">Today</SelectItem>
-                      <SelectItem value="This Week">This Week</SelectItem>
-                      <SelectItem value="This Month">This Month</SelectItem>
-                      <SelectItem value="Last 3 Months">Last 3 Months</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <ReportDateSelector
+                    dateRange={dateRange}
+                    onDateRangeChange={setDateRange}
+                    customStartDate={customStartDate}
+                    customEndDate={customEndDate}
+                    onCustomDateChange={(s, e) => {
+                      setCustomStartDate(s)
+                      setCustomEndDate(e)
+                    }}
+                  />
                   <Button variant="outline" onClick={fetchSummaryData} className="gap-2 bg-transparent">
                     <RefreshCw className="w-4 h-4" />
                     Refresh
