@@ -718,18 +718,130 @@ export async function updateCustomer(
   })
 }
 
-export async function deleteCustomer(id: string): Promise<void> {
+export async function deleteCustomer(id: string): Promise<{ success: boolean; message: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
-    if (!id || isNaN(Number(id))) {
-      throw new Error("Invalid customer ID")
+    try {
+      if (!id || isNaN(Number(id))) {
+        return { success: false, message: "Invalid customer ID" }
+      }
+
+      const numId = Number(id)
+
+      // 1. Decouple self-referencing referral pointer on other customers
+      await sql`
+        UPDATE customers 
+        SET referred_by_customer_id = NULL 
+        WHERE referred_by_customer_id = ${numId} AND tenant_id = ${tenantId}
+      `.catch((err: any) => console.warn("[deleteCustomer] Error decoupling referred_by_customer_id:", err))
+
+      // 2. Remove or decouple referral records where this customer was referrer or referee
+      await sql`
+        DELETE FROM referral_records 
+        WHERE (referrer_id = ${numId} OR referee_id = ${numId}) AND tenant_id = ${tenantId}
+      `.catch((err: any) => console.warn("[deleteCustomer] Error deleting referral_records:", err))
+
+      // 3. Remove customer wallet transactions
+      await sql`
+        DELETE FROM wallet_transactions 
+        WHERE customer_id = ${numId} AND tenant_id = ${tenantId}
+      `.catch((err: any) => console.warn("[deleteCustomer] Error deleting wallet_transactions:", err))
+
+      // 4. Remove loyalty transactions
+      await sql`
+        DELETE FROM loyalty_transactions 
+        WHERE customer_id = ${numId} AND tenant_id = ${tenantId}
+      `.catch((err: any) => console.warn("[deleteCustomer] Error deleting loyalty_transactions:", err))
+
+      // 5. Remove customer packages
+      await sql`
+        DELETE FROM customer_packages 
+        WHERE customer_id = ${numId} AND tenant_id = ${tenantId}
+      `.catch((err: any) => console.warn("[deleteCustomer] Error deleting customer_packages:", err))
+
+      // 6. Remove customer memberships
+      await sql`
+        DELETE FROM customer_memberships 
+        WHERE customer_id = ${numId} AND tenant_id = ${tenantId}
+      `.catch((err: any) => console.warn("[deleteCustomer] Error deleting customer_memberships:", err))
+
+      // 7. Remove form submissions
+      await sql`
+        DELETE FROM form_submissions 
+        WHERE customer_id = ${numId} AND (tenant_id = ${tenantId} OR tenant_id IS NULL)
+      `.catch((err: any) => console.warn("[deleteCustomer] Error deleting form_submissions:", err))
+
+      // 8. Remove waitlist entries
+      await sql`
+        DELETE FROM waitlist 
+        WHERE customer_id = ${numId} AND tenant_id = ${tenantId}
+      `.catch((err: any) => console.warn("[deleteCustomer] Error deleting waitlist:", err))
+
+      // 9. Decouple whatsapp messages (preserve message audit log without hard FK crash)
+      await sql`
+        UPDATE whatsapp_messages 
+        SET customer_id = NULL 
+        WHERE customer_id = ${numId} AND tenant_id = ${tenantId}
+      `.catch((err: any) => console.warn("[deleteCustomer] Error decoupling whatsapp_messages:", err))
+
+      // 10. Decouple reviews
+      await sql`
+        UPDATE reviews 
+        SET customer_id = NULL 
+        WHERE customer_id = ${numId} AND (tenant_id = ${tenantId} OR tenant_id IS NULL)
+      `.catch((err: any) => console.warn("[deleteCustomer] Error decoupling reviews:", err))
+
+      // 11. Decouple invoices (keep financial record for GST/tax reporting, clear customer reference)
+      await sql`
+        UPDATE invoices 
+        SET customer_id = NULL 
+        WHERE customer_id = ${numId} AND tenant_id = ${tenantId}
+      `.catch((err: any) => console.warn("[deleteCustomer] Error decoupling invoices:", err))
+
+      // 12. Delete or decouple bookings
+      // Remove booking_services for draft/cancelled/pending bookings
+      await sql`
+        DELETE FROM booking_services 
+        WHERE booking_id IN (
+          SELECT id FROM bookings 
+          WHERE customer_id = ${numId} AND tenant_id = ${tenantId} AND status IN ('cancelled', 'draft', 'pending')
+        )
+      `.catch((err: any) => console.warn("[deleteCustomer] Error deleting booking_services:", err))
+
+      // Delete cancelled / draft / pending bookings
+      await sql`
+        DELETE FROM bookings 
+        WHERE customer_id = ${numId} AND tenant_id = ${tenantId} AND status IN ('cancelled', 'draft', 'pending')
+      `.catch((err: any) => console.warn("[deleteCustomer] Error deleting draft bookings:", err))
+
+      // For completed/confirmed historical bookings, decouple customer_id so business revenue reports aren't corrupted
+      await sql`
+        UPDATE bookings 
+        SET customer_id = NULL 
+        WHERE customer_id = ${numId} AND tenant_id = ${tenantId}
+      `.catch((err: any) => console.warn("[deleteCustomer] Error decoupling bookings:", err))
+
+      // 13. Delete customer record
+      const result = await sql`
+        DELETE FROM customers 
+        WHERE id = ${numId} AND tenant_id = ${tenantId}
+        RETURNING id
+      `
+
+      if (result.length === 0) {
+        return { success: false, message: "Customer not found or already deleted" }
+      }
+
+      await invalidateCustomerCache(tenantId, String(numId))
+
+      revalidatePath("/")
+      revalidatePath("/customers")
+      revalidatePath("/new-sale")
+
+      return { success: true, message: "Customer and associated references removed successfully" }
+    } catch (error: any) {
+      console.error("[deleteCustomer] Error deleting customer:", error)
+      return { success: false, message: error?.message || "Failed to delete customer" }
     }
-
-    await sql`DELETE FROM customers WHERE id = ${id} AND tenant_id = ${tenantId}`
-    await invalidateCustomerCache(tenantId, id)
-
-    revalidatePath("/")
-    revalidatePath("/customers")
-    revalidatePath("/new-sale")
   })
 }
 

@@ -119,19 +119,27 @@ export default function CustomersPage() {
   }
 
   const handleDeleteCustomer = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this customer?")) return
+    if (!confirm("Are you sure you want to delete this customer? All their associated records will be cleared.")) return
     try {
-      await deleteCustomer(id)
+      const res = await deleteCustomer(id)
+      if (res && !res.success) {
+        toast({
+          title: "Error",
+          description: res.message || "Failed to delete customer",
+          variant: "destructive",
+        })
+        return
+      }
       await loadCustomers(currentPage, pageSize, searchTerm, false)
       toast({
         title: "Success",
-        description: "Customer deleted successfully",
+        description: res?.message || "Customer deleted successfully",
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting customer:", error)
       toast({
         title: "Error",
-        description: "Failed to delete customer",
+        description: error?.message || "Failed to delete customer",
         variant: "destructive",
       })
     }
