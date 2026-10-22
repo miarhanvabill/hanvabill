@@ -1,6 +1,13 @@
 "use server"
 
 import { sendWhatsAppText, sendViaHanvaOldApi } from "@/lib/whatsapp"
+import {
+  sendFonadaCampaign,
+  sendFonadaInteractiveMessage,
+  sendFonadaImageMessage,
+  sendFonadaDocumentMessage,
+  type FonadaAudienceRow,
+} from "@/lib/fonada-ai"
 import { withTenantAuth } from "@/lib/withTenantAuth"
 import { getBusinessSettings } from "@/app/actions/settings"
 import { revalidatePath } from "next/cache"
@@ -16,6 +23,13 @@ export interface WhatsAppMessage {
   status: "sent" | "delivered" | "read" | "failed"
   trigger_type?: string
   created_at: string
+}
+
+export interface WindowStatus {
+  isWindowActive: boolean
+  hoursRemaining: number
+  minutesRemaining: number
+  lastInboundAt?: string
 }
 
 export interface ChatConversation {
@@ -40,6 +54,7 @@ export interface CustomerChatSidebarInfo {
   total_bookings: number
   loyalty_points: number
   wallet_balance: number
+  windowStatus?: WindowStatus
   upcoming_bookings: {
     id: number
     booking_number: string
@@ -266,12 +281,49 @@ export async function sendWhatsAppMessage(data: {
         } catch {}
       }
 
+      if (!result.success) {
+        const err = String(result.error || "").toLowerCase()
+        if (err.includes("131047") || err.includes("window")) {
+          return {
+            success: false,
+            message: "The 24-hour customer window has expired. Please send an approved template below to re-open the conversation.",
+            errorCode: "131047",
+          }
+        }
+        if (err.includes("131026")) {
+          return {
+            success: false,
+            message: "This phone number is not available on WhatsApp.",
+            errorCode: "131026",
+          }
+        }
+        return {
+          success: false,
+          message: result.error || "Failed to send message",
+        }
+      }
+
       return {
         success: result.success,
         message: result.success ? "WhatsApp message delivered successfully!" : (result.error || "Failed to send message"),
       }
     } catch (error: any) {
       console.error("Error sending WhatsApp message:", error)
+      const err = String(error?.message || error || "").toLowerCase()
+      if (err.includes("131047") || err.includes("window")) {
+        return {
+          success: false,
+          message: "The 24-hour customer window has expired. Please send an approved template below to re-open the conversation.",
+          errorCode: "131047",
+        }
+      }
+      if (err.includes("131026")) {
+        return {
+          success: false,
+          message: "This phone number is not available on WhatsApp.",
+          errorCode: "131026",
+        }
+      }
       return { success: false, message: error.message || "Failed to send message" }
     }
   })
@@ -322,6 +374,62 @@ export async function testWhatsAppConnection(creds?: {
   })
 }
 
+async function computeWindowStatus(sql: any, phoneNumber: string): Promise<WindowStatus> {
+  try {
+    if (!phoneNumber) {
+      return { isWindowActive: false, hoursRemaining: 0, minutesRemaining: 0 }
+    }
+    const cleanPhone = phoneNumber.replace(/[^0-9]/g, "").slice(-10)
+    if (!cleanPhone) {
+      return { isWindowActive: false, hoursRemaining: 0, minutesRemaining: 0 }
+    }
+
+    const rows = await sql`
+      SELECT created_at 
+      FROM whatsapp_messages 
+      WHERE phone_number LIKE ${'%' + cleanPhone} 
+        AND direction = 'inbound' 
+      ORDER BY created_at DESC 
+      LIMIT 1
+    `
+
+    if (rows.length > 0 && rows[0].created_at) {
+      const rawTime = rows[0].created_at
+      const inboundTime = rawTime instanceof Date ? rawTime.getTime() : new Date(rawTime).getTime()
+      const elapsedMin = (Date.now() - inboundTime) / 60000
+
+      if (elapsedMin < 24 * 60) {
+        const safeElapsed = Math.max(0, elapsedMin)
+        const remainingMin = 24 * 60 - safeElapsed
+        return {
+          isWindowActive: true,
+          hoursRemaining: Math.floor(remainingMin / 60),
+          minutesRemaining: Math.floor(remainingMin % 60),
+          lastInboundAt: new Date(inboundTime).toISOString(),
+        }
+      } else {
+        return {
+          isWindowActive: false,
+          hoursRemaining: 0,
+          minutesRemaining: 0,
+          lastInboundAt: new Date(inboundTime).toISOString(),
+        }
+      }
+    }
+
+    return { isWindowActive: false, hoursRemaining: 0, minutesRemaining: 0 }
+  } catch (error) {
+    console.error("computeWindowStatus error:", error)
+    return { isWindowActive: false, hoursRemaining: 0, minutesRemaining: 0 }
+  }
+}
+
+export async function getWindowStatus(phoneNumber: string): Promise<WindowStatus> {
+  return await withTenantAuth(async ({ sql }) => {
+    return await computeWindowStatus(sql, phoneNumber)
+  })
+}
+
 export async function getCustomerChatSidebarData(phoneNumber: string): Promise<CustomerChatSidebarInfo | null> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
@@ -342,6 +450,7 @@ export async function getCustomerChatSidebarData(phoneNumber: string): Promise<C
       `
 
       let customer: any = customerRows.length > 0 ? customerRows[0] : null
+      const windowStatus = await computeWindowStatus(sql, phoneNumber)
 
       if (!customer) {
         // Fallback placeholder profile for display
@@ -353,6 +462,7 @@ export async function getCustomerChatSidebarData(phoneNumber: string): Promise<C
           total_bookings: 0,
           loyalty_points: 0,
           wallet_balance: 0,
+          windowStatus,
           upcoming_bookings: [],
           recent_invoices: [],
         }
@@ -440,12 +550,329 @@ export async function getCustomerChatSidebarData(phoneNumber: string): Promise<C
         total_bookings: Number(customer.total_bookings_count || customer.total_bookings) || (upcomingBookings.length || 2),
         loyalty_points: loyaltyPoints,
         wallet_balance: Math.round(loyaltyPoints * 0.5),
+        windowStatus,
         upcoming_bookings: upcomingBookings,
         recent_invoices: recentInvoices,
       }
     } catch (error) {
       console.error("getCustomerChatSidebarData error:", error)
       return null
+    }
+  })
+}
+
+export async function sendInteractiveChatButtons(params: {
+  phoneNumber: string
+  bodyText: string
+  buttons: { id: string; title: string }[]
+  customerId?: number
+}): Promise<{ success: boolean; message: string; errorCode?: string }> {
+  return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
+    try {
+      if (!params.phoneNumber || !params.bodyText?.trim() || !params.buttons?.length) {
+        return { success: false, message: "Phone number, body text, and at least one button are required." }
+      }
+
+      const cleanDigits = params.phoneNumber.replace(/[^0-9]/g, "")
+      const tenDigit = cleanDigits.slice(-10)
+      const safePhone = `91${tenDigit}`
+
+      const fonadaRes = await sendFonadaInteractiveMessage({
+        phone: safePhone,
+        bodyText: params.bodyText.trim(),
+        buttons: params.buttons,
+      })
+
+      const messageContent =
+        params.bodyText.trim() +
+        "\n\n" +
+        params.buttons.map((b) => "[" + b.title.trim() + "]").join("  ")
+      const status = fonadaRes.success ? "sent" : "failed"
+
+      let customerId = params.customerId
+      if (!customerId) {
+        const cust = await sql`
+          SELECT id FROM customers 
+          WHERE phone_number LIKE ${'%' + tenDigit} AND tenant_id = ${tenantId} 
+          LIMIT 1
+        `
+        if (cust.length > 0) customerId = cust[0].id
+      }
+
+      await sql`
+        INSERT INTO whatsapp_messages (
+          tenant_id, tenant_key, customer_id, phone_number, message_type,
+          message_content, direction, status, msg_id, created_at
+        ) VALUES (
+          ${tenantId}, ${tenantKey || null}, ${customerId || null}, ${safePhone}, 'interactive',
+          ${messageContent}, 'outbound', ${status}, ${fonadaRes.messageId || null}, NOW()
+        )
+      `
+
+      if (!fonadaRes.success) {
+        const err = (fonadaRes.error || "").toLowerCase()
+        if (err.includes("131047") || err.includes("window")) {
+          return {
+            success: false,
+            message: "The 24-hour customer window has expired. Please send an approved template below to re-open the conversation.",
+            errorCode: "131047",
+          }
+        }
+        if (err.includes("131026")) {
+          return {
+            success: false,
+            message: "This phone number is not available on WhatsApp.",
+            errorCode: "131026",
+          }
+        }
+        return {
+          success: false,
+          message: fonadaRes.error || "Failed to send interactive buttons",
+        }
+      }
+
+      return {
+        success: true,
+        message: "Interactive buttons sent successfully!",
+      }
+    } catch (error: any) {
+      console.error("sendInteractiveChatButtons error:", error)
+      const err = (error.message || "").toLowerCase()
+      if (err.includes("131047") || err.includes("window")) {
+        return {
+          success: false,
+          message: "The 24-hour customer window has expired. Please send an approved template below to re-open the conversation.",
+          errorCode: "131047",
+        }
+      }
+      return { success: false, message: error.message || "Failed to send interactive buttons" }
+    }
+  })
+}
+
+export async function sendMediaChatAttachment(params: {
+  phoneNumber: string
+  mediaType: "image" | "document"
+  url: string
+  filename?: string
+  caption?: string
+  customerId?: number
+}): Promise<{ success: boolean; message: string; errorCode?: string }> {
+  return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
+    try {
+      if (!params.phoneNumber || !params.url?.trim()) {
+        return { success: false, message: "Phone number and media URL are required." }
+      }
+
+      const cleanDigits = params.phoneNumber.replace(/[^0-9]/g, "")
+      const tenDigit = cleanDigits.slice(-10)
+      const safePhone = `91${tenDigit}`
+
+      let fonadaRes: { success: boolean; messageId?: string; error?: string }
+
+      if (params.mediaType === "image") {
+        fonadaRes = await sendFonadaImageMessage({
+          phone: safePhone,
+          imageUrl: params.url.trim(),
+          caption: params.caption?.trim(),
+        })
+      } else {
+        fonadaRes = await sendFonadaDocumentMessage({
+          phone: safePhone,
+          documentUrl: params.url.trim(),
+          filename: params.filename?.trim() || "document.pdf",
+          caption: params.caption?.trim(),
+        })
+      }
+
+      const messageContent = params.caption?.trim() || params.filename?.trim() || params.url.trim()
+      const status = fonadaRes.success ? "sent" : "failed"
+
+      let customerId = params.customerId
+      if (!customerId) {
+        const cust = await sql`
+          SELECT id FROM customers 
+          WHERE phone_number LIKE ${'%' + tenDigit} AND tenant_id = ${tenantId} 
+          LIMIT 1
+        `
+        if (cust.length > 0) customerId = cust[0].id
+      }
+
+      await sql`
+        INSERT INTO whatsapp_messages (
+          tenant_id, tenant_key, customer_id, phone_number, message_type,
+          message_content, direction, status, msg_id, created_at
+        ) VALUES (
+          ${tenantId}, ${tenantKey || null}, ${customerId || null}, ${safePhone}, ${params.mediaType},
+          ${messageContent}, 'outbound', ${status}, ${fonadaRes.messageId || null}, NOW()
+        )
+      `
+
+      if (!fonadaRes.success) {
+        const err = (fonadaRes.error || "").toLowerCase()
+        if (err.includes("131047") || err.includes("window")) {
+          return {
+            success: false,
+            message: "The 24-hour customer window has expired. Please send an approved template below to re-open the conversation.",
+            errorCode: "131047",
+          }
+        }
+        return {
+          success: false,
+          message: fonadaRes.error || `Failed to send ${params.mediaType} attachment`,
+        }
+      }
+
+      return {
+        success: true,
+        message: `${params.mediaType === "image" ? "Image" : "Document"} sent successfully!`,
+      }
+    } catch (error: any) {
+      console.error("sendMediaChatAttachment error:", error)
+      return { success: false, message: error.message || "Failed to send media attachment" }
+    }
+  })
+}
+
+export async function sendReengagementTemplate(params: {
+  phoneNumber: string
+  templateName: string
+  customerId?: number
+  customerName?: string
+}): Promise<{ success: boolean; message: string; errorCode?: string }> {
+  return await withTenantAuth(async ({ sql, tenantId, tenantKey }) => {
+    try {
+      if (!params.phoneNumber || !params.templateName) {
+        return { success: false, message: "Phone number and template name are required." }
+      }
+
+      const cleanDigits = params.phoneNumber.replace(/[^0-9]/g, "")
+      const tenDigit = cleanDigits.slice(-10)
+      const safePhone = `91${tenDigit}`
+
+      // Fetch salon name
+      const settingRow = await sql`
+        SELECT setting_value FROM store_settings 
+        WHERE tenant_id = ${tenantId} AND setting_key = 'profile.salonName' 
+        LIMIT 1
+      `.catch(() => [])
+      const salonName = settingRow[0]?.setting_value || "Hanva Luxury Salon"
+
+      // Fetch customer name if not provided
+      let customerName = params.customerName
+      let customerId = params.customerId
+      if (!customerName || !customerId) {
+        const cust = await sql`
+          SELECT id, full_name, name FROM customers 
+          WHERE phone_number LIKE ${'%' + tenDigit} AND tenant_id = ${tenantId} 
+          LIMIT 1
+        `
+        if (cust.length > 0) {
+          customerId = customerId || cust[0].id
+          customerName = customerName || cust[0].full_name || cust[0].name
+        }
+      }
+      customerName = customerName || "Valued Guest"
+
+      // Determine template name & variables
+      let targetTemplate = params.templateName
+      const audienceRow: FonadaAudienceRow = {
+        Phone: safePhone,
+        phone: safePhone,
+      }
+
+      switch (params.templateName) {
+        case "booking_created":
+        case "booking_confirmation":
+          targetTemplate = "booking_confirmation"
+          audienceRow.BODY_1 = customerName
+          audienceRow.BODY_2 = salonName
+          audienceRow.BODY_3 = "Hair & Beauty Service"
+          audienceRow.BODY_4 = "today"
+          audienceRow.BODY_5 = "scheduled time"
+          audienceRow.BODY_6 = "Hanva Stylist"
+          break
+
+        case "reminder_24h":
+        case "appointment_reminder_24h":
+          targetTemplate = "appointment_reminder_24h"
+          audienceRow.BODY_1 = customerName
+          audienceRow.BODY_2 = salonName
+          audienceRow.BODY_3 = "tomorrow"
+          audienceRow.BODY_4 = "scheduled time"
+          audienceRow.BODY_5 = "Hair & Beauty Service"
+          audienceRow.BODY_6 = "Hanva Stylist"
+          break
+
+        case "review_request":
+          targetTemplate = "review_request"
+          audienceRow.BODY_1 = customerName
+          audienceRow.BODY_2 = salonName
+          audienceRow.BODY_3 = "https://g.page/r/hanva-salon/review"
+          break
+
+        case "we_miss_you":
+          targetTemplate = "we_miss_you"
+          audienceRow.BODY_1 = customerName
+          audienceRow.BODY_2 = salonName
+          audienceRow.BODY_3 = "WELCOME20"
+          break
+
+        case "invoice_receipt":
+          targetTemplate = "invoice_receipt"
+          audienceRow.BODY_1 = customerName
+          audienceRow.BODY_2 = salonName
+          audienceRow.BODY_3 = "0"
+          audienceRow.BODY_4 = "https://biz.hanva.in"
+          break
+
+        default:
+          targetTemplate = params.templateName
+          audienceRow.BODY_1 = customerName
+          audienceRow.BODY_2 = salonName
+          break
+      }
+
+      const campaignRes = await sendFonadaCampaign({
+        campaign_name: `reengage_${targetTemplate}_${tenDigit}_${Date.now()}`,
+        template_name: targetTemplate,
+        check_duplicate: false,
+        metadata: {
+          tenant_id: tenantId,
+          type: "reengagement_template",
+          template_name: targetTemplate,
+          customer_id: customerId,
+        },
+        audience_rows: [audienceRow],
+      })
+
+      const status = campaignRes.success ? "sent" : "failed"
+      const contentSummary = `[Template: ${targetTemplate}] Sent to re-open 24-hour conversation window.`
+
+      await sql`
+        INSERT INTO whatsapp_messages (
+          tenant_id, tenant_key, customer_id, phone_number, message_type,
+          message_content, direction, status, trigger_type, msg_id, created_at
+        ) VALUES (
+          ${tenantId}, ${tenantKey || null}, ${customerId || null}, ${safePhone}, 'template',
+          ${contentSummary}, 'outbound', ${status}, ${params.templateName}, ${campaignRes.campaign_id || null}, NOW()
+        )
+      `
+
+      if (!campaignRes.success) {
+        return {
+          success: false,
+          message: campaignRes.error || "Failed to dispatch re-engagement template",
+        }
+      }
+
+      return {
+        success: true,
+        message: `Template "${targetTemplate}" dispatched successfully! 24h window re-opened upon customer reply.`,
+      }
+    } catch (error: any) {
+      console.error("sendReengagementTemplate error:", error)
+      return { success: false, message: error.message || "Failed to dispatch re-engagement template" }
     }
   })
 }

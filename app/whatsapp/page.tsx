@@ -50,6 +50,9 @@ import {
   ChevronRight,
   ShieldCheck,
   Zap,
+  Paperclip,
+  Image as ImageIcon,
+  MousePointerClick,
 } from "lucide-react"
 import {
   getWhatsAppMessages,
@@ -57,9 +60,14 @@ import {
   sendWhatsAppMessage,
   getCustomerChatSidebarData,
   sendCustomerQuickAction,
+  getWindowStatus,
+  sendInteractiveChatButtons,
+  sendMediaChatAttachment,
+  sendReengagementTemplate,
   type WhatsAppMessage,
   type ChatConversation,
   type CustomerChatSidebarInfo,
+  type WindowStatus,
 } from "@/app/actions/whatsapp"
 import { getCustomers, type Customer } from "@/app/actions/customers"
 
@@ -68,6 +76,7 @@ export default function WhatsAppPage() {
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null)
   const [messages, setMessages] = useState<WhatsAppMessage[]>([])
   const [sidebarData, setSidebarData] = useState<CustomerChatSidebarInfo | null>(null)
+  const [windowStatus, setWindowStatus] = useState<WindowStatus | null>(null)
   const [newMessage, setNewMessage] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [chatFilter, setChatFilter] = useState<"all" | "unread">("all")
@@ -75,6 +84,22 @@ export default function WhatsAppPage() {
   const [sending, setSending] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [templateLoading, setTemplateLoading] = useState(false)
+
+  // Interactive Buttons Modal state
+  const [interactiveModalOpen, setInteractiveModalOpen] = useState(false)
+  const [interactivePreset, setInteractivePreset] = useState<"preset1" | "preset2" | "custom">("preset1")
+  const [customBodyText, setCustomBodyText] = useState("")
+  const [customButtons, setCustomButtons] = useState<string[]>(["", "", ""])
+  const [sendingInteractive, setSendingInteractive] = useState(false)
+
+  // Media Attachment Modal state
+  const [mediaModalOpen, setMediaModalOpen] = useState(false)
+  const [mediaType, setMediaType] = useState<"image" | "document">("image")
+  const [mediaUrl, setMediaUrl] = useState("")
+  const [mediaFilename, setMediaFilename] = useState("")
+  const [mediaCaption, setMediaCaption] = useState("")
+  const [sendingMedia, setSendingMedia] = useState(false)
 
   // New Chat Modal state
   const [newChatOpen, setNewChatOpen] = useState(false)
@@ -111,6 +136,10 @@ export default function WhatsAppPage() {
             setMessages(unique)
           }
         }).catch(() => {})
+
+        getWindowStatus(selectedPhone).then((ws) => {
+          if (ws) setWindowStatus(ws)
+        }).catch(() => {})
       }
       getChatConversations().then((convos) => {
         if (convos && convos.length > 0) {
@@ -125,6 +154,31 @@ export default function WhatsAppPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
+
+  const liveWindowRemaining = useMemo(() => {
+    if (!windowStatus?.lastInboundAt) {
+      return {
+        isWindowActive: false,
+        hoursRemaining: 0,
+        minutesRemaining: 0,
+      }
+    }
+    const inboundTime = new Date(windowStatus.lastInboundAt).getTime()
+    const elapsedMin = (Date.now() - inboundTime) / 60000
+    if (elapsedMin >= 0 && elapsedMin < 24 * 60) {
+      const rem = 24 * 60 - elapsedMin
+      return {
+        isWindowActive: true,
+        hoursRemaining: Math.floor(rem / 60),
+        minutesRemaining: Math.floor(rem % 60),
+      }
+    }
+    return {
+      isWindowActive: false,
+      hoursRemaining: 0,
+      minutesRemaining: 0,
+    }
+  }, [windowStatus, messages])
 
   const loadInitialData = async () => {
     setLoading(true)
@@ -166,6 +220,12 @@ export default function WhatsAppPage() {
     try {
       const profile = await getCustomerChatSidebarData(phone)
       setSidebarData(profile)
+      if (profile?.windowStatus) {
+        setWindowStatus(profile.windowStatus)
+      } else {
+        const ws = await getWindowStatus(phone)
+        setWindowStatus(ws)
+      }
     } catch (error) {
       console.error("Error loading sidebar data:", error)
     }
@@ -209,13 +269,154 @@ export default function WhatsAppPage() {
       } else {
         // Remove optimistic on failure too
         setMessages((prev) => prev.filter((m) => m.id !== optimisticId))
-        toast.error(result.message || "Failed to send message")
+        if (result.errorCode === "131047") {
+          toast.error("The 24-hour customer window has expired. Please send an approved template to re-open the conversation.")
+        } else if (result.errorCode === "131026") {
+          toast.error("This phone number is not available on WhatsApp.")
+        } else {
+          toast.error(result.message || "Failed to send message")
+        }
       }
     } catch (error: any) {
       setMessages((prev) => prev.filter((m) => m.id !== optimisticId))
-      toast.error(error.message || "Error sending WhatsApp message")
+      const errStr = String(error?.message || error || "").toLowerCase()
+      if (errStr.includes("131047") || errStr.includes("window")) {
+        toast.error("The 24-hour customer window has expired. Please send an approved template to re-open the conversation.")
+      } else {
+        toast.error(error.message || "Error sending WhatsApp message")
+      }
     } finally {
       setSending(false)
+    }
+  }
+
+  const handleSendReengagementTemplate = async (templateName: string) => {
+    if (!selectedPhone) return
+    setTemplateLoading(true)
+    const toastId = toast.loading(`Dispatching approved template "${templateName}"...`)
+
+    try {
+      const res = await sendReengagementTemplate({
+        phoneNumber: selectedPhone,
+        templateName,
+        customerId: sidebarData?.id,
+        customerName: sidebarData?.full_name,
+      })
+
+      if (res.success) {
+        toast.success(res.message, { id: toastId })
+        loadChatMessages(selectedPhone)
+        loadSidebar(selectedPhone)
+        getChatConversations().then((c) => setConversations(c))
+      } else {
+        toast.error(res.message || "Failed to dispatch template", { id: toastId })
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to send template", { id: toastId })
+    } finally {
+      setTemplateLoading(false)
+    }
+  }
+
+  const handleSendInteractive = async () => {
+    if (!selectedPhone) return
+
+    let bodyText = ""
+    let buttons: { id: string; title: string }[] = []
+
+    if (interactivePreset === "preset1") {
+      bodyText = "Hi! Please confirm your upcoming appointment with us at " + (sidebarData?.full_name ? "" : "Hanva Salon") + ":"
+      buttons = [
+        { id: "bkg_confirm", title: "Confirm ✅" },
+        { id: "bkg_reschedule", title: "Reschedule 📅" },
+        { id: "bkg_cancel", title: "Cancel ❌" },
+      ]
+    } else if (interactivePreset === "preset2") {
+      bodyText = "Thank you for visiting us! How was your salon service experience today?"
+      buttons = [
+        { id: "feed_loved", title: "Loved it! ⭐" },
+        { id: "feed_better", title: "Could be better" },
+      ]
+    } else {
+      if (!customBodyText.trim()) {
+        toast.error("Please enter message body text")
+        return
+      }
+      const validBtns = customButtons
+        .map((b, i) => ({ id: `custom_btn_${i + 1}`, title: b.trim() }))
+        .filter((b) => b.title.length > 0)
+      if (validBtns.length === 0) {
+        toast.error("Please provide at least one button title")
+        return
+      }
+      bodyText = customBodyText.trim()
+      buttons = validBtns
+    }
+
+    setSendingInteractive(true)
+    try {
+      const res = await sendInteractiveChatButtons({
+        phoneNumber: selectedPhone,
+        bodyText,
+        buttons,
+        customerId: sidebarData?.id,
+      })
+
+      if (res.success) {
+        toast.success("Interactive buttons sent!")
+        setInteractiveModalOpen(false)
+        loadChatMessages(selectedPhone)
+        getChatConversations().then((c) => setConversations(c))
+      } else {
+        if (res.errorCode === "131047") {
+          toast.error("The 24-hour customer window has expired. Please send an approved template to re-open the conversation.")
+        } else {
+          toast.error(res.message || "Failed to send interactive buttons")
+        }
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to send interactive buttons")
+    } finally {
+      setSendingInteractive(false)
+    }
+  }
+
+  const handleSendMedia = async () => {
+    if (!selectedPhone || !mediaUrl.trim()) {
+      toast.error("Please provide a valid media URL")
+      return
+    }
+
+    setSendingMedia(true)
+    try {
+      const res = await sendMediaChatAttachment({
+        phoneNumber: selectedPhone,
+        mediaType,
+        url: mediaUrl.trim(),
+        filename: mediaFilename.trim() || (mediaType === "document" ? "document.pdf" : undefined),
+        caption: mediaCaption.trim() || undefined,
+        customerId: sidebarData?.id,
+      })
+
+      if (res.success) {
+        toast.success(`${mediaType === "image" ? "Image" : "Document"} sent!`)
+        setMediaModalOpen(false)
+        setMediaUrl("")
+        setMediaFilename("")
+        setMediaCaption("")
+        loadChatMessages(selectedPhone)
+        getChatConversations().then((c) => setConversations(c))
+      } else {
+        if (res.errorCode === "131047") {
+          toast.error("The 24-hour customer window has expired. Please send an approved template to re-open the conversation.")
+        } else {
+          toast.error(res.message || "Failed to send media attachment")
+        }
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to send media attachment")
+    } finally {
+      setSendingMedia(false)
     }
   }
 
@@ -291,7 +492,11 @@ export default function WhatsAppPage() {
       case "sent":
         return <Check className="w-3.5 h-3.5 text-slate-400" />
       case "failed":
-        return <AlertCircle className="w-3.5 h-3.5 text-rose-500" />
+        return (
+          <span title="Delivery failed: 24h window closed or delivery error">
+            <AlertCircle className="w-3.5 h-3.5 text-rose-500" />
+          </span>
+        )
       default:
         return <Clock className="w-3 h-3 text-slate-400" />
     }
@@ -574,15 +779,40 @@ export default function WhatsAppPage() {
 
                 {messages.map((msg) => {
                   const isOutbound = msg.direction === "outbound"
+                  const isInteractive = msg.message_type === "interactive"
+                  const isInboundButtonReply = !isOutbound && msg.message_content.trim().startsWith("🔘")
+                  const isImage = msg.message_type === "image"
+                  const isDocument = msg.message_type === "document"
+                  const isFailed = isOutbound && msg.status === "failed"
+
+                  // Parse interactive button labels if interactive
+                  let interactiveBody = msg.message_content
+                  let interactiveButtons: string[] = []
+                  if (isInteractive) {
+                    const parts = msg.message_content.split("\n\n")
+                    if (parts.length > 1) {
+                      interactiveBody = parts.slice(0, parts.length - 1).join("\n\n")
+                      const lastPart = parts[parts.length - 1]
+                      const matches = lastPart.match(/\[(.*?)\]/g)
+                      if (matches && matches.length > 0) {
+                        interactiveButtons = matches.map((m) => m.slice(1, -1))
+                      }
+                    }
+                  }
+
                   return (
                     <div
                       key={msg.id}
                       className={`flex ${isOutbound ? "justify-end" : "justify-start"} animate-in fade-in-50`}
                     >
                       <div
-                        className={`max-w-[85%] sm:max-w-md p-3 rounded-2xl shadow-xs text-xs space-y-1 relative leading-relaxed ${
+                        className={`max-w-[85%] sm:max-w-md p-3 rounded-2xl shadow-xs text-xs space-y-1.5 relative leading-relaxed ${
                           isOutbound
-                            ? "bg-[#d9fdd3] text-[#111b21] rounded-tr-xs"
+                            ? isFailed
+                              ? "bg-rose-50 border border-rose-200 text-[#111b21] rounded-tr-xs"
+                              : "bg-[#d9fdd3] text-[#111b21] rounded-tr-xs"
+                            : isInboundButtonReply
+                            ? "bg-emerald-50/90 border border-emerald-300 text-[#111b21] rounded-tl-xs"
                             : "bg-white text-[#111b21] rounded-tl-xs"
                         }`}
                       >
@@ -594,7 +824,90 @@ export default function WhatsAppPage() {
                           </div>
                         )}
 
-                        <p className="whitespace-pre-wrap">{msg.message_content}</p>
+                        {/* Inbound button reply highlighted pill */}
+                        {isInboundButtonReply ? (
+                          <div className="space-y-1">
+                            <div className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 uppercase tracking-wider bg-emerald-100/90 px-2 py-0.5 rounded-md">
+                              <CheckCheck className="w-3 h-3 text-emerald-600" />
+                              <span>Customer Selected Option</span>
+                            </div>
+                            <div className="p-2 bg-white/90 border border-emerald-200 rounded-xl text-emerald-950 font-bold text-xs flex items-center gap-2">
+                              <span className="text-base">🔘</span>
+                              <span>{msg.message_content.replace(/^🔘\s*/, "")}</span>
+                            </div>
+                          </div>
+                        ) : isInteractive ? (
+                          /* Interactive Button Message */
+                          <div className="space-y-2">
+                            <p className="whitespace-pre-wrap">{interactiveBody}</p>
+                            {interactiveButtons.length > 0 && (
+                              <div className="flex flex-col gap-1.5 pt-1.5 border-t border-emerald-300/40">
+                                <span className="text-[10px] font-semibold text-emerald-800 flex items-center gap-1">
+                                  <MousePointerClick className="w-3 h-3 text-emerald-600" />
+                                  Interactive Buttons (Quick Reply):
+                                </span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {interactiveButtons.map((btnTitle, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 bg-white text-emerald-900 font-bold text-[11px] rounded-lg border border-emerald-300 shadow-2xs"
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                      {btnTitle}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : isImage ? (
+                          /* Image attachment message */
+                          <div className="space-y-1.5">
+                            {msg.message_content.startsWith("http") ? (
+                              <a href={msg.message_content} target="_blank" rel="noopener noreferrer">
+                                <img
+                                  src={msg.message_content}
+                                  alt="WhatsApp Image"
+                                  className="rounded-lg max-h-48 w-full object-cover border border-slate-200"
+                                />
+                              </a>
+                            ) : null}
+                            <p className="whitespace-pre-wrap">{msg.message_content}</p>
+                          </div>
+                        ) : isDocument ? (
+                          /* Document attachment message */
+                          <div className="space-y-1">
+                            <div className="p-2.5 bg-white rounded-lg border border-slate-200 flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+                                <FileText className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-slate-800 truncate">{msg.message_content}</p>
+                                {msg.message_content.startsWith("http") && (
+                                  <a
+                                    href={msg.message_content}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-[10px] text-emerald-600 hover:underline flex items-center gap-0.5 mt-0.5 font-medium"
+                                  >
+                                    Open Document <ExternalLink className="w-2.5 h-2.5" />
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Normal text message */
+                          <p className="whitespace-pre-wrap">{msg.message_content}</p>
+                        )}
+
+                        {/* Delivery Failure notice if failed */}
+                        {isFailed && (
+                          <div className="flex items-center gap-1.5 text-[10px] text-rose-600 font-semibold pt-1 border-t border-rose-200/60">
+                            <AlertCircle className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                            <span>Delivery Failed — 24h window closed or delivery rejected</span>
+                          </div>
+                        )}
 
                         <div className="flex items-center justify-end gap-1 text-[10px] text-slate-500 pt-0.5">
                           <span>
@@ -618,6 +931,65 @@ export default function WhatsAppPage() {
                   <Zap className="w-3 h-3 text-amber-500" />
                   Quick:
                 </span>
+
+                <button
+                  type="button"
+                  onClick={() => setInteractiveModalOpen(true)}
+                  className="px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[11px] font-bold transition-colors shrink-0 flex items-center gap-1 border border-emerald-300"
+                >
+                  <span className="text-xs">🔘</span>
+                  Buttons
+                </button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      disabled={templateLoading}
+                      className="px-2.5 py-1 rounded-full bg-amber-50 hover:bg-amber-100 text-amber-800 text-[11px] font-bold transition-colors shrink-0 flex items-center gap-1 border border-amber-300"
+                    >
+                      <Zap className="w-3 h-3 text-amber-600" />
+                      Templates ▾
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-60 text-xs">
+                    <DropdownMenuItem onClick={() => handleSendReengagementTemplate("booking_created")} className="cursor-pointer gap-2 py-2">
+                      <span className="text-sm">📅</span>
+                      <div>
+                        <p className="font-semibold">Booking Confirmation</p>
+                        <p className="text-[10px] text-slate-400">booking_created</p>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleSendReengagementTemplate("reminder_24h")} className="cursor-pointer gap-2 py-2">
+                      <span className="text-sm">⏰</span>
+                      <div>
+                        <p className="font-semibold">Appointment Reminder</p>
+                        <p className="text-[10px] text-slate-400">reminder_24h</p>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleSendReengagementTemplate("review_request")} className="cursor-pointer gap-2 py-2">
+                      <span className="text-sm">⭐</span>
+                      <div>
+                        <p className="font-semibold">Google Review Request</p>
+                        <p className="text-[10px] text-slate-400">review_request</p>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleSendReengagementTemplate("we_miss_you")} className="cursor-pointer gap-2 py-2">
+                      <span className="text-sm">💛</span>
+                      <div>
+                        <p className="font-semibold">We Miss You Win-back</p>
+                        <p className="text-[10px] text-slate-400">we_miss_you</p>
+                      </div>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleSendReengagementTemplate("invoice_receipt")} className="cursor-pointer gap-2 py-2">
+                      <span className="text-sm">🧾</span>
+                      <div>
+                        <p className="font-semibold">Digital Invoice Link</p>
+                        <p className="text-[10px] text-slate-400">invoice_receipt</p>
+                      </div>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
                 <button
                   type="button"
@@ -660,11 +1032,97 @@ export default function WhatsAppPage() {
                 </button>
               </div>
 
+              {/* 24-Hour Window Countdown Banner */}
+              {liveWindowRemaining.isWindowActive ? (
+                <div className="bg-emerald-50 border-t border-emerald-200/90 px-4 py-2 flex items-center justify-between text-xs text-emerald-900 shrink-0 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                    <span className="font-semibold text-[11px] sm:text-xs">
+                      🟢 24h Window Active: {liveWindowRemaining.hoursRemaining}h {liveWindowRemaining.minutesRemaining}m remaining for free-form replies
+                    </span>
+                  </div>
+                  <Badge className="bg-emerald-600 text-white text-[10px] h-5 px-2 font-mono">
+                    Session Open
+                  </Badge>
+                </div>
+              ) : (
+                <div className="bg-amber-50 border-t border-amber-200 px-4 py-2 flex items-center justify-between text-xs text-amber-950 shrink-0 shadow-2xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-base shrink-0">⏳</span>
+                    <p className="text-[11px] sm:text-xs font-medium truncate">
+                      <strong className="font-bold text-amber-900">24h Window Closed</strong> — Free-form messages cannot be delivered. Send a pre-approved template to re-engage client.
+                    </p>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="sm"
+                        disabled={templateLoading}
+                        className="bg-amber-600 hover:bg-amber-700 text-white text-xs h-7 px-2.5 font-bold gap-1 shrink-0 ml-2 shadow-xs"
+                      >
+                        <Zap className="w-3.5 h-3.5" />
+                        Send Template ⚡
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-60 text-xs">
+                      <DropdownMenuItem onClick={() => handleSendReengagementTemplate("booking_created")} className="cursor-pointer gap-2 py-2">
+                        <span className="text-sm">📅</span>
+                        <div>
+                          <p className="font-semibold">Booking Confirmation</p>
+                          <p className="text-[10px] text-slate-400">booking_created</p>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleSendReengagementTemplate("reminder_24h")} className="cursor-pointer gap-2 py-2">
+                        <span className="text-sm">⏰</span>
+                        <div>
+                          <p className="font-semibold">Appointment Reminder</p>
+                          <p className="text-[10px] text-slate-400">reminder_24h</p>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleSendReengagementTemplate("review_request")} className="cursor-pointer gap-2 py-2">
+                        <span className="text-sm">⭐</span>
+                        <div>
+                          <p className="font-semibold">Google Review Request</p>
+                          <p className="text-[10px] text-slate-400">review_request</p>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleSendReengagementTemplate("we_miss_you")} className="cursor-pointer gap-2 py-2">
+                        <span className="text-sm">💛</span>
+                        <div>
+                          <p className="font-semibold">We Miss You Win-back</p>
+                          <p className="text-[10px] text-slate-400">we_miss_you</p>
+                        </div>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleSendReengagementTemplate("invoice_receipt")} className="cursor-pointer gap-2 py-2">
+                        <span className="text-sm">🧾</span>
+                        <div>
+                          <p className="font-semibold">Digital Invoice Link</p>
+                          <p className="text-[10px] text-slate-400">invoice_receipt</p>
+                        </div>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              )}
+
               {/* Message Composer Footer */}
               <div className="bg-white p-3 border-t border-slate-200 flex items-end gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setMediaModalOpen(true)}
+                  className="p-2.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors shrink-0"
+                  title="Send Media Attachment (Image / Document)"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
+
                 <div className="flex-1 relative">
                   <Textarea
-                    placeholder="Type a message or press Enter to send..."
+                    placeholder={
+                      liveWindowRemaining.isWindowActive
+                        ? "Type a message or press Enter to send..."
+                        : "24h window closed — Send an approved template above to re-engage..."
+                    }
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyDown={(e) => {
@@ -989,6 +1447,275 @@ export default function WhatsAppPage() {
               className="text-xs font-semibold"
             >
               Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================================ */}
+      {/* MODAL: INTERACTIVE BUTTONS BUILDER */}
+      {/* ============================================================ */}
+      <Dialog open={interactiveModalOpen} onOpenChange={setInteractiveModalOpen}>
+        <DialogContent className="max-w-lg border-slate-200 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <span className="text-lg">🔘</span>
+              Send Interactive Quick Buttons
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Quick-reply buttons allow clients to respond with a single tap directly inside WhatsApp.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Presets selector */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Choose Preset</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setInteractivePreset("preset1")}
+                  className={`p-2.5 rounded-xl border text-left transition-all ${
+                    interactivePreset === "preset1"
+                      ? "border-emerald-500 bg-emerald-50/70 text-emerald-900 ring-1 ring-emerald-500"
+                      : "border-slate-200 hover:bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  <p className="font-bold text-xs">Booking Confirmation</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">3 buttons (Confirm/Resched/Cancel)</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setInteractivePreset("preset2")}
+                  className={`p-2.5 rounded-xl border text-left transition-all ${
+                    interactivePreset === "preset2"
+                      ? "border-emerald-500 bg-emerald-50/70 text-emerald-900 ring-1 ring-emerald-500"
+                      : "border-slate-200 hover:bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  <p className="font-bold text-xs">Service Feedback</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">2 buttons (Loved it / Improve)</p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setInteractivePreset("custom")}
+                  className={`p-2.5 rounded-xl border text-left transition-all ${
+                    interactivePreset === "custom"
+                      ? "border-emerald-500 bg-emerald-50/70 text-emerald-900 ring-1 ring-emerald-500"
+                      : "border-slate-200 hover:bg-slate-50 text-slate-700"
+                  }`}
+                >
+                  <p className="font-bold text-xs">Custom Buttons</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">Enter custom body & up to 3 buttons</p>
+                </button>
+              </div>
+            </div>
+
+            {/* Custom Inputs if custom preset selected */}
+            {interactivePreset === "custom" && (
+              <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">Message Body</Label>
+                  <Textarea
+                    placeholder="Enter message text explaining the options..."
+                    value={customBodyText}
+                    onChange={(e) => setCustomBodyText(e.target.value)}
+                    rows={2}
+                    className="text-xs bg-white"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold text-slate-700">
+                    Buttons (up to 3, max 20 chars each)
+                  </Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <Input
+                      placeholder="Button 1 (e.g. Yes ✅)"
+                      value={customButtons[0]}
+                      maxLength={20}
+                      onChange={(e) => setCustomButtons([e.target.value, customButtons[1], customButtons[2]])}
+                      className="text-xs bg-white"
+                    />
+                    <Input
+                      placeholder="Button 2 (e.g. No ❌)"
+                      value={customButtons[1]}
+                      maxLength={20}
+                      onChange={(e) => setCustomButtons([customButtons[0], e.target.value, customButtons[2]])}
+                      className="text-xs bg-white"
+                    />
+                    <Input
+                      placeholder="Button 3 (optional)"
+                      value={customButtons[2]}
+                      maxLength={20}
+                      onChange={(e) => setCustomButtons([customButtons[0], customButtons[1], e.target.value])}
+                      className="text-xs bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* WhatsApp Message Preview */}
+            <div className="space-y-1.5">
+              <Label className="text-[11px] font-semibold text-slate-500 uppercase">Live Preview</Label>
+              <div className="p-3 bg-[#e5ddd5]/60 rounded-xl border border-slate-200">
+                <div className="bg-[#d9fdd3] text-[#111b21] max-w-sm ml-auto p-3 rounded-2xl rounded-tr-xs shadow-2xs space-y-2 text-xs">
+                  <p className="whitespace-pre-wrap">
+                    {interactivePreset === "preset1"
+                      ? "Hi! Please confirm your upcoming appointment with us at " + (sidebarData?.full_name ? "" : "Hanva Salon") + ":"
+                      : interactivePreset === "preset2"
+                      ? "Thank you for visiting us! How was your salon service experience today?"
+                      : customBodyText || "Your custom interactive message text will appear here."}
+                  </p>
+                  <div className="flex flex-col gap-1.5 pt-1.5 border-t border-emerald-300/40">
+                    {(interactivePreset === "preset1"
+                      ? ["Confirm ✅", "Reschedule 📅", "Cancel ❌"]
+                      : interactivePreset === "preset2"
+                      ? ["Loved it! ⭐", "Could be better"]
+                      : customButtons.filter((b) => b.trim().length > 0).length > 0
+                      ? customButtons.filter((b) => b.trim().length > 0)
+                      : ["Button 1", "Button 2"]
+                    ).map((title, i) => (
+                      <div
+                        key={i}
+                        className="py-1 px-3 bg-white text-emerald-800 font-bold text-center rounded-lg shadow-2xs text-[11px] border border-emerald-200"
+                      >
+                        {title}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInteractiveModalOpen(false)}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSendInteractive}
+              disabled={sendingInteractive}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-1.5"
+            >
+              {sendingInteractive ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              Send Buttons
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================================ */}
+      {/* MODAL: MEDIA ATTACHMENT SENDER */}
+      {/* ============================================================ */}
+      <Dialog open={mediaModalOpen} onOpenChange={setMediaModalOpen}>
+        <DialogContent className="max-w-md border-slate-200 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Paperclip className="w-4 h-4 text-emerald-600" />
+              Send Media Attachment
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Dispatch images, brochures, or PDF invoice documents directly via WhatsApp.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setMediaType("image")}
+                className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 ${
+                  mediaType === "image"
+                    ? "border-emerald-500 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-500"
+                    : "border-slate-200 hover:bg-slate-50 text-slate-700"
+                }`}
+              >
+                <ImageIcon className="w-5 h-5 text-emerald-600" />
+                <span className="text-xs font-bold">Image (JPG/PNG)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMediaType("document")}
+                className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 ${
+                  mediaType === "document"
+                    ? "border-emerald-500 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-500"
+                    : "border-slate-200 hover:bg-slate-50 text-slate-700"
+                }`}
+              >
+                <FileText className="w-5 h-5 text-blue-600" />
+                <span className="text-xs font-bold">Document (PDF)</span>
+              </button>
+            </div>
+
+            <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-200">
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-slate-700">
+                  {mediaType === "image" ? "Image URL" : "Document / PDF URL"}
+                </Label>
+                <Input
+                  placeholder={
+                    mediaType === "image"
+                      ? "https://example.com/salon-look.jpg"
+                      : "https://biz.hanva.in/invoices/INV-101.pdf"
+                  }
+                  value={mediaUrl}
+                  onChange={(e) => setMediaUrl(e.target.value)}
+                  className="text-xs bg-white font-mono"
+                />
+              </div>
+
+              {mediaType === "document" && (
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold text-slate-700">File Name (optional)</Label>
+                  <Input
+                    placeholder="e.g. Invoice_INV101.pdf"
+                    value={mediaFilename}
+                    onChange={(e) => setMediaFilename(e.target.value)}
+                    className="text-xs bg-white"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-slate-700">Caption (optional)</Label>
+                <Input
+                  placeholder="e.g. Here is your service invoice receipt!"
+                  value={mediaCaption}
+                  onChange={(e) => setMediaCaption(e.target.value)}
+                  className="text-xs bg-white"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMediaModalOpen(false)}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSendMedia}
+              disabled={sendingMedia || !mediaUrl.trim()}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold gap-1.5"
+            >
+              {sendingMedia ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              Send Attachment
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -208,6 +208,8 @@ export async function sendWhatsAppText(tenantId: string, customerPhone: string, 
     let msgId: string | null = null;
     let dispatchedViaFonada = false;
 
+    let sendError: string | null = null;
+
     // 1. Dispatch via modern Fonada AI WhatsApp message sender
     try {
       const fonadaRes = await sendFonadaDirectMessage({
@@ -220,22 +222,30 @@ export async function sendWhatsAppText(tenantId: string, customerPhone: string, 
         msgId = fonadaRes.messageId || `fonada_${Date.now()}`;
         console.log(`[WhatsApp Service] Dispatched live chat message via Fonada to ${safePhone} (msgId: ${msgId})`);
       } else {
+        sendError = fonadaRes.error || null;
         console.warn(`[WhatsApp Service] Fonada direct sender error: ${fonadaRes.error}. Trying legacy fallback...`);
       }
-    } catch (fonadaErr) {
+    } catch (fonadaErr: any) {
+      sendError = fonadaErr?.message || String(fonadaErr);
       console.warn("[WhatsApp Service] Fonada direct send failed:", fonadaErr);
     }
 
-    // 2. Legacy fallback if needed
-    if (!dispatchedViaFonada) {
+    // 2. Legacy fallback if needed (only if error is not a hard 24h window expiry or invalid phone)
+    const isHardStop = sendError && (sendError.includes("131047") || sendError.includes("131026") || sendError.toLowerCase().includes("window"));
+    if (!dispatchedViaFonada && !isHardStop) {
       try {
         const legacyRes = await sendViaHanvaOldApi(config, customerPhone, text);
         safePhone = legacyRes.safePhone;
         msgId = legacyRes.msgId;
+        dispatchedViaFonada = true;
+        sendError = null;
       } catch (oldErr: any) {
+        sendError = oldErr?.message || sendError || "Legacy API send failed";
         console.warn("[WhatsApp Service] Legacy API send failed:", oldErr?.message || oldErr);
       }
     }
+
+    const messageStatus = dispatchedViaFonada ? 'sent' : 'failed';
 
     // Save to db
     try {
@@ -261,12 +271,16 @@ export async function sendWhatsAppText(tenantId: string, customerPhone: string, 
           message_content, direction, status, msg_id, created_at
         ) VALUES (
           ${tenantId}, ${resolvedTenantKey}, ${customerId}, ${safePhone}, 'text', 
-          ${text}, 'outbound', 'sent', ${msgId}, NOW()
+          ${text}, 'outbound', ${messageStatus}, ${msgId}, NOW()
         )
       `;
-      console.log(`[WhatsApp] Saved outbound message for tenant ${tenantId} to ${safePhone}`);
+      console.log(`[WhatsApp] Saved outbound message for tenant ${tenantId} to ${safePhone} (status: ${messageStatus})`);
     } catch (dbErr) {
       console.error("[WhatsApp Service] DB Insert failed:", dbErr);
+    }
+
+    if (!dispatchedViaFonada) {
+      return { success: false, error: sendError || "Failed to deliver message" };
     }
 
     return { success: true, messageId: msgId };
