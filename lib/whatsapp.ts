@@ -1,6 +1,6 @@
 import { sql as baseSql } from "@/lib/db";
 import { getTenantWhatsAppConfig, DEFAULT_HANVA_WABA_NUMBER } from "@/lib/whatsapp-automations";
-import { sendFonadaCampaign } from "@/lib/fonada-ai";
+import { sendFonadaCampaign, sendFonadaDirectMessage } from "@/lib/fonada-ai";
 
 export { DEFAULT_HANVA_WABA_NUMBER };
 
@@ -202,7 +202,40 @@ export async function sendWhatsAppText(tenantId: string, customerPhone: string, 
       throw new Error("WhatsApp Integration is disabled. Please configure credentials in WhatsApp Settings.");
     }
 
-    const { safePhone, msgId } = await sendViaHanvaOldApi(config, customerPhone, text);
+    let safePhone = String(customerPhone).replace(/[^0-9]/g, "");
+    const tenDigit = safePhone.slice(-10);
+    safePhone = `91${tenDigit}`;
+    let msgId: string | null = null;
+    let dispatchedViaFonada = false;
+
+    // 1. Dispatch via modern Fonada AI WhatsApp message sender
+    try {
+      const fonadaRes = await sendFonadaDirectMessage({
+        phone: customerPhone,
+        text: text,
+      });
+
+      if (fonadaRes.success) {
+        dispatchedViaFonada = true;
+        msgId = fonadaRes.messageId || `fonada_${Date.now()}`;
+        console.log(`[WhatsApp Service] Dispatched live chat message via Fonada to ${safePhone} (msgId: ${msgId})`);
+      } else {
+        console.warn(`[WhatsApp Service] Fonada direct sender error: ${fonadaRes.error}. Trying legacy fallback...`);
+      }
+    } catch (fonadaErr) {
+      console.warn("[WhatsApp Service] Fonada direct send failed:", fonadaErr);
+    }
+
+    // 2. Legacy fallback if needed
+    if (!dispatchedViaFonada) {
+      try {
+        const legacyRes = await sendViaHanvaOldApi(config, customerPhone, text);
+        safePhone = legacyRes.safePhone;
+        msgId = legacyRes.msgId;
+      } catch (oldErr: any) {
+        console.warn("[WhatsApp Service] Legacy API send failed:", oldErr?.message || oldErr);
+      }
+    }
 
     // Save to db
     try {

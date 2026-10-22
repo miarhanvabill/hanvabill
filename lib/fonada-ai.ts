@@ -6,6 +6,7 @@
 
 export const FONADA_AI_API_URL = "https://app.fonada.ai/functions/v1/whatsapp_campaign_creator"
 export const FONADA_AI_TEMPLATES_URL = "https://app.fonada.ai/functions/v1/whatsapp_templates"
+export const FONADA_AI_MESSAGE_SENDER_URL = "https://app.fonada.ai/functions/v1/whatsapp_message_sender"
 export const FONADA_AI_DEFAULT_TOKEN = "fsk_fa674b9a167787e48b2b29f48939a4570fe02efc1a4ec012c9f60bacc76bc250"
 export const FONADA_AI_HANVA_ACCOUNT_ID = "78c079e7-c500-4678-99c4-1ac8b51d5637"
 export const FONADA_AI_HANVA_PHONE = "917965373459"
@@ -232,5 +233,67 @@ export async function syncFonadaTemplates(
     return await res.json()
   } catch (err: any) {
     return { success: false, error: err.message }
+  }
+}
+
+/**
+ * Send single 2-way live chat message via modern Fonada AI WhatsApp message sender
+ * Works within the 24-hour customer session window
+ */
+export async function sendFonadaDirectMessage(params: {
+  phone: string
+  text: string
+  accountId?: string
+  apiToken?: string
+}): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const rawPhone = String(params.phone).replace(/[^0-9]/g, "")
+  const tenDigit = rawPhone.slice(-10)
+  const fullPhone = `91${tenDigit}`
+  const accountId = params.accountId || FONADA_AI_HANVA_ACCOUNT_ID
+  const token = params.apiToken || FONADA_AI_DEFAULT_TOKEN
+
+  try {
+    const res = await fetch(FONADA_AI_MESSAGE_SENDER_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        account_id: accountId,
+        to: fullPhone,
+        message: {
+          type: "text",
+          text: {
+            body: params.text,
+          },
+        },
+      }),
+    })
+
+    const text = await res.text()
+    let data: any = null
+    try {
+      data = JSON.parse(text)
+    } catch {
+      data = { raw: text }
+    }
+
+    if (!res.ok || data?.success === false) {
+      return {
+        success: false,
+        error: data?.error || data?.message || text || `HTTP ${res.status}`,
+      }
+    }
+
+    return {
+      success: true,
+      messageId: data?.data?.message_id || data?.message_id || `fonada_${Date.now()}`,
+    }
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "Failed to dispatch message via Fonada",
+    }
   }
 }
