@@ -779,7 +779,7 @@ export default function WhatsAppPage() {
 
                 {messages.map((msg) => {
                   const isOutbound = msg.direction === "outbound"
-                  const isInteractive = msg.message_type === "interactive"
+                  const isInteractive = msg.message_type === "interactive" || msg.trigger_type === "interactive"
                   const isInboundButtonReply = !isOutbound && msg.message_content.trim().startsWith("🔘")
                   const isImage = msg.message_type === "image"
                   const isDocument = msg.message_type === "document"
