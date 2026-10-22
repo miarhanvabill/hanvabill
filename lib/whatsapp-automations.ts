@@ -1,6 +1,7 @@
 // lib/whatsapp-automations.ts
 import { sql as defaultSql } from "@/lib/db"
 import { sendViaHanvaOldApi } from "@/lib/whatsapp"
+import { sendFonadaCampaign } from "@/lib/fonada-ai"
 
 export const DEFAULT_HANVA_WABA_NUMBER = "917965373459" // Official Hanva WABA Endpoint (+91 79 6537 3459)
 
@@ -157,6 +158,113 @@ export const DEFAULT_AUTOMATION_TEMPLATES: Record<string, { template: string; de
     template: "Congratulations *{{referrer_name}}*! 🎉\n\nYour friend *{{friend_name}}* just completed their first visit at *{{business_name}}*.\n\nWe have credited *₹{{reward_amount}}* directly to your salon wallet! Use it on your next visit. ✨",
     delay_minutes: 0,
     send_time: "09:00",
+  },
+}
+
+export const EVENT_TO_FONADA_TEMPLATE: Record<string, {
+  templateName: string
+  getVariables: (vars: WhatsAppTemplateVariables, salonName: string) => Record<string, string>
+}> = {
+  booking_created: {
+    templateName: "booking_confirmation",
+    getVariables: (v, salon) => ({
+      BODY_1: String(v.customer_name || "Valued Guest"),
+      BODY_2: String(v.business_name || salon || "Hanva Salon"),
+      BODY_3: String(v.service_name || "Salon Service"),
+      BODY_4: String(v.booking_date || "today"),
+      BODY_5: String(v.booking_time || "scheduled time"),
+      BODY_6: String(v.staff_name || "Hanva Stylist"),
+    }),
+  },
+  booking_confirmation: {
+    templateName: "booking_confirmation",
+    getVariables: (v, salon) => ({
+      BODY_1: String(v.customer_name || "Valued Guest"),
+      BODY_2: String(v.business_name || salon || "Hanva Salon"),
+      BODY_3: String(v.service_name || "Salon Service"),
+      BODY_4: String(v.booking_date || "today"),
+      BODY_5: String(v.booking_time || "scheduled time"),
+      BODY_6: String(v.staff_name || "Hanva Stylist"),
+    }),
+  },
+  reminder_24h: {
+    templateName: "appointment_reminder_24h",
+    getVariables: (v, salon) => ({
+      BODY_1: String(v.customer_name || "Valued Guest"),
+      BODY_2: String(v.business_name || salon || "Hanva Salon"),
+      BODY_3: String(v.booking_date || "tomorrow"),
+      BODY_4: String(v.booking_time || "scheduled time"),
+      BODY_5: String(v.service_name || "Salon Service"),
+      BODY_6: String(v.staff_name || "Hanva Stylist"),
+    }),
+  },
+  reminder_2h: {
+    templateName: "appointment_reminder_2h",
+    getVariables: (v, salon) => ({
+      BODY_1: String(v.customer_name || "Valued Guest"),
+      BODY_2: String(v.business_name || salon || "Hanva Salon"),
+      BODY_3: String(v.booking_time || "in 2 hours"),
+      BODY_4: String(v.service_name || "Salon Service"),
+    }),
+  },
+  invoice_receipt: {
+    templateName: "invoice_receipt",
+    getVariables: (v, salon) => ({
+      BODY_1: String(v.customer_name || "Valued Guest"),
+      BODY_2: String(v.business_name || salon || "Hanva Salon"),
+      BODY_3: String(v.total_amount || "0"),
+      BODY_4: String(v.invoice_url || "https://biz.hanva.in"),
+    }),
+  },
+  review_request: {
+    templateName: "review_request",
+    getVariables: (v, salon) => ({
+      BODY_1: String(v.customer_name || "Valued Guest"),
+      BODY_2: String(v.business_name || salon || "Hanva Salon"),
+      BODY_3: String(v.gmb_url || "https://maps.google.com"),
+    }),
+  },
+  birthday: {
+    templateName: "birthday_greeting",
+    getVariables: (v, salon) => ({
+      BODY_1: String(v.customer_name || "Valued Guest"),
+      BODY_2: String(v.business_name || salon || "Hanva Salon"),
+      BODY_3: String(v.coupon_code || "BDAY20"),
+    }),
+  },
+  anniversary: {
+    templateName: "anniversary_greeting",
+    getVariables: (v, salon) => ({
+      BODY_1: String(v.customer_name || "Valued Guest"),
+      BODY_2: String(v.business_name || salon || "Hanva Salon"),
+      BODY_3: String(v.coupon_code || "ANNIV20"),
+    }),
+  },
+  we_miss_you: {
+    templateName: "we_miss_you",
+    getVariables: (v, salon) => ({
+      BODY_1: String(v.customer_name || "Valued Guest"),
+      BODY_2: String(v.business_name || salon || "Hanva Salon"),
+      BODY_3: String(v.coupon_code || "WELCOMEBACK"),
+    }),
+  },
+  loyalty_update: {
+    templateName: "loyalty_points_update",
+    getVariables: (v, salon) => ({
+      BODY_1: String(v.customer_name || "Valued Guest"),
+      BODY_2: String(v.business_name || salon || "Hanva Salon"),
+      BODY_3: String(v.points || "0"),
+    }),
+  },
+  referral_reward_earned: {
+    templateName: "referral_reward_earned",
+    getVariables: (v, salon) => ({
+      BODY_1: String(v.referrer_name || v.customer_name || "Valued Guest"),
+      BODY_2: String(v.business_name || salon || "Hanva Salon"),
+      BODY_3: String(v.referee_name || v.friend_name || "A friend"),
+      BODY_4: String(v.reward_amount || "250"),
+      BODY_5: String(v.new_balance || "250"),
+    }),
   },
 }
 
@@ -527,8 +635,57 @@ export async function triggerWhatsAppAutomation(
 
     console.log(`[WhatsApp Automations] Sending ${canonicalEvent} message to ${recipientPhone} for tenant ${tenantId}`)
 
-    // Send via Hanva API
-    const sendResult = await sendViaHanvaOldApi(waConfig, recipientPhone, messageContent)
+    let sendResult: { safePhone: string; msgId?: string | null } = {
+      safePhone: recipientPhone.replace(/[^0-9]/g, ""),
+      msgId: null,
+    }
+
+    const templateMapping = EVENT_TO_FONADA_TEMPLATE[canonicalEvent]
+    let dispatchedViaFonada = false
+
+    if (templateMapping) {
+      const cleanDigits = recipientPhone.replace(/[^0-9]/g, "")
+      const tenDigit = cleanDigits.slice(-10)
+      const fullPhone = `91${tenDigit}`
+      const audienceRow = {
+        phone: fullPhone,
+        Phone: fullPhone,
+        ...templateMapping.getVariables(mergedVariables, waConfig.salonName),
+      }
+
+      console.log(`[WhatsApp Automations] Dispatching Meta template "${templateMapping.templateName}" via Fonada Campaign API to ${fullPhone}...`)
+
+      const fonadaRes = await sendFonadaCampaign({
+        campaign_name: `${templateMapping.templateName}_${tenDigit}_${Date.now()}`,
+        template_name: templateMapping.templateName,
+        check_duplicate: false,
+        metadata: {
+          tenant_id: tenantId,
+          event_type: canonicalEvent,
+          customer_id: customerId,
+        },
+        audience_rows: [audienceRow],
+      })
+
+      if (fonadaRes.success) {
+        dispatchedViaFonada = true
+        sendResult = {
+          safePhone: fullPhone,
+          msgId: fonadaRes.campaign_id || `camp_${Date.now()}`,
+        }
+        console.log(`[WhatsApp Automations] Successfully dispatched Meta template "${templateMapping.templateName}" via Fonada (campaign_id: ${fonadaRes.campaign_id})`)
+      } else {
+        console.warn(`[WhatsApp Automations] Fonada campaign dispatch for "${templateMapping.templateName}" returned: ${fonadaRes.error}. (Template must be submitted and approved in Meta WhatsApp Business Manager before live delivery).`)
+      }
+    }
+
+    if (!dispatchedViaFonada) {
+      try {
+        sendResult = await sendViaHanvaOldApi(waConfig, recipientPhone, messageContent)
+      } catch (oldErr: any) {
+        console.warn(`[WhatsApp Automations] Legacy API fallback also failed: ${oldErr?.message || oldErr}`)
+      }
+    }
 
     // Resolve customer ID if not provided
     let finalCustomerId = customerId

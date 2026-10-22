@@ -1,5 +1,6 @@
 import { sql as baseSql } from "@/lib/db";
 import { getTenantWhatsAppConfig, DEFAULT_HANVA_WABA_NUMBER } from "@/lib/whatsapp-automations";
+import { sendFonadaCampaign } from "@/lib/fonada-ai";
 
 export { DEFAULT_HANVA_WABA_NUMBER };
 
@@ -115,9 +116,49 @@ export async function sendWhatsAppInvoice(tenantId: string, phone: string, data:
     const invoiceUrl = `https://biz.hanva.in/inv/${data.shareToken || data.bookingNumber}`;
     const textMessage = `Hello *${data.customerName}*! ✨\n\nThank you for visiting *${salonName}*! Your invoice for Booking *#${data.bookingNumber}* amounting to *${currency}${data.amount}* is ready.\n\n🧾 *View & Download Digital Receipt:*\n${invoiceUrl}\n\nWe look forward to seeing you again soon! 🌸`;
 
-    console.log(`[WhatsApp Service] Sending Invoice to ${phone} via Hanva`);
+    console.log(`[WhatsApp Service] Sending Invoice to ${phone} via Fonada/Meta Template`);
     
-    const { safePhone, msgId } = await sendViaHanvaOldApi(config, phone, textMessage);
+    let safePhone = phone.replace(/[^0-9]/g, "");
+    const tenDigit = safePhone.slice(-10);
+    let msgId: string | null = null;
+    let dispatchedViaFonada = false;
+
+    try {
+      const campaignRes = await sendFonadaCampaign({
+        campaign_name: `inv_${tenDigit}_${Date.now()}`,
+        template_name: "invoice_receipt",
+        check_duplicate: false,
+        audience_rows: [
+          {
+            phone: `91${tenDigit}`,
+            Phone: `91${tenDigit}`,
+            BODY_1: data.customerName || "Valued Guest",
+            BODY_2: salonName,
+            BODY_3: String(data.amount || 0),
+            BODY_4: invoiceUrl,
+          },
+        ],
+      });
+
+      if (campaignRes.success) {
+        dispatchedViaFonada = true;
+        safePhone = `91${tenDigit}`;
+        msgId = campaignRes.campaign_id || `camp_${Date.now()}`;
+        console.log(`[WhatsApp Service] Successfully sent invoice template via Fonada campaign ${msgId}`);
+      }
+    } catch (fonadaErr) {
+      console.warn("[WhatsApp Service] Fonada invoice campaign error:", fonadaErr);
+    }
+
+    if (!dispatchedViaFonada) {
+      try {
+        const res = await sendViaHanvaOldApi(config, phone, textMessage);
+        safePhone = res.safePhone;
+        msgId = res.msgId;
+      } catch (oldErr: any) {
+        console.warn("[WhatsApp Service] Legacy API send failed:", oldErr?.message || oldErr);
+      }
+    }
 
     // Save to db
     try {

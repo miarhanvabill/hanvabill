@@ -56,13 +56,20 @@ export async function sendFonadaCampaign(
     const rawPhone = String(row.phone || row.Phone || "").replace(/[^0-9]/g, "")
     const tenDigit = rawPhone.slice(-10)
     const fullPhone = `91${tenDigit}`
-    const bodyVal = row.BODY_1 || row.Body_1 || row.body_1 || ""
-    return {
+    const result: Record<string, string> = {
       phone: fullPhone,
       Phone: fullPhone,
-      BODY_1: bodyVal,
-      Body_1: bodyVal,
     }
+    for (const [k, v] of Object.entries(row)) {
+      if (k.toLowerCase() === "phone") continue
+      if (v !== undefined && v !== null) {
+        const val = String(v)
+        result[k] = val
+        const upper = k.toUpperCase()
+        result[upper] = val
+      }
+    }
+    return result
   })
 
   const requestBody: Record<string, any> = {

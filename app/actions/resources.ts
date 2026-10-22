@@ -44,11 +44,17 @@ export async function getAllResources(): Promise<Resource[]> {
           type,
           COALESCE(description, '') as description,
           COALESCE(location, 'Main Floor') as location,
-          COALESCE(capacity, 1) as capacity,
-          COALESCE(is_bookable, false) as is_bookable,
-          COALESCE(hourly_rate, 0) as hourly_rate,
+          COALESCE(capacity::numeric, 1) as capacity,
+          CASE 
+            WHEN is_bookable::text IN ('true', 't', '1', 'yes') THEN true 
+            ELSE false 
+          END as is_bookable,
+          COALESCE(hourly_rate::numeric, 0) as hourly_rate,
           maintenance_schedule,
-          is_active as is_available,
+          CASE 
+            WHEN is_active::text IN ('true', 't', '1', 'yes') OR is_active IS NULL THEN true 
+            ELSE false 
+          END as is_available,
           created_at,
           updated_at
         FROM business_resources 
@@ -68,8 +74,8 @@ export async function getAllResources(): Promise<Resource[]> {
         description: row.description || "",
         location: row.location || "Main Floor",
         capacity: Number(row.capacity) || 1,
-        is_available: Boolean(row.is_available),
-        is_bookable: Boolean(row.is_bookable),
+        is_available: row.is_available === true || row.is_available === 'true' || row.is_available === 't' || row.is_available === 1 || row.is_available === '1',
+        is_bookable: row.is_bookable === true || row.is_bookable === 'true' || row.is_bookable === 't' || row.is_bookable === 1 || row.is_bookable === '1',
         hourly_rate: Number.parseFloat(row.hourly_rate || "0"),
         maintenance_schedule: row.maintenance_schedule,
         assigned_staff: [],
@@ -120,8 +126,8 @@ export async function createResource(
         description: row.description || "",
         location: row.location || "Main Floor",
         capacity: Number(row.capacity) || 1,
-        is_available: Boolean(row.is_available),
-        is_bookable: Boolean(row.is_bookable),
+        is_available: row.is_available === true || row.is_available === 'true' || row.is_available === 't' || row.is_available === 1 || row.is_available === '1',
+        is_bookable: row.is_bookable === true || row.is_bookable === 'true' || row.is_bookable === 't' || row.is_bookable === 1 || row.is_bookable === '1',
         hourly_rate: Number.parseFloat(row.hourly_rate || "0"),
         maintenance_schedule: row.maintenance_schedule,
         assigned_staff: [],
@@ -146,10 +152,10 @@ export async function updateResource(id: string, data: Partial<Resource>): Promi
           description = COALESCE(${data.description}, description),
           location = COALESCE(${data.location}, location),
           capacity = COALESCE(${data.capacity}, capacity),
-          is_bookable = COALESCE(${data.is_bookable}, is_bookable),
+          is_bookable = CASE WHEN ${data.is_bookable !== undefined} THEN ${data.is_bookable ? true : false} ELSE is_bookable END,
           hourly_rate = COALESCE(${data.hourly_rate}, hourly_rate),
           maintenance_schedule = COALESCE(${data.maintenance_schedule}, maintenance_schedule),
-          is_active = COALESCE(${data.is_available}, is_active),
+          is_active = CASE WHEN ${data.is_available !== undefined} THEN ${data.is_available ? true : false} ELSE is_active END,
           updated_at = CURRENT_TIMESTAMP
         WHERE id = ${id} AND tenant_id = ${tenantId}
         RETURNING id::text, name, type, COALESCE(description,'') as description, COALESCE(location,'Main Floor') as location, capacity, is_bookable, hourly_rate, maintenance_schedule, is_active as is_available, created_at, updated_at
@@ -167,8 +173,8 @@ export async function updateResource(id: string, data: Partial<Resource>): Promi
         description: row.description || "",
         location: row.location || "Main Floor",
         capacity: Number(row.capacity) || 1,
-        is_available: Boolean(row.is_available),
-        is_bookable: Boolean(row.is_bookable),
+        is_available: row.is_available === true || row.is_available === 'true' || row.is_available === 't' || row.is_available === 1 || row.is_available === '1',
+        is_bookable: row.is_bookable === true || row.is_bookable === 'true' || row.is_bookable === 't' || row.is_bookable === 1 || row.is_bookable === '1',
         hourly_rate: Number.parseFloat(row.hourly_rate || "0"),
         maintenance_schedule: row.maintenance_schedule,
         assigned_staff: [],
