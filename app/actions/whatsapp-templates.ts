@@ -16,7 +16,7 @@ function safeRevalidate(path: string) {
   }
 }
 
-export const FONADA_AI_TEMPLATE_MANAGER_URL =
+const FONADA_AI_TEMPLATE_MANAGER_URL =
   "https://app.fonada.ai/functions/v1/whatsapp_template_manager"
 
 export interface MetaTemplateComponentButton {
@@ -77,7 +77,7 @@ export interface AfterHoursSettings {
   endTime: string
 }
 
-export const DEFAULT_AFTER_HOURS_SETTINGS: AfterHoursSettings = {
+const DEFAULT_AFTER_HOURS_SETTINGS: AfterHoursSettings = {
   enabled: false,
   startTime: "20:30",
   endTime: "09:30",
@@ -85,7 +85,7 @@ export const DEFAULT_AFTER_HOURS_SETTINGS: AfterHoursSettings = {
     "Hello! Thank you for reaching out to {salon_name}. ✨\n\nWe are currently closed for the day. Our team will get back to you as soon as we open tomorrow!\n\nIn the meantime, you can explore our services and book your next appointment online anytime here: {booking_link} 🌸",
 }
 
-export const CANONICAL_SALON_TEMPLATES: MetaTemplate[] = [
+const CANONICAL_SALON_TEMPLATES: MetaTemplate[] = [
   {
     id: "canonical-booking-created",
     template_id: "988274373593627",

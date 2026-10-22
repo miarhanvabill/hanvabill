@@ -82,8 +82,15 @@ import {
   type MetaTemplate,
   type CreateTemplateInput,
   type AfterHoursSettings,
-  DEFAULT_AFTER_HOURS_SETTINGS,
 } from "@/app/actions/whatsapp-templates"
+
+const DEFAULT_AFTER_HOURS_SETTINGS: AfterHoursSettings = {
+  enabled: false,
+  startTime: "20:30",
+  endTime: "09:30",
+  customMessage:
+    "Hello! Thank you for reaching out to {salon_name}. ✨\n\nWe are currently closed for the day. Our team will get back to you as soon as we open tomorrow!\n\nIn the meantime, you can explore our services and book your next appointment online anytime here: {booking_link} 🌸",
+}
 import {
   getAutomationRules,
   saveAutomationRule,
