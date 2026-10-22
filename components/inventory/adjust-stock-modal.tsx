@@ -9,7 +9,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
-import { playNotificationSound } from "@/lib/notification-sound"
 import { Package, PlusCircle, MinusCircle, AlertTriangle } from "lucide-react"
 import { adjustInventoryStock, type InventoryItem } from "@/app/actions/inventory"
 
@@ -58,7 +57,6 @@ export function AdjustStockModal({ isOpen, onClose, item, onSuccess }: AdjustSto
       })
 
       if (res.success) {
-        playNotificationSound()
         toast({
           title: "Stock Adjusted Successfully",
           description: res.message,

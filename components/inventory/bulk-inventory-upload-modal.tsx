@@ -11,7 +11,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Progress } from "@/components/ui/progress"
 import { toast } from "@/hooks/use-toast"
-import { playNotificationSound } from "@/lib/notification-sound"
 import {
   Upload,
   Download,
@@ -225,7 +224,6 @@ export function BulkInventoryUploadModal({
       setUploadResult(res)
 
       if (res.success) {
-        playNotificationSound()
         toast({
           title: "Bulk Inventory Upload Successful",
           description: `${res.summary.created} new items created, ${res.summary.updated} items auto-updated by SKU.`,

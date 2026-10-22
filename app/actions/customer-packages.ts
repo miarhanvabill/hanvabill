@@ -2,6 +2,52 @@
 
 import { withTenantAuth } from "@/lib/withTenantAuth"
 
+let customerPackagesSchemaEnsured = false
+async function ensureCustomerPackagesSchema(sql: any) {
+  if (customerPackagesSchemaEnsured) return
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS service_packages (
+        id SERIAL PRIMARY KEY,
+        tenant_id TEXT,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        services JSONB DEFAULT '[]'::jsonb,
+        original_price NUMERIC DEFAULT 0,
+        package_price NUMERIC DEFAULT 0,
+        discount_percentage NUMERIC DEFAULT 0,
+        duration_minutes INTEGER DEFAULT 60,
+        validity_days INTEGER DEFAULT 30,
+        is_transferable BOOLEAN DEFAULT false,
+        is_multi_branch BOOLEAN DEFAULT true,
+        is_active BOOLEAN DEFAULT true,
+        image_url TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS customer_packages (
+        id SERIAL PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        customer_id BIGINT NOT NULL,
+        package_id BIGINT NOT NULL,
+        total_services JSONB NOT NULL DEFAULT '[]'::jsonb,
+        remaining_services JSONB NOT NULL DEFAULT '[]'::jsonb,
+        expires_at DATE,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_customer_packages_tenant_cust ON customer_packages(tenant_id, customer_id);
+      CREATE INDEX IF NOT EXISTS idx_customer_packages_active ON customer_packages(tenant_id, is_active);
+      ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS is_transferable BOOLEAN DEFAULT false;
+      ALTER TABLE service_packages ADD COLUMN IF NOT EXISTS is_multi_branch BOOLEAN DEFAULT true;
+    `
+    customerPackagesSchemaEnsured = true
+  } catch {
+    // Non-blocking schema assurance
+  }
+}
+
 export interface CustomerPackage {
   id: number
   tenant_id: string
@@ -20,6 +66,7 @@ export interface CustomerPackage {
 export async function getCustomerPackages(customerId: number): Promise<CustomerPackage[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureCustomerPackagesSchema(sql)
       const packages = await sql`
         SELECT 
           cp.*, 
@@ -30,7 +77,7 @@ export async function getCustomerPackages(customerId: number): Promise<CustomerP
         WHERE cp.customer_id = ${customerId} 
         AND cp.tenant_id = ${tenantId}
         ORDER BY cp.created_at DESC
-      `
+      `.catch(() => [])
       return packages as CustomerPackage[]
     } catch (error) {
       console.error("Error fetching customer packages:", error)
@@ -46,6 +93,7 @@ export async function assignPackageToCustomer(params: {
 }): Promise<{ success: boolean; data?: any; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureCustomerPackagesSchema(sql)
       const [pkgDetails] = await sql`
         SELECT id, name, services, validity_days 
         FROM service_packages 
@@ -101,6 +149,8 @@ export async function deductPackageSession(
 ): Promise<{ success: boolean; remaining?: number; error?: string }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureCustomerPackagesSchema(sql)
+
       const [cp] = await sql`
         SELECT * FROM customer_packages
         WHERE id = ${customerPackageId} AND tenant_id = ${tenantId}
@@ -174,13 +224,15 @@ export async function deductBookingPackageSessions(
 ): Promise<{ success: boolean; deducted: Array<{ service_id: number; package_id: number; remaining: number }> }> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureCustomerPackagesSchema(sql)
+
       const bookingServices = await sql`
         SELECT service_id, quantity 
         FROM booking_services 
-        WHERE booking_id = ${bookingId} AND tenant_id = ${tenantId}
-      `
+        WHERE booking_id = ${bookingId} AND (tenant_id = ${tenantId} OR tenant_id IS NULL)
+      `.catch(() => [])
 
-      if (bookingServices.length === 0) {
+      if (!bookingServices || bookingServices.length === 0) {
         return { success: true, deducted: [] }
       }
 
@@ -193,9 +245,9 @@ export async function deductBookingPackageSessions(
           AND is_active = true
           AND (expires_at IS NULL OR expires_at >= CURRENT_DATE)
         ORDER BY expires_at ASC NULLS LAST, created_at ASC
-      `
+      `.catch(() => [])
 
-      if (activePackages.length === 0) {
+      if (!activePackages || activePackages.length === 0) {
         return { success: true, deducted: [] }
       }
 
@@ -256,6 +308,8 @@ export async function deductBookingPackageSessions(
 export async function transferPackage(customerPackageId: number, toCustomerId: number) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureCustomerPackagesSchema(sql)
+
       // First verify the package exists and belongs to the tenant
       const [pkg] = await sql`
         SELECT cp.id, sp.is_transferable 

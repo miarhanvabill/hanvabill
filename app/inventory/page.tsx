@@ -27,7 +27,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { toast } from "@/hooks/use-toast"
-import { playNotificationSound } from "@/lib/notification-sound"
 import { formatCurrency } from "@/lib/currency"
 import { BulkInventoryUploadModal } from "@/components/inventory/bulk-inventory-upload-modal"
 import { AdjustStockModal } from "@/components/inventory/adjust-stock-modal"
@@ -242,7 +241,6 @@ export default function InventoryPage() {
 
       const res = await response.json()
       if (res.success) {
-        playNotificationSound()
         toast({ title: "Product Created", description: `${formData.name} added to inventory.` })
         setIsAddDialogOpen(false)
         resetForm()
@@ -319,7 +317,6 @@ export default function InventoryPage() {
 
       const res = await response.json()
       if (res.success) {
-        playNotificationSound()
         toast({ title: "Product Updated", description: `${formData.name} updated successfully.` })
         setIsEditDialogOpen(false)
         resetForm()
@@ -342,7 +339,6 @@ export default function InventoryPage() {
       const response = await fetch(`/api/inventory/${id}`, { method: "DELETE" })
       const res = await response.json()
       if (res.success) {
-        playNotificationSound()
         toast({ title: "Item Deleted", description: "Inventory item removed." })
         loadData(true)
       } else {

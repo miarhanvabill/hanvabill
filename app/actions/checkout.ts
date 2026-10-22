@@ -400,6 +400,21 @@ export async function finalizeCheckout(
 
           try {
             await sql`
+              CREATE TABLE IF NOT EXISTS customer_packages (
+                id SERIAL PRIMARY KEY,
+                tenant_id TEXT NOT NULL,
+                customer_id BIGINT NOT NULL,
+                package_id BIGINT NOT NULL,
+                total_services JSONB NOT NULL DEFAULT '[]'::jsonb,
+                remaining_services JSONB NOT NULL DEFAULT '[]'::jsonb,
+                expires_at DATE,
+                is_active BOOLEAN DEFAULT true,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+              );
+            `.catch(() => {})
+
+            await sql`
               INSERT INTO customer_packages (
                 tenant_id, customer_id, package_id, total_services, remaining_services, expires_at
               ) VALUES (

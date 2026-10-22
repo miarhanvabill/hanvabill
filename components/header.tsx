@@ -44,7 +44,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
 
   const fetchNotifications = async () => {
     try {
-      const response = await fetch("/api/notifications?limit=5")
+      const response = await fetch("/api/notifications")
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
@@ -94,8 +94,28 @@ export function Header({ onMenuToggle }: HeaderProps) {
 
   useEffect(() => {
     fetchNotifications()
-    const interval = setInterval(fetchNotifications, 30000)
-    return () => clearInterval(interval)
+
+    // Poll every 12 seconds for fresh business/system notifications
+    const interval = setInterval(fetchNotifications, 12000)
+
+    // Check when user returns to tab or window gains focus
+    const handleFocus = () => {
+      fetchNotifications()
+    }
+    const handleCustomRefresh = () => {
+      fetchNotifications()
+    }
+
+    window.addEventListener("focus", handleFocus)
+    window.addEventListener("refresh-notifications", handleCustomRefresh)
+    document.addEventListener("visibilitychange", handleFocus)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener("focus", handleFocus)
+      window.removeEventListener("refresh-notifications", handleCustomRefresh)
+      document.removeEventListener("visibilitychange", handleFocus)
+    }
   }, [])
 
   const unreadCount = notifications.filter((n) => !n.is_read).length

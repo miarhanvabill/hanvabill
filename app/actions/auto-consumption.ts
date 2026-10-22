@@ -4,6 +4,65 @@ import { withTenantAuth } from "@/lib/withTenantAuth"
 export type { AutoConsumptionRule, ConsumptionLog, ConsumptionStats } from "@/types/auto-consumption"
 import type { AutoConsumptionRule, ConsumptionLog, ConsumptionStats } from "@/types/auto-consumption"
 
+let autoConsumptionSchemaEnsured = false
+async function ensureAutoConsumptionSchema(sql: any) {
+  if (autoConsumptionSchemaEnsured) return
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS auto_consumption_rules (
+        id SERIAL PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        service_id BIGINT,
+        product_id BIGINT,
+        consumption_amount NUMERIC NOT NULL DEFAULT 0,
+        unit VARCHAR(50) DEFAULT 'ml',
+        is_active BOOLEAN DEFAULT true,
+        trigger_type VARCHAR(50) DEFAULT 'automatic',
+        conditions JSONB DEFAULT '[]'::jsonb,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS auto_consumption_logs (
+        id SERIAL PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        rule_id BIGINT,
+        service_booking_id BIGINT,
+        product_id BIGINT,
+        amount_consumed NUMERIC NOT NULL DEFAULT 0,
+        unit VARCHAR(50) DEFAULT 'ml',
+        cost NUMERIC DEFAULT 0,
+        status VARCHAR(50) DEFAULT 'completed',
+        triggered_at TIMESTAMPTZ DEFAULT NOW(),
+        created_by BIGINT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS product_consumptions (
+        id SERIAL PRIMARY KEY,
+        tenant_id TEXT NOT NULL,
+        invoice_id BIGINT,
+        booking_id BIGINT,
+        product_id BIGINT,
+        product_name VARCHAR(255),
+        sku VARCHAR(100),
+        quantity_deducted NUMERIC NOT NULL DEFAULT 0,
+        unit VARCHAR(50) DEFAULT 'ml',
+        service_name VARCHAR(255),
+        staff_name VARCHAR(255),
+        notes TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      ALTER TABLE inventory ADD COLUMN IF NOT EXISTS cost_price NUMERIC DEFAULT 0;
+      ALTER TABLE inventory ADD COLUMN IF NOT EXISTS unit_price NUMERIC DEFAULT 0;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS cost NUMERIC DEFAULT 0;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS cost_price NUMERIC DEFAULT 0;
+    `
+    autoConsumptionSchemaEnsured = true
+  } catch {
+    // Non-blocking schema fallback
+  }
+}
+
 export async function getAutoConsumptionRules(): Promise<AutoConsumptionRule[]> {
   return withTenantAuth(async ({ sql, tenantId }) => {
     try {
@@ -360,14 +419,26 @@ export async function triggerConsumption(
 ): Promise<{ success: boolean; message: string }> {
   return withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      // Get rule details - correctly alias cost to cost_per_unit
-      const rule = await sql`
-        SELECT acr.*, COALESCE(p.cost, inv.cost_price, 0) as cost_per_unit, COALESCE(p.name, inv.name, 'Product') as product_name, p.sku
-        FROM auto_consumption_rules acr
-        LEFT JOIN products p ON acr.product_id = p.id AND p.tenant_id = ${tenantId}
-        LEFT JOIN inventory inv ON (acr.product_id = inv.id OR LOWER(p.name) = LOWER(inv.name)) AND inv.tenant_id = ${tenantId}
-        WHERE acr.id = ${Number.parseInt(ruleId)} AND acr.is_active = true AND acr.tenant_id = ${tenantId}
-      `
+      await ensureAutoConsumptionSchema(sql)
+
+      // Get rule details - safely retrieve cost_per_unit from products
+      let rule: any[] = []
+      try {
+        rule = await sql`
+          SELECT acr.*, COALESCE(p.cost, p.cost_price, 0) as cost_per_unit, COALESCE(p.name, inv.name, 'Product') as product_name, p.sku
+          FROM auto_consumption_rules acr
+          LEFT JOIN products p ON acr.product_id = p.id AND p.tenant_id = ${tenantId}
+          LEFT JOIN inventory inv ON (acr.product_id = inv.id OR LOWER(p.name) = LOWER(inv.name)) AND inv.tenant_id = ${tenantId}
+          WHERE acr.id = ${Number.parseInt(ruleId)} AND acr.is_active = true AND acr.tenant_id = ${tenantId}
+        `
+      } catch {
+        rule = await sql`
+          SELECT acr.*, COALESCE(p.cost, p.cost_price, 0) as cost_per_unit, COALESCE(p.name, 'Product') as product_name, p.sku
+          FROM auto_consumption_rules acr
+          LEFT JOIN products p ON acr.product_id = p.id AND p.tenant_id = ${tenantId}
+          WHERE acr.id = ${Number.parseInt(ruleId)} AND acr.is_active = true AND acr.tenant_id = ${tenantId}
+        `.catch(() => [])
+      }
 
       if (rule.length === 0) {
         return {
@@ -460,13 +531,28 @@ export async function processServiceAutoConsumption(params: {
 }) {
   const { tenantId, sql, serviceId, serviceName, bookingId, invoiceId, staffId, staffName } = params
   try {
-    const rules = await sql`
-      SELECT acr.*, COALESCE(p.cost, inv.cost_price, 0) as cost_per_unit, COALESCE(p.name, inv.name, 'Product') as product_name, p.sku
-      FROM auto_consumption_rules acr
-      LEFT JOIN products p ON acr.product_id = p.id AND p.tenant_id = ${tenantId}
-      LEFT JOIN inventory inv ON (acr.product_id = inv.id OR LOWER(p.name) = LOWER(inv.name)) AND inv.tenant_id = ${tenantId}
-      WHERE acr.service_id = ${Number(serviceId)} AND acr.is_active = true AND acr.trigger_type = 'automatic' AND acr.tenant_id = ${tenantId}
-    `
+    await ensureAutoConsumptionSchema(sql)
+
+    let rules: any[] = []
+    try {
+      rules = await sql`
+        SELECT acr.*, COALESCE(p.cost, p.cost_price, 0) as cost_per_unit, COALESCE(p.name, inv.name, 'Product') as product_name, p.sku
+        FROM auto_consumption_rules acr
+        LEFT JOIN products p ON acr.product_id = p.id AND p.tenant_id = ${tenantId}
+        LEFT JOIN inventory inv ON (acr.product_id = inv.id OR LOWER(p.name) = LOWER(inv.name)) AND inv.tenant_id = ${tenantId}
+        WHERE acr.service_id = ${Number(serviceId)} AND acr.is_active = true AND acr.trigger_type = 'automatic' AND acr.tenant_id = ${tenantId}
+      `
+    } catch {
+      rules = await sql`
+        SELECT acr.*, COALESCE(p.cost, p.cost_price, 0) as cost_per_unit, COALESCE(p.name, 'Product') as product_name, p.sku
+        FROM auto_consumption_rules acr
+        LEFT JOIN products p ON acr.product_id = p.id AND p.tenant_id = ${tenantId}
+        WHERE acr.service_id = ${Number(serviceId)} AND acr.is_active = true AND acr.trigger_type = 'automatic' AND acr.tenant_id = ${tenantId}
+      `.catch(() => [])
+    }
+
+    if (!rules || rules.length === 0) return
+
     for (const rule of rules) {
       const amount = Number(rule.consumption_amount) || 0
       const cost = amount * (Number(rule.cost_per_unit) || 0)
