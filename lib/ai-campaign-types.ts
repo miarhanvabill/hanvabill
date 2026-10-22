@@ -62,7 +62,7 @@ export function convertToMetaTemplateFormat(
   const variableOrder: string[] = [];
   const sampleValues: Record<string, string> = {};
 
-  const convertedText = (templateText || "").replace(/\{\{\s*([a-zA-Z0-9_-]+)\s*\}\}/g, (_, varName) => {
+  let convertedText = (templateText || "").replace(/\{\{\s*([a-zA-Z0-9_-]+)\s*\}\}/g, (_, varName) => {
     const cleanVar = varName.trim();
     let idx = variableOrder.indexOf(cleanVar);
     if (idx === -1) {
@@ -72,7 +72,15 @@ export function convertToMetaTemplateFormat(
     const paramNum = String(idx + 1);
     sampleValues[paramNum] = defaultSamples[cleanVar] || cleanVar;
     return `{{${paramNum}}}`;
-  });
+  }).trim();
+
+  // Meta Graph API constraint: Variables cannot be at the start or end of template body text
+  if (/^\{\{\d+\}\}/.test(convertedText)) {
+    convertedText = `Hello ${convertedText}`;
+  }
+  if (/\{\{\d+\}\}$/.test(convertedText)) {
+    convertedText = `${convertedText} 🌸`;
+  }
 
   return {
     metaBodyText: convertedText,

@@ -323,22 +323,50 @@ export async function createMetaTemplateSubmission(data: CreateTemplateInput): P
     }
 
     // 2. Body
-    // Check for variables like {{1}}, {{2}} in body text
-    const varMatches = data.bodyText.match(/\{\{(\d+)\}\}/g) || []
-    const uniqueVars = Array.from(new Set(varMatches)).sort()
+    let cleanBodyText = data.bodyText.trim()
+    // Meta Graph API constraint: Variables cannot be at the start or end of template body text
+    if (/^\{\{\d+\}\}/.test(cleanBodyText)) {
+      cleanBodyText = `Hello ${cleanBodyText}`
+    }
+    if (/\{\{\d+\}\}$/.test(cleanBodyText)) {
+      cleanBodyText = `${cleanBodyText} 🌸`
+    }
 
+    // Check for variables like {{1}}, {{2}} in body text
+    const varMatches = cleanBodyText.match(/\{\{(\d+)\}\}/g) || []
+    const uniqueVars = Array.from(new Set(varMatches)).sort((a, b) => {
+      const numA = parseInt(a.replace(/[^0-9]/g, ""), 10)
+      const numB = parseInt(b.replace(/[^0-9]/g, ""), 10)
+      return numA - numB
+    })
+
+    const sample_values: Record<string, string> = {}
     let sampleBodyValues: string[] = []
     if (uniqueVars.length > 0) {
       sampleBodyValues = uniqueVars.map((v, idx) => {
         const num = v.replace(/[^0-9]/g, "")
-        const sample = data.sampleValues?.[num] || data.sampleValues?.[v] || `Sample_${idx + 1}`
+        const sample =
+          data.sampleValues?.[num] ||
+          data.sampleValues?.[v] ||
+          (num === "1"
+            ? "Priya"
+            : num === "2"
+            ? "Hanva Luxury Salon"
+            : num === "3"
+            ? "Hair Spa & Styling"
+            : num === "4"
+            ? "GLAM10"
+            : num === "5"
+            ? "https://biz.hanva.in"
+            : `Sample_${idx + 1}`)
+        sample_values[`BODY_${num}`] = sample
         return sample
       })
     }
 
     const bodyComponent: any = {
       type: "BODY",
-      text: data.bodyText.trim(),
+      text: cleanBodyText,
     }
     if (sampleBodyValues.length > 0) {
       bodyComponent.example = {
@@ -348,10 +376,14 @@ export async function createMetaTemplateSubmission(data: CreateTemplateInput): P
     components.push(bodyComponent)
 
     // 3. Footer
-    if (data.footerText && data.footerText.trim()) {
+    let footerText = data.footerText?.trim()
+    if (!footerText && (data.category || "MARKETING").toUpperCase() === "MARKETING") {
+      footerText = "Reply STOP to unsubscribe from future messages"
+    }
+    if (footerText) {
       components.push({
         type: "FOOTER",
-        text: data.footerText.trim(),
+        text: footerText,
       })
     }
 
@@ -391,11 +423,13 @@ export async function createMetaTemplateSubmission(data: CreateTemplateInput): P
 
     const payload = {
       action: "create",
+      accountId: FONADA_AI_HANVA_ACCOUNT_ID,
       account_id: FONADA_AI_HANVA_ACCOUNT_ID,
       templateData: {
         name: cleanName,
-        category: data.category || "UTILITY",
-        language: data.language || "en_US",
+        category: (data.category || "UTILITY").toUpperCase(),
+        language: (data.language || "en").toLowerCase().startsWith("en") ? "en" : (data.language || "en"),
+        sample_values,
         components,
       },
     }
@@ -422,7 +456,7 @@ export async function createMetaTemplateSubmission(data: CreateTemplateInput): P
     safeRevalidate("/manage/whatsapp-config")
 
     const createdTemplateId =
-      resData?.success?.local_id || resData?.success?.id || cleanName
+      resData?.success?.id || resData?.success?.local_id || cleanName
 
     return {
       success: true,
