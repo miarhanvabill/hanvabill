@@ -93,7 +93,7 @@ export async function getCustomers(search?: string, offset: number = 0, limit: n
           LIMIT ${limit} OFFSET ${offset}
         `
 
-        return customers.map((customer) => ({
+        return customers.map((customer: any) => ({
           ...customer,
           id: Number(customer.id) || 0,
           total_bookings: Number(customer.total_bookings) || 0,
@@ -227,7 +227,7 @@ export async function searchCustomers(query: string): Promise<Customer[]> {
           LIMIT 20
         `
 
-        return customers.map((customer) => ({
+        return customers.map((customer: any) => ({
           ...customer,
           id: Number(customer.id) || 0,
           total_bookings: Number(customer.total_bookings) || 0,
@@ -335,9 +335,9 @@ async function invalidateCustomerCache(tenantId: string, customerId?: string) {
       await cacheDel(`${baseKey}:customer:${customerId}`)
     }
     // Invalidate search cache patterns
-    const keys = await cacheFetch('keys', async () => []);
+    const keys = await cacheFetch('keys', async () => [] as string[]);
     for (const key of keys) {
-      if (key.startsWith(`${baseKey}:search:`) || key.startsWith(`customers:all:${tenantId}`) || key.startsWith(`customers:paginated:${tenantId}`)) {
+      if (typeof key === "string" && (key.startsWith(`${baseKey}:search:`) || key.startsWith(`customers:all:${tenantId}`) || key.startsWith(`customers:paginated:${tenantId}`))) {
         await cacheDel(key);
       }
     }

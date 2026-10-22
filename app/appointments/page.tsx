@@ -24,13 +24,17 @@ import {
   MapPin,
   Trash2,
   CheckCircle,
+  CheckCircle2,
   XCircle,
   RefreshCw,
+  UserPlus,
+  Loader2,
 } from "lucide-react"
 import { getBookings, createBooking, updateBookingStatus, deleteBooking, type Booking } from "@/app/actions/bookings"
 import { getServices, type Service } from "@/app/actions/services"
 import { getStaff, type Staff } from "@/app/actions/staff"
 import { formatCurrency } from "@/lib/currency"
+import { useCustomerLookup } from "@/hooks/use-customer-lookup"
 
 interface Appointment {
   id: number
@@ -87,6 +91,7 @@ export default function AppointmentsPage() {
   const [searchQuery, setSearchQuery] = useState("")
 
   const [appointmentForm, setAppointmentForm] = useState({
+    customerId: null as number | null,
     customerName: "",
     customerPhone: "",
     customerEmail: "",
@@ -95,6 +100,24 @@ export default function AppointmentsPage() {
     date: new Date().toLocaleDateString("en-CA"),
     time: "",
     notes: "",
+  })
+
+  const customerLookup = useCustomerLookup({
+    onCustomerFound: (cust) => {
+      setAppointmentForm((prev) => ({
+        ...prev,
+        customerId: cust.id,
+        customerName: cust.full_name || prev.customerName,
+        customerPhone: cust.phone_number || prev.customerPhone,
+        customerEmail: cust.email || prev.customerEmail,
+      }))
+    },
+    onClear: () => {
+      setAppointmentForm((prev) => ({
+        ...prev,
+        customerId: null,
+      }))
+    },
   })
 
   // Load live services, staff, and bookings on mount
@@ -216,6 +239,9 @@ export default function AppointmentsPage() {
     try {
       const selectedSvc = services.find((s) => s.id.toString() === appointmentForm.serviceId)
       const formData = new FormData()
+      if (appointmentForm.customerId) {
+        formData.append("customerId", appointmentForm.customerId.toString())
+      }
       formData.append("customerName", appointmentForm.customerName.trim())
       formData.append("customerPhone", appointmentForm.customerPhone.trim() || "0000000000")
       if (appointmentForm.customerEmail.trim()) {
@@ -245,7 +271,9 @@ export default function AppointmentsPage() {
           description: `Booking #${res.bookingNumber || ""} created successfully.`,
         })
         setShowAddModal(false)
+        customerLookup.clearCustomer()
         setAppointmentForm({
+          customerId: null,
           customerName: "",
           customerPhone: "",
           customerEmail: "",
@@ -517,27 +545,118 @@ export default function AppointmentsPage() {
                         <DialogTitle>Book New Appointment</DialogTitle>
                       </DialogHeader>
                       <div className="space-y-4 pt-2">
-                        <div>
+                        <div className="relative">
                           <Label>Customer Name *</Label>
                           <Input
                             placeholder="e.g. Pooja Sharma"
                             value={appointmentForm.customerName}
-                            onChange={(e) =>
-                              setAppointmentForm({ ...appointmentForm, customerName: e.target.value })
-                            }
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setAppointmentForm((prev) => ({ ...prev, customerName: val }))
+                              customerLookup.handleNameChange(val)
+                            }}
+                            onBlur={customerLookup.handleNameBlur}
                           />
+                          {/* Name suggestions */}
+                          {customerLookup.showNameSuggestions && customerLookup.suggestions.length > 0 && (
+                            <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                              <div className="p-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/50 border-b">
+                                Matching Customers ({customerLookup.suggestions.length})
+                              </div>
+                              {customerLookup.suggestions.map((cust) => (
+                                <button
+                                  key={cust.id}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault()
+                                    customerLookup.selectCustomer(cust)
+                                  }}
+                                  className="w-full text-left p-2.5 hover:bg-accent/60 flex items-center justify-between gap-2 border-b last:border-0 transition-colors"
+                                >
+                                  <div className="min-w-0">
+                                    <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                                      <User className="w-3.5 h-3.5 text-primary" />
+                                      <span>{cust.full_name}</span>
+                                    </div>
+                                    <div className="text-[11px] text-muted-foreground flex items-center gap-2 mt-0.5">
+                                      <span className="font-mono">{cust.phone_number}</span>
+                                      {cust.email && <span className="truncate max-w-[120px]">• {cust.email}</span>}
+                                    </div>
+                                  </div>
+                                  <span className="text-[10px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 px-1.5 py-0.5 rounded font-medium border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                    {cust.total_bookings ? `${cust.total_bookings} visits` : "Found"}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <Label>Phone Number</Label>
-                            <Input
-                              placeholder="9876543210"
-                              value={appointmentForm.customerPhone}
-                              onChange={(e) =>
-                                setAppointmentForm({ ...appointmentForm, customerPhone: e.target.value })
-                              }
-                            />
+                          <div className="relative">
+                            <div className="flex items-center justify-between">
+                              <Label>Phone Number</Label>
+                              {customerLookup.isSearching && (
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                  <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                                  Searching...
+                                </span>
+                              )}
+                            </div>
+                            <div className="relative mt-1">
+                              <Input
+                                placeholder="9876543210"
+                                value={appointmentForm.customerPhone}
+                                onChange={(e) => {
+                                  const val = e.target.value
+                                  setAppointmentForm((prev) => ({ ...prev, customerPhone: val }))
+                                  customerLookup.handlePhoneChange(val)
+                                }}
+                                onBlur={() => customerLookup.handlePhoneBlur(appointmentForm.customerPhone)}
+                                className="pr-8"
+                              />
+                              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                                {customerLookup.isSearching ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                                ) : customerLookup.lookupStatus === "found" ? (
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                ) : null}
+                              </div>
+                            </div>
+
+                            {/* Phone suggestions */}
+                            {customerLookup.showPhoneSuggestions && customerLookup.suggestions.length > 0 && (
+                              <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                                <div className="p-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/50 border-b">
+                                  Matching Customers ({customerLookup.suggestions.length})
+                                </div>
+                                {customerLookup.suggestions.map((cust) => (
+                                  <button
+                                    key={cust.id}
+                                    type="button"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault()
+                                      customerLookup.selectCustomer(cust)
+                                    }}
+                                    className="w-full text-left p-2.5 hover:bg-accent/60 flex items-center justify-between gap-2 border-b last:border-0 transition-colors"
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                                        <User className="w-3.5 h-3.5 text-primary" />
+                                        <span>{cust.full_name}</span>
+                                      </div>
+                                      <div className="text-[11px] text-muted-foreground flex items-center gap-2 mt-0.5">
+                                        <span className="font-mono font-medium text-foreground">{cust.phone_number}</span>
+                                        {cust.email && <span className="truncate max-w-[100px]">• {cust.email}</span>}
+                                      </div>
+                                    </div>
+                                    <span className="text-[10px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 px-1.5 py-0.5 rounded font-medium border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                      {cust.total_bookings ? `${cust.total_bookings} visits` : "Found"}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                           </div>
                           <div>
                             <Label>Email (Optional)</Label>
@@ -548,9 +667,39 @@ export default function AppointmentsPage() {
                               onChange={(e) =>
                                 setAppointmentForm({ ...appointmentForm, customerEmail: e.target.value })
                               }
+                              className="mt-1"
                             />
                           </div>
                         </div>
+
+                        {/* Customer Status Banner */}
+                        {customerLookup.lookupStatus === "found" && customerLookup.matchedCustomer && (
+                          <div className="flex items-center justify-between p-2 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span className="truncate">
+                                Existing Customer: <strong className="font-semibold">{customerLookup.matchedCustomer.full_name}</strong>
+                                {customerLookup.matchedCustomer.total_bookings ? ` • ${customerLookup.matchedCustomer.total_bookings} visits` : ""}
+                              </span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={customerLookup.clearCustomer}
+                              className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+                            >
+                              Clear
+                            </Button>
+                          </div>
+                        )}
+
+                        {customerLookup.lookupStatus === "not_found" && (
+                          <div className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400">
+                            <UserPlus className="w-3.5 h-3.5 shrink-0" />
+                            <span>New customer detected — details will be registered on booking</span>
+                          </div>
+                        )}
 
                         <div>
                           <Label>Service *</Label>

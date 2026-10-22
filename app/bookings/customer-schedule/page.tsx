@@ -358,7 +358,8 @@ export default function CustomerSchedulePage() {
                     setSelectedStaff(null)
                     setSelectedDate(undefined)
                     setSelectedTime("")
-                    setCustomerInfo({ name: "", phone: "", email: "", notes: "" })
+                    customerLookup.clearCustomer()
+                    setCustomerInfo({ customerId: null, name: "", phone: "", email: "", notes: "" })
                     setStep(1)
                   }}
                   className="bg-blue-600 hover:bg-blue-700"
