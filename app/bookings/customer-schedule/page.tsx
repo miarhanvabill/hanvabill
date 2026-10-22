@@ -11,11 +11,15 @@ import { Badge } from "@/components/ui/badge"
 import {
   Clock,
   CheckCircle,
+  CheckCircle2,
   Star,
   ArrowLeft,
   Search,
   Sparkles,
+  User,
   UserCheck,
+  UserPlus,
+  Loader2,
   Calendar as CalendarIcon,
   Check,
   RefreshCw,
@@ -28,6 +32,7 @@ import { format } from "date-fns"
 import { getServices, type Service } from "@/app/actions/services"
 import { getStaff, type Staff } from "@/app/actions/staff"
 import { createBooking, getBookedSlotsForDate } from "@/app/actions/bookings"
+import { useCustomerLookup } from "@/hooks/use-customer-lookup"
 
 const STANDARD_TIME_SLOTS = [
   "09:00", "09:30", "10:00", "10:30",
@@ -61,10 +66,30 @@ export default function CustomerSchedulePage() {
   const [bookingResult, setBookingResult] = useState<{ bookingNumber: string } | null>(null)
 
   const [customerInfo, setCustomerInfo] = useState({
+    customerId: null as number | null,
     name: "",
     phone: "",
     email: "",
     notes: "",
+  })
+
+  // Customer phone lookup hook
+  const customerLookup = useCustomerLookup({
+    onCustomerFound: (cust) => {
+      setCustomerInfo((prev) => ({
+        ...prev,
+        customerId: cust.id,
+        name: cust.full_name || prev.name,
+        phone: cust.phone_number || prev.phone,
+        email: cust.email || prev.email,
+      }))
+    },
+    onClear: () => {
+      setCustomerInfo((prev) => ({
+        ...prev,
+        customerId: null,
+      }))
+    },
   })
 
   // Load real services and staff from database on mount
@@ -214,6 +239,9 @@ export default function CustomerSchedulePage() {
     try {
       const dateStr = format(selectedDate, "yyyy-MM-dd")
       const formData = new FormData()
+      if (customerInfo.customerId) {
+        formData.append("customerId", customerInfo.customerId.toString())
+      }
       formData.append("customerName", customerInfo.name.trim())
       formData.append("customerPhone", customerInfo.phone.trim())
       if (customerInfo.email.trim()) {
@@ -850,7 +878,7 @@ export default function CustomerSchedulePage() {
                 {/* Form fields */}
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
+                    <div className="relative">
                       <Label htmlFor="custName" className="text-xs font-semibold">
                         Full Name *
                       </Label>
@@ -859,25 +887,149 @@ export default function CustomerSchedulePage() {
                         required
                         placeholder="e.g. Rahul Sharma"
                         value={customerInfo.name}
-                        onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setCustomerInfo((prev) => ({ ...prev, name: val }))
+                          customerLookup.handleNameChange(val)
+                        }}
+                        onBlur={customerLookup.handleNameBlur}
                         className="mt-1"
                       />
+                      {/* Name suggestions dropdown */}
+                      {customerLookup.showNameSuggestions && customerLookup.suggestions.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                          <div className="p-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-slate-50 dark:bg-slate-800/50 border-b">
+                            Matching Customers ({customerLookup.suggestions.length})
+                          </div>
+                          {customerLookup.suggestions.map((cust) => (
+                            <button
+                              key={cust.id}
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                customerLookup.selectCustomer(cust)
+                              }}
+                              className="w-full text-left p-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/80 flex items-center justify-between gap-2 border-b last:border-0 transition-colors"
+                            >
+                              <div className="min-w-0">
+                                <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                                  <User className="w-3.5 h-3.5 text-primary" />
+                                  <span>{cust.full_name}</span>
+                                </div>
+                                <div className="text-[11px] text-muted-foreground flex items-center gap-2 mt-0.5">
+                                  <span className="font-mono">{cust.phone_number}</span>
+                                  {cust.email && <span className="truncate max-w-[120px]">• {cust.email}</span>}
+                                </div>
+                              </div>
+                              <span className="text-[10px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 px-1.5 py-0.5 rounded font-medium border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                {cust.total_bookings ? `${cust.total_bookings} visits` : "Found"}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <Label htmlFor="custPhone" className="text-xs font-semibold">
-                        Phone Number *
-                      </Label>
-                      <Input
-                        id="custPhone"
-                        required
-                        type="tel"
-                        placeholder="e.g. 9876543210"
-                        value={customerInfo.phone}
-                        onChange={(e) => setCustomerInfo({ ...customerInfo, phone: e.target.value })}
-                        className="mt-1"
-                      />
+
+                    <div className="relative">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="custPhone" className="text-xs font-semibold">
+                          Phone Number *
+                        </Label>
+                        {customerLookup.isSearching && (
+                          <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                            Looking up...
+                          </span>
+                        )}
+                      </div>
+                      <div className="relative mt-1">
+                        <Input
+                          id="custPhone"
+                          required
+                          type="tel"
+                          placeholder="e.g. 9876543210"
+                          value={customerInfo.phone}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setCustomerInfo((prev) => ({ ...prev, phone: val }))
+                            customerLookup.handlePhoneChange(val)
+                          }}
+                          onBlur={() => customerLookup.handlePhoneBlur(customerInfo.phone)}
+                          className="pr-8"
+                        />
+                        <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                          {customerLookup.isSearching ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                          ) : customerLookup.lookupStatus === "found" ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {/* Phone suggestions dropdown */}
+                      {customerLookup.showPhoneSuggestions && customerLookup.suggestions.length > 0 && (
+                        <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                          <div className="p-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-slate-50 dark:bg-slate-800/50 border-b">
+                            Matching Customers ({customerLookup.suggestions.length})
+                          </div>
+                          {customerLookup.suggestions.map((cust) => (
+                            <button
+                              key={cust.id}
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                customerLookup.selectCustomer(cust)
+                              }}
+                              className="w-full text-left p-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/80 flex items-center justify-between gap-2 border-b last:border-0 transition-colors"
+                            >
+                              <div className="min-w-0">
+                                <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                                  <User className="w-3.5 h-3.5 text-primary" />
+                                  <span>{cust.full_name}</span>
+                                </div>
+                                <div className="text-[11px] text-muted-foreground flex items-center gap-2 mt-0.5">
+                                  <span className="font-mono font-medium text-foreground">{cust.phone_number}</span>
+                                  {cust.email && <span className="truncate max-w-[120px]">• {cust.email}</span>}
+                                </div>
+                              </div>
+                              <span className="text-[10px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 px-1.5 py-0.5 rounded font-medium border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                {cust.total_bookings ? `${cust.total_bookings} visits` : "Found"}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
+
+                  {/* Customer Status Banner */}
+                  {customerLookup.lookupStatus === "found" && customerLookup.matchedCustomer && (
+                    <div className="flex items-center justify-between p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs text-emerald-800 dark:text-emerald-300 animate-in fade-in duration-200">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span className="truncate">
+                          Welcome back, <strong>{customerLookup.matchedCustomer.full_name}</strong>! Details auto-filled.
+                          {customerLookup.matchedCustomer.total_bookings ? ` (${customerLookup.matchedCustomer.total_bookings} previous bookings)` : ""}
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={customerLookup.clearCustomer}
+                        className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                      >
+                        Change
+                      </Button>
+                    </div>
+                  )}
+
+                  {customerLookup.lookupStatus === "not_found" && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400">
+                      <UserPlus className="w-3.5 h-3.5 shrink-0" />
+                      <span>New customer — please confirm your name and email above to complete your booking</span>
+                    </div>
+                  )}
 
                   <div>
                     <Label htmlFor="custEmail" className="text-xs font-semibold">

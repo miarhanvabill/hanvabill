@@ -316,21 +316,40 @@ export async function createBooking(formData: FormData) {
       let finalStaffId: number | null = null
 
       // Handle customer portal booking (create customer if needed)
-      if (customerName && customerPhone) {
+      if (customerId && !isNaN(Number(customerId)) && Number(customerId) > 0) {
+        finalCustomerId = Number(customerId)
+      } else if (customerName && customerPhone) {
+        const phoneStr = customerPhone.toString().trim()
+        const digits = phoneStr.replace(/\D/g, "")
+        const last10 = digits.length >= 10 ? digits.slice(-10) : digits
+
         const existingCustomer = await sql`
-          SELECT id FROM customers WHERE phone_number = ${customerPhone.toString()} AND tenant_id = ${tenantId}
+          SELECT id, email FROM customers 
+          WHERE tenant_id = ${tenantId}
+            AND (
+              phone_number = ${phoneStr}
+              OR (LENGTH(${last10}) >= 7 AND RIGHT(REGEXP_REPLACE(phone_number, '[^0-9]', '', 'g'), 10) = ${last10})
+            )
+          LIMIT 1
         `
 
         if (existingCustomer.length > 0) {
           finalCustomerId = Number(existingCustomer[0].id)
+          if (customerEmail && !existingCustomer[0].email) {
+            await sql`
+              UPDATE customers 
+              SET email = ${customerEmail.toString().trim()}, updated_at = NOW() 
+              WHERE id = ${finalCustomerId} AND tenant_id = ${tenantId}
+            `.catch(() => {})
+          }
         } else {
           const [newCustomer] = await sql`
             INSERT INTO customers (tenant_id, full_name, phone_number, email, created_at, updated_at)
             VALUES (
               ${tenantId},
-              ${customerName.toString()},
-              ${customerPhone.toString()},
-              ${customerEmail?.toString() || null},
+              ${customerName.toString().trim()},
+              ${customerPhone.toString().trim()},
+              ${customerEmail?.toString().trim() || null},
               NOW(),
               NOW()
             )

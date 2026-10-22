@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -37,6 +38,8 @@ import {
   RefreshCw,
   Filter,
   Volume2,
+  Search,
+  ArrowLeft,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { playNotificationSound } from "@/lib/notification-sound"
@@ -250,14 +253,21 @@ export default function NotificationsPage() {
     <div className="flex-1 flex flex-col min-h-screen bg-slate-50/50">
       <div className="p-6 max-w-7xl mx-auto w-full space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-              <Bell className="w-6 h-6 text-primary" />
-              Notification Center
-            </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              Configure automated WhatsApp, SMS, and Email messaging across all customer lifecycle events.
-            </p>
+          <div className="flex items-center gap-3">
+            <Link href="/manage">
+              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
+                <Bell className="w-6 h-6 text-primary" />
+                Notification Center
+              </h1>
+              <p className="text-sm text-slate-500 mt-0.5">
+                Configure automated WhatsApp, SMS, and Email messaging across all customer lifecycle events.
+              </p>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <Button

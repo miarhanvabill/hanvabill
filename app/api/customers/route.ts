@@ -1,11 +1,30 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getCustomers, getCustomerStats } from "@/app/actions/customers"
+import { getCustomers, getCustomerStats, searchCustomers, getCustomerByPhone } from "@/app/actions/customers"
 import { withTenantAuth } from "@/lib/withTenantAuth"
 
 export const GET = withTenantAuth(async ({ sql, tenantId }, request: NextRequest) => {
   try {
     const { searchParams } = new URL(request.url)
+    const phone = searchParams.get("phone")
+    const search = searchParams.get("search") || searchParams.get("query")
     const includeStats = searchParams.get("stats") === "1"
+
+    if (phone) {
+      const customer = await getCustomerByPhone(phone)
+      return NextResponse.json({
+        success: true,
+        customer,
+      })
+    }
+
+    if (search) {
+      const customers = await searchCustomers(search)
+      return NextResponse.json({
+        success: true,
+        customers,
+        count: customers.length,
+      })
+    }
 
     // The getCustomers function now automatically uses tenant context
     const customers = await getCustomers()

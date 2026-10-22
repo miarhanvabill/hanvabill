@@ -25,191 +25,80 @@ import {
   CheckCircle,
   Play,
   Pause,
+  RefreshCw,
 } from "lucide-react"
 import { formatCurrency } from "@/lib/currency"
-
-interface PaymentReminder {
-  id: string
-  name: string
-  description: string
-  isActive: boolean
-  triggerType: "days_overdue" | "days_before_due" | "amount_threshold"
-  triggerValue: number
-  channels: ("email" | "sms" | "whatsapp")[]
-  template: {
-    subject: string
-    message: string
-    includeInvoice: boolean
-  }
-  schedule: {
-    frequency: "once" | "daily" | "weekly"
-    maxReminders: number
-    stopAfterPayment: boolean
-  }
-  createdAt: string
-  lastTriggered?: string
-  totalSent: number
-  successRate: number
-}
-
-interface ReminderLog {
-  id: string
-  reminderId: string
-  customerName: string
-  invoiceNumber: string
-  amount: number
-  channel: string
-  status: "sent" | "delivered" | "failed" | "opened"
-  sentAt: string
-  responseAt?: string
-}
+import { useToast } from "@/hooks/use-toast"
+import {
+  getPaymentRemindersData,
+  savePaymentReminder,
+  togglePaymentReminderStatus,
+  deletePaymentReminderAction,
+  PaymentReminder,
+  ReminderLog,
+} from "@/app/actions/billing-reminders"
 
 export default function PaymentRemindersPage() {
+  const { toast } = useToast()
   const [reminders, setReminders] = useState<PaymentReminder[]>([])
   const [reminderLogs, setReminderLogs] = useState<ReminderLog[]>([])
   const [selectedReminder, setSelectedReminder] = useState<PaymentReminder | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const res = await getPaymentRemindersData()
+      if (res.success) {
+        setReminders(res.reminders || [])
+        setReminderLogs(res.logs || [])
+        if (res.reminders && res.reminders.length > 0) {
+          setSelectedReminder((prev) => {
+            if (!prev) return res.reminders[0]
+            const match = res.reminders.find((r: any) => r.id === prev.id)
+            return match || res.reminders[0]
+          })
+        }
+      } else {
+        toast({ title: "Notice", description: res.error || "Failed to load reminders", variant: "destructive" })
+      }
+    } catch (err: any) {
+      console.error("Failed to load reminders:", err)
+      toast({ title: "Error", description: "Failed to connect to reminder service", variant: "destructive" })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    // Mock data for payment reminders
-    const mockReminders: PaymentReminder[] = [
-      {
-        id: "1",
-        name: "Overdue Payment Reminder",
-        description: "Send reminder for payments overdue by 7 days",
-        isActive: true,
-        triggerType: "days_overdue",
-        triggerValue: 7,
-        channels: ["email", "sms"],
-        template: {
-          subject: "Payment Overdue - Invoice #{invoice_number}",
-          message:
-            "Dear {customer_name}, your payment of {amount} for invoice #{invoice_number} is now {days_overdue} days overdue. Please make payment at your earliest convenience.",
-          includeInvoice: true,
-        },
-        schedule: {
-          frequency: "weekly",
-          maxReminders: 3,
-          stopAfterPayment: true,
-        },
-        createdAt: "2024-01-15",
-        lastTriggered: "2024-01-25",
-        totalSent: 45,
-        successRate: 78.5,
-      },
-      {
-        id: "2",
-        name: "Payment Due Soon",
-        description: "Gentle reminder 3 days before payment due date",
-        isActive: true,
-        triggerType: "days_before_due",
-        triggerValue: 3,
-        channels: ["email"],
-        template: {
-          subject: "Payment Due Soon - Invoice #{invoice_number}",
-          message:
-            "Hi {customer_name}, this is a friendly reminder that your payment of {amount} for invoice #{invoice_number} is due in {days_until_due} days.",
-          includeInvoice: false,
-        },
-        schedule: {
-          frequency: "once",
-          maxReminders: 1,
-          stopAfterPayment: true,
-        },
-        createdAt: "2024-01-10",
-        lastTriggered: "2024-01-24",
-        totalSent: 23,
-        successRate: 85.2,
-      },
-      {
-        id: "3",
-        name: "High Value Payment Alert",
-        description: "Special reminder for payments above ₹10,000",
-        isActive: false,
-        triggerType: "amount_threshold",
-        triggerValue: 10000,
-        channels: ["email", "whatsapp"],
-        template: {
-          subject: "Important: High Value Payment Due",
-          message:
-            "Dear {customer_name}, we wanted to personally remind you about your upcoming payment of {amount} for invoice #{invoice_number}. Please contact us if you need any assistance.",
-          includeInvoice: true,
-        },
-        schedule: {
-          frequency: "daily",
-          maxReminders: 5,
-          stopAfterPayment: true,
-        },
-        createdAt: "2024-01-12",
-        totalSent: 8,
-        successRate: 92.3,
-      },
-    ]
-
-    const mockLogs: ReminderLog[] = [
-      {
-        id: "1",
-        reminderId: "1",
-        customerName: "Sarah Johnson",
-        invoiceNumber: "INV-2024-001",
-        amount: 2500,
-        channel: "email",
-        status: "delivered",
-        sentAt: "2024-01-25T10:30:00Z",
-        responseAt: "2024-01-25T14:20:00Z",
-      },
-      {
-        id: "2",
-        reminderId: "1",
-        customerName: "Michael Chen",
-        invoiceNumber: "INV-2024-002",
-        amount: 1800,
-        channel: "sms",
-        status: "sent",
-        sentAt: "2024-01-25T10:30:00Z",
-      },
-      {
-        id: "3",
-        reminderId: "2",
-        customerName: "Emily Rodriguez",
-        invoiceNumber: "INV-2024-003",
-        amount: 3200,
-        channel: "email",
-        status: "opened",
-        sentAt: "2024-01-24T09:15:00Z",
-        responseAt: "2024-01-24T11:45:00Z",
-      },
-    ]
-
-    setReminders(mockReminders)
-    setReminderLogs(mockLogs)
-    setLoading(false)
+    loadData()
   }, [])
 
   const handleCreateReminder = () => {
     const newReminder: PaymentReminder = {
-      id: Date.now().toString(),
-      name: "New Reminder",
-      description: "Custom payment reminder",
+      id: "new-" + Date.now().toString(),
+      name: "New Payment Reminder",
+      description: "Custom automated reminder rule",
       isActive: true,
       triggerType: "days_overdue",
       triggerValue: 7,
-      channels: ["email"],
+      channels: ["whatsapp"],
       template: {
         subject: "Payment Reminder - Invoice #{invoice_number}",
-        message: "Dear {customer_name}, please pay your outstanding amount of {amount}.",
+        message: "Dear {customer_name}, please pay your outstanding amount of {amount} for invoice #{invoice_number}.",
         includeInvoice: true,
       },
       schedule: {
-        frequency: "once",
-        maxReminders: 1,
+        frequency: "weekly",
+        maxReminders: 3,
         stopAfterPayment: true,
       },
       createdAt: new Date().toISOString().split("T")[0],
       totalSent: 0,
-      successRate: 0,
+      successRate: 100,
     }
 
     setReminders([...reminders, newReminder])
@@ -217,29 +106,79 @@ export default function PaymentRemindersPage() {
     setIsEditing(true)
   }
 
-  const handleSaveReminder = () => {
-    if (selectedReminder) {
-      const updatedReminders = reminders.map((reminder) =>
-        reminder.id === selectedReminder.id ? selectedReminder : reminder,
-      )
-      setReminders(updatedReminders)
-      setIsEditing(false)
+  const handleSaveReminder = async () => {
+    if (!selectedReminder) return
+
+    if (!selectedReminder.name.trim()) {
+      toast({ title: "Name Required", description: "Please enter a reminder name", variant: "destructive" })
+      return
+    }
+
+    setSaving(true)
+    try {
+      const res = await savePaymentReminder(selectedReminder)
+      if (res.success) {
+        toast({ title: "Saved", description: `"${selectedReminder.name}" saved successfully to database.` })
+        setIsEditing(false)
+        await loadData()
+      } else {
+        toast({ title: "Error", description: res.error || "Failed to save reminder", variant: "destructive" })
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message || "Failed to save reminder", variant: "destructive" })
+    } finally {
+      setSaving(false)
     }
   }
 
-  const handleDeleteReminder = (reminderId: string) => {
-    setReminders(reminders.filter((reminder) => reminder.id !== reminderId))
+  const handleDeleteReminder = async (reminderId: string) => {
+    if (!confirm("Are you sure you want to delete this reminder rule?")) return
+
+    // Optimistic removal
+    setReminders((prev) => prev.filter((r) => r.id !== reminderId))
     if (selectedReminder?.id === reminderId) {
       setSelectedReminder(null)
       setIsEditing(false)
     }
+
+    try {
+      const res = await deletePaymentReminderAction(reminderId)
+      if (res.success) {
+        toast({ title: "Deleted", description: "Reminder deleted successfully." })
+      } else {
+        await loadData()
+        toast({ title: "Error", description: res.error || "Failed to delete reminder", variant: "destructive" })
+      }
+    } catch (err) {
+      await loadData()
+    }
   }
 
-  const handleToggleReminder = (reminderId: string) => {
-    const updatedReminders = reminders.map((reminder) =>
-      reminder.id === reminderId ? { ...reminder, isActive: !reminder.isActive } : reminder,
+  const handleToggleReminder = async (reminderId: string) => {
+    const target = reminders.find((r) => r.id === reminderId)
+    if (!target) return
+
+    // Optimistic toggle
+    setReminders((prev) =>
+      prev.map((r) => (r.id === reminderId ? { ...r, isActive: !r.isActive } : r))
     )
-    setReminders(updatedReminders)
+    if (selectedReminder?.id === reminderId) {
+      setSelectedReminder((prev) => (prev ? { ...prev, isActive: !prev.isActive } : null))
+    }
+
+    try {
+      const res = await togglePaymentReminderStatus(reminderId, target.isActive)
+      if (res.success) {
+        toast({
+          title: res.isActive ? "Activated" : "Paused",
+          description: `Reminder "${target.name}" is now ${res.isActive ? "active" : "paused"}.`,
+        })
+      } else {
+        await loadData()
+      }
+    } catch (err) {
+      await loadData()
+    }
   }
 
   const getStatusColor = (status: string) => {
@@ -286,9 +225,21 @@ export default function PaymentRemindersPage() {
       <PageHeader
         title="Payment Reminders"
         subtitle="Automate payment reminders to improve cash flow and reduce overdue payments"
+        showBackButton
+        backHref="/manage"
         action={
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setShowLogs(true)} className="gap-2 bg-transparent">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={loadData}
+              disabled={loading}
+              title="Refresh Reminders"
+              className="bg-white h-9 w-9"
+            >
+              <RefreshCw className={`w-4 h-4 text-slate-600 ${loading ? "animate-spin text-primary" : ""}`} />
+            </Button>
+            <Button variant="outline" onClick={() => setShowLogs(true)} className="gap-2 bg-white">
               <Clock className="w-4 h-4" />
               View Logs
             </Button>
@@ -467,9 +418,9 @@ export default function PaymentRemindersPage() {
                             <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>
                               Cancel
                             </Button>
-                            <Button size="sm" onClick={handleSaveReminder} className="gap-2">
-                              <CheckCircle className="w-4 h-4" />
-                              Save
+                            <Button size="sm" onClick={handleSaveReminder} disabled={saving} className="gap-2">
+                              {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                              {saving ? "Saving..." : "Save"}
                             </Button>
                           </div>
                         ) : (

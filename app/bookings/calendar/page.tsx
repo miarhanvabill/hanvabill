@@ -15,12 +15,16 @@ import {
   User,
   Package,
   CheckCircle,
+  CheckCircle2,
   XCircle,
   Plus,
   Sparkles,
   Phone,
   ArrowRight,
+  UserCheck,
+  UserPlus,
 } from "lucide-react"
+import { useCustomerLookup } from "@/hooks/use-customer-lookup"
 import {
   getCalendarBookings,
   updateBookingStatus,
@@ -102,6 +106,7 @@ export default function BookingCalendarPage() {
     resourceId: "",
     date: format(new Date(), "yyyy-MM-dd"),
     bookingTime: "10:00",
+    customerId: null as number | null,
     customerName: "",
     customerPhone: "",
     customerEmail: "",
@@ -109,6 +114,25 @@ export default function BookingCalendarPage() {
     totalAmount: "",
     notes: "",
     status: "confirmed",
+  })
+
+  // Customer phone lookup hook for quick booking
+  const customerLookup = useCustomerLookup({
+    onCustomerFound: (cust) => {
+      setQuickBookForm((prev) => ({
+        ...prev,
+        customerId: cust.id,
+        customerName: cust.full_name || prev.customerName,
+        customerPhone: cust.phone_number || prev.customerPhone,
+        customerEmail: cust.email || prev.customerEmail,
+      }))
+    },
+    onClear: () => {
+      setQuickBookForm((prev) => ({
+        ...prev,
+        customerId: null,
+      }))
+    },
   })
 
   // Live time indicator position (in pixels from top of grid)
@@ -280,12 +304,14 @@ export default function BookingCalendarPage() {
     const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`
     const isResource = groupBy === "resource"
 
+    customerLookup.clearCustomer()
     setQuickBookForm({
       staffId: !isResource && entity.id !== -1 ? entity.id.toString() : "",
       staffName: !isResource ? entity.name : "",
       resourceId: isResource && entity.id !== -1 ? entity.id.toString() : "",
       date: format(currentDate, "yyyy-MM-dd"),
       bookingTime: timeStr,
+      customerId: null,
       customerName: "",
       customerPhone: "",
       customerEmail: "",
@@ -348,6 +374,9 @@ export default function BookingCalendarPage() {
     try {
       const selectedSvc = servicesList.find((s) => s.id.toString() === quickBookForm.serviceId)
       const formData = new FormData()
+      if (quickBookForm.customerId) {
+        formData.append("customerId", quickBookForm.customerId.toString())
+      }
       formData.append("customerName", quickBookForm.customerName.trim())
       formData.append("customerPhone", quickBookForm.customerPhone.trim())
       if (quickBookForm.customerEmail.trim()) {
@@ -952,30 +981,125 @@ export default function BookingCalendarPage() {
           </DialogHeader>
 
           <form onSubmit={handleQuickBookSubmit} className="space-y-3.5 pt-2">
-            <div>
+            <div className="relative">
               <Label htmlFor="qb-name" className="text-xs">Customer Name *</Label>
               <Input
                 id="qb-name"
                 placeholder="e.g. Rahul Sharma"
                 value={quickBookForm.customerName}
-                onChange={(e) => setQuickBookForm({ ...quickBookForm, customerName: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setQuickBookForm((prev) => ({ ...prev, customerName: val }))
+                  customerLookup.handleNameChange(val)
+                }}
+                onBlur={customerLookup.handleNameBlur}
                 className="h-9 text-sm"
                 required
               />
+              {/* Name suggestions dropdown */}
+              {customerLookup.showNameSuggestions && customerLookup.suggestions.length > 0 && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                  <div className="p-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/50 border-b">
+                    Matching Customers ({customerLookup.suggestions.length})
+                  </div>
+                  {customerLookup.suggestions.map((cust) => (
+                    <button
+                      key={cust.id}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        customerLookup.selectCustomer(cust)
+                      }}
+                      className="w-full text-left p-2.5 hover:bg-accent/60 flex items-center justify-between gap-2 border-b last:border-0 transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 text-primary" />
+                          <span>{cust.full_name}</span>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground flex items-center gap-2 mt-0.5">
+                          <span className="font-mono">{cust.phone_number}</span>
+                          {cust.email && <span className="truncate max-w-[130px]">• {cust.email}</span>}
+                        </div>
+                      </div>
+                      <span className="text-[10px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 px-1.5 py-0.5 rounded font-medium border border-emerald-200 dark:border-emerald-800 shrink-0">
+                        {cust.total_bookings ? `${cust.total_bookings} visits` : "Found"}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label htmlFor="qb-phone" className="text-xs">Phone Number *</Label>
-                <Input
-                  id="qb-phone"
-                  placeholder="9876543210"
-                  value={quickBookForm.customerPhone}
-                  onChange={(e) => setQuickBookForm({ ...quickBookForm, customerPhone: e.target.value })}
-                  className="h-9 text-sm"
-                  required
-                />
+              <div className="relative">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="qb-phone" className="text-xs">Phone Number *</Label>
+                  {customerLookup.isSearching && (
+                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                      <Loader2 className="w-3 h-3 animate-spin text-primary" />
+                      Searching...
+                    </span>
+                  )}
+                </div>
+                <div className="relative mt-1">
+                  <Input
+                    id="qb-phone"
+                    placeholder="9876543210"
+                    value={quickBookForm.customerPhone}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setQuickBookForm((prev) => ({ ...prev, customerPhone: val }))
+                      customerLookup.handlePhoneChange(val)
+                    }}
+                    onBlur={() => customerLookup.handlePhoneBlur(quickBookForm.customerPhone)}
+                    className="h-9 text-sm pr-7"
+                    required
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                    {customerLookup.isSearching ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                    ) : customerLookup.lookupStatus === "found" ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Phone suggestions dropdown */}
+                {customerLookup.showPhoneSuggestions && customerLookup.suggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                    <div className="p-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/50 border-b">
+                      Matching Customers ({customerLookup.suggestions.length})
+                    </div>
+                    {customerLookup.suggestions.map((cust) => (
+                      <button
+                        key={cust.id}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          customerLookup.selectCustomer(cust)
+                        }}
+                        className="w-full text-left p-2.5 hover:bg-accent/60 flex items-center justify-between gap-2 border-b last:border-0 transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                            <User className="w-3.5 h-3.5 text-primary" />
+                            <span>{cust.full_name}</span>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground flex items-center gap-2 mt-0.5">
+                            <span className="font-mono font-medium text-foreground">{cust.phone_number}</span>
+                            {cust.email && <span className="truncate max-w-[100px]">• {cust.email}</span>}
+                          </div>
+                        </div>
+                        <span className="text-[10px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 px-1.5 py-0.5 rounded font-medium border border-emerald-200 dark:border-emerald-800 shrink-0">
+                          {cust.total_bookings ? `${cust.total_bookings} visits` : "Found"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
+
               <div>
                 <Label htmlFor="qb-email" className="text-xs">Email (Optional)</Label>
                 <Input
@@ -984,10 +1108,39 @@ export default function BookingCalendarPage() {
                   placeholder="client@mail.com"
                   value={quickBookForm.customerEmail}
                   onChange={(e) => setQuickBookForm({ ...quickBookForm, customerEmail: e.target.value })}
-                  className="h-9 text-sm"
+                  className="h-9 text-sm mt-1"
                 />
               </div>
             </div>
+
+            {/* Customer Lookup Status Banner */}
+            {customerLookup.lookupStatus === "found" && customerLookup.matchedCustomer && (
+              <div className="flex items-center justify-between p-2 rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="truncate">
+                    Existing Customer: <strong className="font-semibold">{customerLookup.matchedCustomer.full_name}</strong>
+                    {customerLookup.matchedCustomer.total_bookings ? ` • ${customerLookup.matchedCustomer.total_bookings} previous bookings` : ""}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={customerLookup.clearCustomer}
+                  className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
+                >
+                  Clear
+                </Button>
+              </div>
+            )}
+
+            {customerLookup.lookupStatus === "not_found" && (
+              <div className="flex items-center gap-1.5 text-[11px] text-blue-600 dark:text-blue-400">
+                <UserPlus className="w-3.5 h-3.5 shrink-0" />
+                <span>New customer detected — details will be registered on booking</span>
+              </div>
+            )}
 
             <div>
               <Label htmlFor="qb-service" className="text-xs">Select Service *</Label>

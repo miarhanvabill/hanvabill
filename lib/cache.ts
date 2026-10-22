@@ -79,17 +79,26 @@ export async function cacheFetch<T>(
     return fetchFn();
   }
 
+  let cached: T | null = null;
   try {
-    const cached = await cacheGet<T>(key)
-    if (cached) return cached
-
-    const fresh = await fetchFn()
-    await cacheSet(key, fresh, ttlSeconds)
-    return fresh
+    cached = await cacheGet<T>(key);
   } catch (error) {
-    console.warn(`[Cache] cacheFetch error for ${key}, falling back to fetchFn:`, error);
-    return fetchFn();
+    console.warn(`[Cache] cacheGet error for ${key}:`, error);
   }
+
+  if (cached !== null && cached !== undefined) {
+    return cached;
+  }
+
+  const fresh = await fetchFn();
+
+  try {
+    await cacheSet(key, fresh, ttlSeconds);
+  } catch (error) {
+    console.warn(`[Cache] cacheSet error for ${key}:`, error);
+  }
+
+  return fresh;
 }
 
 export default redis

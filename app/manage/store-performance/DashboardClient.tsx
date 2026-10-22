@@ -1,10 +1,14 @@
 "use client"
 
-import React from "react"
+import React, { useState } from "react"
 import { PageHeader } from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { DollarSign, Users, ShoppingBag, TrendingUp } from "lucide-react"
+import { DollarSign, Users, ShoppingBag, TrendingUp, RefreshCw } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { ReportDateSelector } from "@/components/reports/report-date-selector"
+import { parseReportDates, getDefaultCustomDates } from "@/lib/report-dates"
+import { getStorePerformanceData } from "@/app/actions/store-performance"
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -14,7 +18,62 @@ import {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 export default function DashboardClient({ initialData }: { initialData: any }) {
-  const { kpis, dailyStats, categoryDistribution, leaderboards, quarterlyResults } = initialData
+  const [data, setData] = useState(initialData)
+  const [dateRange, setDateRange] = useState("Last 30 Days")
+  const defaultCustom = getDefaultCustomDates()
+  const [customStartDate, setCustomStartDate] = useState(defaultCustom.startDate)
+  const [customEndDate, setCustomEndDate] = useState(defaultCustom.endDate)
+  const [loading, setLoading] = useState(false)
+
+  const handleFetch = async (range: string, start?: string, end?: string) => {
+    const s = start !== undefined ? start : customStartDate
+    const e = end !== undefined ? end : customEndDate
+    const { startIso, endIso } = parseReportDates(range, s, e)
+
+    setLoading(true)
+    try {
+      const res = await getStorePerformanceData({ startDate: startIso, endDate: endIso })
+      if (res.success && res.data) {
+        setData(res.data)
+      }
+    } catch (err) {
+      console.error("Failed to fetch store performance data:", err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDateRangeChange = (newRange: string) => {
+    setDateRange(newRange)
+    handleFetch(newRange)
+  }
+
+  const handleCustomDateChange = (start: string, end: string) => {
+    setCustomStartDate(start)
+    setCustomEndDate(end)
+    handleFetch("Custom", start, end)
+  }
+
+  const kpis = data?.kpis || {
+    revenue: 0,
+    totalVisits: 0,
+    avgCustomerRevenue: 0,
+    totalUniqueCustomers: 0,
+    revenueGrowth: "+0% vs Previous Period",
+    visitsGrowth: "+0% vs Previous Period",
+    avgRevenueGrowth: "+0% vs Previous Period",
+    customersGrowth: "+0% vs Previous Period",
+  }
+  const dailyStats = data?.dailyStats || []
+  const categoryDistribution = data?.categoryDistribution || []
+  const leaderboards = data?.leaderboards || {
+    topServices: [],
+    topCustomers: [],
+    topStaff: [],
+    topProducts: [],
+    topPackages: [],
+  }
+  const quarterlyResults = data?.quarterlyResults || []
 
   return (
     <div className="space-y-6">
@@ -23,9 +82,31 @@ export default function DashboardClient({ initialData }: { initialData: any }) {
         subtitle="Comprehensive analytics and performance metrics."
         showBackButton
         backHref="/manage"
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <ReportDateSelector
+              dateRange={dateRange}
+              onDateRangeChange={handleDateRangeChange}
+              customStartDate={customStartDate}
+              customEndDate={customEndDate}
+              onCustomDateChange={handleCustomDateChange}
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => handleFetch(dateRange)}
+              disabled={loading}
+              title="Refresh Performance Data"
+              className="h-9 w-9 bg-white"
+            >
+              <RefreshCw className={`h-4 w-4 text-slate-600 ${loading ? "animate-spin text-primary" : ""}`} />
+            </Button>
+          </div>
+        }
       />
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className={`transition-opacity duration-200 ${loading ? "opacity-60 pointer-events-none" : "opacity-100"}`}>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
@@ -188,6 +269,7 @@ export default function DashboardClient({ initialData }: { initialData: any }) {
             </CardContent>
           </Card>
         ))}
+      </div>
       </div>
     </div>
   )

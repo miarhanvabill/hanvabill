@@ -175,6 +175,9 @@ export async function searchCustomers(query: string): Promise<Customer[]> {
     }
 
     const searchQuery = query.trim()
+    const digits = searchQuery.replace(/\D/g, "")
+    const last10 = digits.length >= 10 ? digits.slice(-10) : digits
+
     return await cacheFetch(
       `customers:search:${tenantId}:${searchQuery.toLowerCase()}`,
       async () => {
@@ -204,12 +207,23 @@ export async function searchCustomers(query: string): Promise<Customer[]> {
           FROM customers c
           LEFT JOIN bookings b ON c.id = b.customer_id
           WHERE c.tenant_id = ${tenantId}
-            AND (c.full_name ILIKE ${`%${searchQuery}%`} 
-                 OR c.phone_number ILIKE ${`%${searchQuery}%`}
-                 OR c.email ILIKE ${`%${searchQuery}%`})
+            AND (
+              c.full_name ILIKE ${`%${searchQuery}%`} 
+              OR c.phone_number ILIKE ${`%${searchQuery}%`}
+              OR c.email ILIKE ${`%${searchQuery}%`}
+              ${digits.length >= 3 ? sql`OR REGEXP_REPLACE(c.phone_number, '[^0-9]', '', 'g') ILIKE ${`%${digits}%`}` : sql``}
+              ${digits.length >= 7 ? sql`OR RIGHT(REGEXP_REPLACE(c.phone_number, '[^0-9]', '', 'g'), 10) = ${last10}` : sql``}
+            )
           GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.tags, c.preferred_staff_id,
             c.referred_by_customer_id, c.wallet_balance, c.created_at, c.updated_at
-          ORDER BY c.full_name
+          ORDER BY 
+            CASE 
+              WHEN c.phone_number = ${searchQuery} THEN 1
+              WHEN ${digits.length >= 7 ? sql`RIGHT(REGEXP_REPLACE(c.phone_number, '[^0-9]', '', 'g'), 10) = ${last10}` : sql`FALSE`} THEN 2
+              WHEN c.full_name ILIKE ${searchQuery + '%'} THEN 3
+              ELSE 4
+            END,
+            c.created_at DESC
           LIMIT 20
         `
 
@@ -224,7 +238,88 @@ export async function searchCustomers(query: string): Promise<Customer[]> {
           referred_by_customer_id: customer.referred_by_customer_id ? Number(customer.referred_by_customer_id) : null,
         })) as Customer[]
       },
-      180,
+      60,
+    )
+  })
+}
+
+export async function getCustomerByPhone(phone: string): Promise<Customer | null> {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    if (!phone || phone.trim().length === 0) {
+      return null
+    }
+
+    const trimmed = phone.trim()
+    const digits = trimmed.replace(/\D/g, "")
+    if (digits.length < 5 && trimmed.length < 5) {
+      return null
+    }
+
+    const last10 = digits.length >= 10 ? digits.slice(-10) : digits
+
+    return await cacheFetch(
+      `customer:phone:${tenantId}:${last10 || trimmed}`,
+      async () => {
+        const customers = await sql`
+          SELECT 
+            c.id,
+            c.full_name,
+            c.phone_number,
+            c.email,
+            c.address,
+            c.gender,
+            c.date_of_birth,
+            c.date_of_anniversary,
+            c.sms_number,
+            c.code,
+            c.instagram_handle,
+            c.lead_source,
+            c.notes,
+            c.tags,
+            c.preferred_staff_id,
+            c.referred_by_customer_id,
+            c.wallet_balance,
+            c.created_at,
+            c.updated_at,
+            COUNT(b.id) as total_bookings,
+            COALESCE(SUM(CASE WHEN b.status IN ('completed', 'confirmed') THEN b.total_amount ELSE 0 END), 0) as total_spent
+          FROM customers c
+          LEFT JOIN bookings b ON c.id = b.customer_id
+          WHERE c.tenant_id = ${tenantId}
+            AND (
+              c.phone_number = ${trimmed}
+              OR c.phone_number = ${digits}
+              OR c.phone_number ILIKE ${'%' + trimmed + '%'}
+              OR c.phone_number ILIKE ${'%' + last10 + '%'}
+              OR (LENGTH(${last10}) >= 7 AND RIGHT(REGEXP_REPLACE(c.phone_number, '[^0-9]', '', 'g'), 10) = ${last10})
+            )
+          GROUP BY c.id, c.full_name, c.phone_number, c.email, c.address, c.gender, c.date_of_birth, c.date_of_anniversary, c.sms_number, c.code, c.instagram_handle, c.lead_source, c.notes, c.tags, c.preferred_staff_id,
+            c.referred_by_customer_id, c.wallet_balance, c.created_at, c.updated_at
+          ORDER BY 
+            CASE 
+              WHEN c.phone_number = ${trimmed} THEN 1
+              WHEN (LENGTH(${last10}) >= 7 AND RIGHT(REGEXP_REPLACE(c.phone_number, '[^0-9]', '', 'g'), 10) = ${last10}) THEN 2
+              ELSE 3
+            END,
+            c.created_at DESC
+          LIMIT 1
+        `
+
+        if (customers.length === 0) return null
+
+        const customer = customers[0]
+        return {
+          ...customer,
+          id: Number(customer.id) || 0,
+          total_bookings: Number(customer.total_bookings) || 0,
+          total_spent: Number(customer.total_spent) || 0,
+          wallet_balance: Number(customer.wallet_balance) || 0,
+          tags: typeof customer.tags === "string" ? JSON.parse(customer.tags) : (customer.tags || []),
+          preferred_staff_id: customer.preferred_staff_id ? Number(customer.preferred_staff_id) : null,
+          referred_by_customer_id: customer.referred_by_customer_id ? Number(customer.referred_by_customer_id) : null,
+        } as Customer
+      },
+      60,
     )
   })
 }

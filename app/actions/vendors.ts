@@ -30,13 +30,48 @@ async function ensureVendorsSchema(sql: any) {
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
-      ALTER TABLE vendors ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100);
-      ALTER TABLE vendors ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active';
-      ALTER TABLE vendors ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
-      ALTER TABLE vendors ADD COLUMN IF NOT EXISTS contact_person VARCHAR(255);
-      ALTER TABLE vendors ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
-      ALTER TABLE vendors ADD COLUMN IF NOT EXISTS email VARCHAR(255);
-      ALTER TABLE vendors ADD COLUMN IF NOT EXISTS address TEXT;
+    `
+  } catch (err) {
+    console.warn("[ensureVendorsSchema] Table check notice:", err)
+  }
+
+  const alterStatements = [
+    sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100)`,
+    sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'active'`,
+    sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`,
+    sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS contact_person VARCHAR(255)`,
+    sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS phone VARCHAR(50)`,
+    sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS email VARCHAR(255)`,
+    sql`ALTER TABLE vendors ADD COLUMN IF NOT EXISTS address TEXT`,
+  ]
+
+  for (const stmt of alterStatements) {
+    try {
+      await stmt
+    } catch {}
+  }
+
+  // Safely migrate is_active from text/varchar to boolean if needed
+  try {
+    await sql`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'vendors' 
+            AND column_name = 'is_active' 
+            AND data_type IN ('character varying', 'text', 'character')
+        ) THEN
+          ALTER TABLE vendors ALTER COLUMN is_active DROP DEFAULT;
+          ALTER TABLE vendors ALTER COLUMN is_active TYPE BOOLEAN USING (
+            CASE 
+              WHEN LOWER(TRIM(is_active::text)) IN ('false', '0', 'f', 'inactive', 'no') THEN false 
+              ELSE true 
+            END
+          );
+          ALTER TABLE vendors ALTER COLUMN is_active SET DEFAULT true;
+        END IF;
+      END $$;
     `
   } catch {}
 }
@@ -54,7 +89,7 @@ export async function getVendors(): Promise<Vendor[]> {
           COALESCE(phone, '') as phone,
           email,
           address,
-          COALESCE(status, CASE WHEN is_active = false THEN 'inactive' ELSE 'active' END) as status,
+          COALESCE(status, CASE WHEN is_active::text IN ('false', '0', 'f', 'inactive', 'no') THEN 'inactive' ELSE 'active' END) as status,
           created_at,
           tenant_id
         FROM vendors 
@@ -198,8 +233,19 @@ export async function deleteVendor(id: number) {
 export async function getVendorById(id: number): Promise<Vendor | null> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureVendorsSchema(sql)
       const result = await sql`
-        SELECT * FROM vendors 
+        SELECT 
+          id,
+          name,
+          COALESCE(contact_person, '') as contact_person,
+          COALESCE(phone, '') as phone,
+          email,
+          address,
+          COALESCE(status, CASE WHEN is_active::text IN ('false', '0', 'f', 'inactive', 'no') THEN 'inactive' ELSE 'active' END) as status,
+          created_at,
+          tenant_id
+        FROM vendors 
         WHERE id = ${id} AND tenant_id = ${tenantId}
       `
 

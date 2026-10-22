@@ -39,7 +39,28 @@ export function PageHeader({
   const isManageSubpage = pathname ? pathname.startsWith("/manage/") && pathname !== "/manage" : false
   const isReportsSubpage = pathname ? pathname.startsWith("/reports/") && pathname !== "/reports" : false
   const isBillingSubpage = pathname ? pathname.startsWith("/billing/") && pathname !== "/billing" : false
-  const isManageLinkedPage = pathname === "/user-management" || pathname === "/attendance"
+
+  const manageLinkedPaths = [
+    "/user-management",
+    "/attendance",
+    "/services",
+    "/todos",
+    "/billing/reminders",
+    "/billing/templates",
+    "/billing/advanced-reports",
+    "/cash-registers",
+    "/invoices",
+    "/expenses",
+    "/enquiry",
+    "/appointments",
+    "/university",
+    "/forms",
+    "/reviews",
+    "/notifications",
+  ]
+  const isManageLinkedPage = pathname
+    ? manageLinkedPaths.some((p) => pathname === p || pathname.startsWith(p + "/"))
+    : false
 
   // If showBackButton is explicitly passed (boolean), respect it; otherwise auto-enable for manage/reports/billing subpages
   const shouldShowBack = showBackButton !== undefined ? showBackButton : (isManageSubpage || isReportsSubpage || isBillingSubpage || isManageLinkedPage)

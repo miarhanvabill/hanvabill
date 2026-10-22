@@ -25,6 +25,26 @@ export interface NotificationPreference {
   whatsapp_enabled: boolean
 }
 
+async function ensureNotificationTables(sql: any) {
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS notification_preferences (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id VARCHAR(255) NOT NULL,
+        event_type VARCHAR(100) NOT NULL,
+        email_enabled BOOLEAN DEFAULT true,
+        sms_enabled BOOLEAN DEFAULT true,
+        whatsapp_enabled BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (tenant_id, event_type)
+      )
+    `
+  } catch (err) {
+    // Ignore error if table exists or permission issues
+  }
+}
+
 export async function getNotificationLogs() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
@@ -59,6 +79,7 @@ export async function getNotificationLogs() {
 export async function getNotificationPreferences() {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureNotificationTables(sql)
       const preferences = await sql`
         SELECT *
         FROM notification_preferences
@@ -75,6 +96,7 @@ export async function getNotificationPreferences() {
 export async function saveNotificationPreferences(preferences: NotificationPreference[]) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      await ensureNotificationTables(sql)
       for (const pref of preferences) {
         await sql`
           INSERT INTO notification_preferences (
