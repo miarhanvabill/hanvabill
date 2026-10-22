@@ -12,7 +12,8 @@ import { triggerWhatsAppAutomation, interpolateTemplate } from "@/lib/whatsapp-a
 import { getTenantWhatsAppConfig } from "@/lib/whatsapp-automations";
 import { sendViaHanvaOldApi } from "@/lib/whatsapp";
 import { sendFonadaCampaign } from "@/lib/fonada-ai";
-import { createMetaTemplateSubmission, CANONICAL_SALON_TEMPLATES } from "@/app/actions/whatsapp-templates";
+import { createMetaTemplateSubmission } from "@/app/actions/whatsapp-templates";
+import { CANONICAL_SALON_TEMPLATES } from "@/lib/whatsapp-templates-constants";
 
 export interface SmartCampaignRule extends SmartCampaignRuleDraft {
   id: string;

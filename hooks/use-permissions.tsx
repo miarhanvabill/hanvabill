@@ -21,6 +21,7 @@ const ROUTE_PERMISSION_MAP: { prefix: string; permissions: string[] }[] = [
   { prefix: "/staff", permissions: ["staff.view", "staff.create", "staff.edit"] },
   { prefix: "/inventory", permissions: ["inventory.view", "inventory.manage"] },
   { prefix: "/reports", permissions: ["reports.view", "reports.financial", "reports.advanced"] },
+  { prefix: "/manage/whatsapp-config", permissions: ["settings.view", "settings.manage", "marketing.view", "marketing.manage", "customers.view"] },
   { prefix: "/manage", permissions: ["settings.view", "settings.manage", "users.view", "users.roles"] },
   { prefix: "/reviews", permissions: ["reviews.view", "reviews.manage"] },
   { prefix: "/analytics", permissions: ["dashboard.analytics", "reports.view"] },
