@@ -96,6 +96,7 @@ async function ensureWhatsAppSchema(sql: any, tenantId: string) {
       await sql`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS tenant_id TEXT`
       await sql`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS trigger_type VARCHAR(50)`
       await sql`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS msg_id VARCHAR(100)`
+      await sql`ALTER TABLE whatsapp_messages DROP CONSTRAINT IF EXISTS whatsapp_messages_message_type_check`
     } catch {}
   } catch (e) {
     console.error("ensureWhatsAppSchema error:", e)
@@ -599,15 +600,32 @@ export async function sendInteractiveChatButtons(params: {
         if (cust.length > 0) customerId = cust[0].id
       }
 
-      await sql`
-        INSERT INTO whatsapp_messages (
-          tenant_id, tenant_key, customer_id, phone_number, message_type,
-          message_content, direction, status, msg_id, created_at
-        ) VALUES (
-          ${tenantId}, ${tenantKey || null}, ${customerId || null}, ${safePhone}, 'interactive',
-          ${messageContent}, 'outbound', ${status}, ${fonadaRes.messageId || null}, NOW()
-        )
-      `
+      try {
+        await sql`ALTER TABLE whatsapp_messages DROP CONSTRAINT IF EXISTS whatsapp_messages_message_type_check`
+      } catch {}
+
+      try {
+        await sql`
+          INSERT INTO whatsapp_messages (
+            tenant_id, tenant_key, customer_id, phone_number, message_type,
+            message_content, direction, status, msg_id, trigger_type, created_at
+          ) VALUES (
+            ${tenantId}, ${tenantKey || null}, ${customerId || null}, ${safePhone}, 'interactive',
+            ${messageContent}, 'outbound', ${status}, ${fonadaRes.messageId || null}, 'interactive', NOW()
+          )
+        `
+      } catch (insertErr) {
+        // Fallback to message_type 'text' with trigger_type 'interactive' if constraint still active
+        await sql`
+          INSERT INTO whatsapp_messages (
+            tenant_id, tenant_key, customer_id, phone_number, message_type,
+            message_content, direction, status, msg_id, trigger_type, created_at
+          ) VALUES (
+            ${tenantId}, ${tenantKey || null}, ${customerId || null}, ${safePhone}, 'text',
+            ${messageContent}, 'outbound', ${status}, ${fonadaRes.messageId || null}, 'interactive', NOW()
+          )
+        `
+      }
 
       if (!fonadaRes.success) {
         const err = (fonadaRes.error || "").toLowerCase()
