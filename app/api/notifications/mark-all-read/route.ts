@@ -4,22 +4,31 @@ import { withTenantAuth } from "@/lib/withTenantAuth"
 export async function POST(request: NextRequest) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
-      // Dismiss all existing WhatsApp automation logs
       await sql`
-        INSERT INTO notification_dismissals (tenant_id, item_type, item_id, dismissed_at)
-        SELECT ${tenantId}, 'wa', wal.id::text, NOW()
-        FROM whatsapp_automation_logs wal
-        WHERE wal.tenant_id = ${tenantId}::text
-        ON CONFLICT (tenant_id, item_type, item_id) DO NOTHING
+        CREATE TABLE IF NOT EXISTS notification_reads (
+          tenant_id VARCHAR(100) NOT NULL,
+          notification_id VARCHAR(100) NOT NULL,
+          read_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (tenant_id, notification_id)
+        )
       `.catch(() => {})
 
-      // Dismiss all existing booking notifications
+      // Mark all existing WhatsApp automation logs as read
       await sql`
-        INSERT INTO notification_dismissals (tenant_id, item_type, item_id, dismissed_at)
-        SELECT ${tenantId}, 'booking', b.id::text, NOW()
+        INSERT INTO notification_reads (tenant_id, notification_id, read_at)
+        SELECT ${tenantId}::text, wal.id::text || '-wa', NOW()
+        FROM whatsapp_automation_logs wal
+        WHERE wal.tenant_id = ${tenantId}::text
+        ON CONFLICT (tenant_id, notification_id) DO UPDATE SET read_at = NOW()
+      `.catch(() => {})
+
+      // Mark all existing booking notifications as read
+      await sql`
+        INSERT INTO notification_reads (tenant_id, notification_id, read_at)
+        SELECT ${tenantId}::text, b.id::text || '-booking', NOW()
         FROM bookings b
         WHERE b.tenant_id = ${tenantId}
-        ON CONFLICT (tenant_id, item_type, item_id) DO NOTHING
+        ON CONFLICT (tenant_id, notification_id) DO UPDATE SET read_at = NOW()
       `.catch(() => {})
 
       // Mark legacy notifications table as read

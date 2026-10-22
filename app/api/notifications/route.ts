@@ -20,6 +20,26 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(result[0] || { total: 0, sent: 0, failed: 0, skipped: 0 })
       }
 
+      // Ensure notification_reads & notification_dismissals tables exist
+      await sql`
+        CREATE TABLE IF NOT EXISTS notification_reads (
+          tenant_id VARCHAR(100) NOT NULL,
+          notification_id VARCHAR(100) NOT NULL,
+          read_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (tenant_id, notification_id)
+        )
+      `.catch((err: any) => console.warn("Notice: notification_reads table check:", err?.message))
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS notification_dismissals (
+          tenant_id VARCHAR(100) NOT NULL,
+          item_type VARCHAR(50) NOT NULL,
+          item_id VARCHAR(50) NOT NULL,
+          dismissed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (tenant_id, item_type, item_id)
+        )
+      `.catch((err: any) => console.warn("Notice: notification_dismissals table check:", err?.message))
+
       // UNION: WA automation logs + recent booking events
       // Filtering out any that exist in notification_dismissals
       const rows = await sql`
@@ -41,14 +61,15 @@ export async function GET(request: NextRequest) {
             wal.message_content
           ) as message,
           wal.status,
-          false as is_read,
-          wal.sent_at as created_at,
+          (nr.read_at IS NOT NULL) as is_read,
+          GREATEST(0, EXTRACT(EPOCH FROM (NOW() - COALESCE(wal.sent_at, wal.created_at, NOW())))::int) as age_seconds,
           c.full_name as customer_name,
           wal.recipient_phone
         FROM whatsapp_automation_logs wal
         LEFT JOIN customers c ON wal.customer_id = c.id AND c.tenant_id = ${tenantId}
+        LEFT JOIN notification_reads nr ON nr.tenant_id = ${tenantId}::text AND nr.notification_id = (wal.id::text || '-wa')
         LEFT JOIN notification_dismissals nd ON nd.tenant_id = ${tenantId} AND nd.item_type = 'wa' AND nd.item_id = wal.id::text
-        WHERE wal.tenant_id = ${tenantId}::text AND nd.dismissed_at IS NULL
+        WHERE wal.tenant_id = ${tenantId}::text AND (nd.dismissed_at IS NULL OR nd.tenant_id IS NULL)
 
         UNION ALL
 
@@ -69,22 +90,35 @@ export async function GET(request: NextRequest) {
             ELSE 'Appointment for ' || COALESCE(c.full_name, 'Walk-in')
           END as message,
           b.status,
-          false as is_read,
-          b.created_at,
+          (nr.read_at IS NOT NULL) as is_read,
+          GREATEST(0, EXTRACT(EPOCH FROM (NOW() - COALESCE(b.created_at, NOW())))::int) as age_seconds,
           c.full_name as customer_name,
           c.phone_number as recipient_phone
         FROM bookings b
         LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+        LEFT JOIN notification_reads nr ON nr.tenant_id = ${tenantId}::text AND nr.notification_id = (b.id::text || '-booking')
         LEFT JOIN notification_dismissals nd ON nd.tenant_id = ${tenantId} AND nd.item_type = 'booking' AND nd.item_id = b.id::text
         WHERE b.tenant_id = ${tenantId} 
           AND b.created_at >= NOW() - INTERVAL '7 days'
-          AND nd.dismissed_at IS NULL
+          AND (nd.dismissed_at IS NULL OR nd.tenant_id IS NULL)
 
-        ORDER BY created_at DESC
+        ORDER BY age_seconds ASC
         LIMIT 20
       `
 
-      return NextResponse.json({ notifications: rows || [] })
+      const nowMs = Date.now()
+      const notifications = (rows || []).map((row: any) => ({
+        id: String(row.id),
+        type: row.type,
+        message: row.message,
+        status: row.status,
+        is_read: Boolean(row.is_read),
+        created_at: new Date(nowMs - (Number(row.age_seconds) || 0) * 1000).toISOString(),
+        customer_name: row.customer_name,
+        recipient_phone: row.recipient_phone,
+      }))
+
+      return NextResponse.json({ notifications })
     } catch (error) {
       console.error("Error in notifications API:", error)
       return NextResponse.json({ notifications: [] })

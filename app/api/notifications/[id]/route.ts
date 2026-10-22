@@ -7,26 +7,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       const resolvedParams = await params;
       const idParam = resolvedParams.id;
       
-      let itemType = '';
-      let itemId = '';
-
-      if (idParam.endsWith('-wa')) {
-        itemType = 'wa';
-        itemId = idParam.replace('-wa', '');
-      } else if (idParam.endsWith('-booking')) {
-        itemType = 'booking';
-        itemId = idParam.replace('-booking', '');
-      } else {
-        // Fallback for normal ints
-        itemType = 'booking';
-        itemId = idParam;
-      }
+      await sql`
+        CREATE TABLE IF NOT EXISTS notification_reads (
+          tenant_id VARCHAR(100) NOT NULL,
+          notification_id VARCHAR(100) NOT NULL,
+          read_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (tenant_id, notification_id)
+        )
+      `.catch(() => {});
 
       await sql`
-        INSERT INTO notification_dismissals (tenant_id, item_type, item_id, dismissed_at)
-        VALUES (${tenantId}, ${itemType}, ${itemId}, NOW())
-        ON CONFLICT (tenant_id, item_type, item_id) DO NOTHING
-      `
+        INSERT INTO notification_reads (tenant_id, notification_id, read_at)
+        VALUES (${tenantId}::text, ${idParam}, NOW())
+        ON CONFLICT (tenant_id, notification_id) DO UPDATE SET read_at = NOW()
+      `;
 
       return NextResponse.json({ success: true, message: "Notification marked as read" })
     } catch (error) {
@@ -57,10 +51,20 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       }
 
       await sql`
+        CREATE TABLE IF NOT EXISTS notification_dismissals (
+          tenant_id VARCHAR(100) NOT NULL,
+          item_type VARCHAR(50) NOT NULL,
+          item_id VARCHAR(50) NOT NULL,
+          dismissed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (tenant_id, item_type, item_id)
+        )
+      `.catch(() => {});
+
+      await sql`
         INSERT INTO notification_dismissals (tenant_id, item_type, item_id, dismissed_at)
-        VALUES (${tenantId}, ${itemType}, ${itemId}, NOW())
+        VALUES (${tenantId}::text, ${itemType}, ${itemId}, NOW())
         ON CONFLICT (tenant_id, item_type, item_id) DO NOTHING
-      `
+      `;
 
       return NextResponse.json({ success: true, message: "Notification removed" })
     } catch (error) {

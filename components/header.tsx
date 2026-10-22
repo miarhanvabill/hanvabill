@@ -32,6 +32,40 @@ interface Notification {
   created_at: string
 }
 
+const READ_STORAGE_KEY = "hanva_read_notification_ids"
+
+function getLocalReadIds(): Set<string> {
+  if (typeof window === "undefined") return new Set()
+  try {
+    const raw = localStorage.getItem(READ_STORAGE_KEY)
+    if (!raw) return new Set()
+    const arr = JSON.parse(raw)
+    return new Set(Array.isArray(arr) ? arr : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function saveLocalReadId(id: string) {
+  if (typeof window === "undefined") return
+  try {
+    const current = getLocalReadIds()
+    current.add(id)
+    const arr = Array.from(current).slice(-200)
+    localStorage.setItem(READ_STORAGE_KEY, JSON.stringify(arr))
+  } catch {}
+}
+
+function saveAllLocalReadIds(ids: string[]) {
+  if (typeof window === "undefined") return
+  try {
+    const current = getLocalReadIds()
+    ids.forEach((id) => current.add(id))
+    const arr = Array.from(current).slice(-200)
+    localStorage.setItem(READ_STORAGE_KEY, JSON.stringify(arr))
+  } catch {}
+}
+
 export function Header({ onMenuToggle }: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -49,7 +83,13 @@ export function Header({ onMenuToggle }: HeaderProps) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
       const data = await response.json()
-      const newItems: Notification[] = data.notifications || []
+      const rawItems: Notification[] = data.notifications || []
+      const localReadIds = getLocalReadIds()
+
+      const newItems: Notification[] = rawItems.map((item) => ({
+        ...item,
+        is_read: item.is_read || localReadIds.has(item.id),
+      }))
 
       // If new unread notifications arrived after initial load, play the notification sound
       if (!isInitialLoad.current && newItems.length > 0) {
@@ -75,20 +115,31 @@ export function Header({ onMenuToggle }: HeaderProps) {
   }
 
   const markAsRead = async (notificationId: string) => {
+    saveLocalReadId(notificationId)
+    setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, is_read: true } : n)))
     try {
-      const response = await fetch(`/api/notifications/${notificationId}`, {
+      await fetch(`/api/notifications/${notificationId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ is_read: true }),
       })
-
-      if (response.ok) {
-        setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, is_read: true } : n)))
-      }
     } catch (error) {
       console.error("[v0] Error marking notification as read:", error)
+    }
+  }
+
+  const handleMarkAllAsRead = async () => {
+    const ids = notifications.map((n) => n.id)
+    saveAllLocalReadIds(ids)
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })))
+    try {
+      await fetch("/api/notifications/mark-all-read", { method: "POST" })
+      const { markAllAsRead: markLegacy } = await import("@/app/actions/notifications")
+      await markLegacy().catch(() => {})
+    } catch (error) {
+      console.error("Error marking all as read:", error)
     }
   }
 
@@ -121,14 +172,26 @@ export function Header({ onMenuToggle }: HeaderProps) {
   const unreadCount = notifications.filter((n) => !n.is_read).length
 
   const formatRelativeTime = (dateString: string) => {
+    if (!dateString) return "Just now"
     const date = new Date(dateString)
-    const now = new Date()
-    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
+    if (isNaN(date.getTime())) return "Just now"
 
-    if (diffInMinutes < 1) return "Just now"
+    const now = new Date()
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
+
+    if (diffInSeconds < 60) return "Just now"
+
+    const diffInMinutes = Math.floor(diffInSeconds / 60)
     if (diffInMinutes < 60) return `${diffInMinutes} min ago`
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)} hr ago`
-    return `${Math.floor(diffInMinutes / 1440)} day ago`
+
+    const diffInHours = Math.floor(diffInMinutes / 60)
+    if (diffInHours < 24) return `${diffInHours} hr ago`
+
+    const diffInDays = Math.floor(diffInHours / 24)
+    if (diffInDays === 1) return "Yesterday"
+    if (diffInDays < 7) return `${diffInDays} days ago`
+
+    return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" })
   }
 
   return (
@@ -193,16 +256,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  onClick={async () => {
-                    try {
-                      await fetch("/api/notifications/mark-all-read", { method: "POST" })
-                      const { markAllAsRead } = await import("@/app/actions/notifications");
-                      await markAllAsRead().catch(() => {});
-                      setNotifications([]);
-                    } catch (error) {
-                      console.error("Error marking all as read:", error);
-                    }
-                  }} 
+                  onClick={handleMarkAllAsRead} 
                   className="h-auto p-0 text-xs text-blue-600 hover:text-blue-800"
                 >
                   Mark all as read

@@ -61,11 +61,11 @@ export async function getNotificationLogs() {
           wal.status,
           COALESCE(wal.message_content, '') as content,
           wal.error_message,
-          wal.sent_at
+          COALESCE(wal.sent_at, wal.created_at, NOW()) as sent_at
         FROM whatsapp_automation_logs wal
         LEFT JOIN customers c ON wal.customer_id = c.id AND c.tenant_id = ${tenantId}
         WHERE wal.tenant_id = ${tenantId}::text
-        ORDER BY wal.sent_at DESC
+        ORDER BY COALESCE(wal.sent_at, wal.created_at) DESC
         LIMIT 100
       `
       return { success: true, data: (logs || []) as NotificationLog[] }
