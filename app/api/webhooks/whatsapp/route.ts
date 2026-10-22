@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAuthenticatedSql } from "@/lib/db"; 
+import { getAuthenticatedSql, sql as baseSql } from "@/lib/db"; 
 
 // Normalize msgType from provider (uppercase) to DB-valid values
 function normalizeMessageType(msgType?: string): string {
@@ -61,6 +61,60 @@ export async function POST(req: Request) {
     // Always log the full payload for complete visibility in production
     console.log("[WhatsApp Webhook] Received webhook payload:\n", JSON.stringify(payload, null, 2));
 
+    // Extract customer phone early for intelligent tenant routing
+    const earlyDataObj = typeof payload.data === "object" && payload.data !== null ? payload.data : {};
+    const earlyCustObj = typeof payload.customer_data === "object" && payload.customer_data !== null ? payload.customer_data : {};
+    const earlyRawPhone = (
+      earlyCustObj.phone ||
+      earlyCustObj.phone_number ||
+      earlyCustObj.mobile ||
+      earlyCustObj.wa_id ||
+      earlyDataObj.from ||
+      earlyDataObj.phone ||
+      earlyDataObj.sender ||
+      earlyDataObj.mobile ||
+      payload.from ||
+      payload.phone
+    )?.toString() || "";
+    const earlyTenDigit = earlyRawPhone.replace(/[^0-9]/g, "").slice(-10);
+
+    // Intelligent tenant resolution if not passed in query parameter
+    if (!tenantId && earlyTenDigit) {
+      try {
+        // A. Match tenant with the most recent chat history for this phone number
+        const chatMatch = await baseSql`
+          SELECT tenant_id FROM whatsapp_messages 
+          WHERE phone_number LIKE ${"%" + earlyTenDigit}
+          ORDER BY (direction = 'outbound') DESC, created_at DESC 
+          LIMIT 1
+        `;
+        if (chatMatch.length > 0 && chatMatch[0].tenant_id) {
+          tenantId = String(chatMatch[0].tenant_id);
+          console.log(`[WhatsApp Webhook] Auto-resolved tenant ${tenantId} from chat history with ${earlyTenDigit}`);
+        }
+      } catch (err) {
+        console.warn("[WhatsApp Webhook] Error resolving tenant from messages:", err);
+      }
+
+      if (!tenantId) {
+        try {
+          // B. Match tenant from customer record
+          const custMatch = await baseSql`
+            SELECT tenant_id FROM customers 
+            WHERE phone_number LIKE ${"%" + earlyTenDigit}
+            ORDER BY updated_at DESC 
+            LIMIT 1
+          `;
+          if (custMatch.length > 0 && custMatch[0].tenant_id) {
+            tenantId = String(custMatch[0].tenant_id);
+            console.log(`[WhatsApp Webhook] Auto-resolved tenant ${tenantId} from customer record with ${earlyTenDigit}`);
+          }
+        } catch (err) {
+          console.warn("[WhatsApp Webhook] Error resolving tenant from customers:", err);
+        }
+      }
+    }
+
     // Fallback tenant resolution: check metadata, payload, or default to '1'
     if (!tenantId) {
       tenantId =
@@ -100,6 +154,15 @@ export async function POST(req: Request) {
           )
         `;
         console.log(`[WhatsApp Webhook] Saved inbound message from ${phone} for tenant ${internalTenantId}`);
+
+        // Re-align any orphan inbound messages that were mistakenly saved under tenant 1
+        if (internalTenantId !== "1") {
+          await sql`
+            UPDATE whatsapp_messages 
+            SET tenant_id = ${internalTenantId} 
+            WHERE phone_number LIKE ${"%" + tenDigit} AND direction = 'inbound' AND (tenant_id = '1' OR tenant_id IS NULL)
+          `.catch(() => {});
+        }
       } catch (e) {
         console.error("[WhatsApp Webhook] Error saving inbound:", e);
       }

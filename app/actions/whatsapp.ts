@@ -95,6 +95,18 @@ export async function getWhatsAppMessages(phoneNumber?: string): Promise<WhatsAp
       let messages: any[] = []
       if (phoneNumber) {
         const cleanPhone = phoneNumber.replace(/^\+/, "").slice(-10)
+
+        // Automatically adopt any orphan inbound messages for this phone number that were saved under tenant 1
+        try {
+          await sql`
+            UPDATE whatsapp_messages 
+            SET tenant_id = ${tenantId} 
+            WHERE phone_number LIKE ${'%' + cleanPhone} 
+              AND direction = 'inbound' 
+              AND (tenant_id != ${tenantId} OR tenant_id IS NULL)
+          `
+        } catch {}
+
         messages = await sql`
           SELECT DISTINCT ON (w.id)
             w.*,
@@ -102,11 +114,27 @@ export async function getWhatsAppMessages(phoneNumber?: string): Promise<WhatsAp
           FROM whatsapp_messages w
           LEFT JOIN customers c ON c.tenant_id = ${tenantId}
             AND (c.id = w.customer_id OR c.phone_number LIKE ${'%' + cleanPhone})
-          WHERE w.tenant_id = ${tenantId} 
+          WHERE (w.tenant_id = ${tenantId} OR (w.phone_number LIKE ${'%' + cleanPhone} AND w.direction = 'inbound')) 
           AND w.phone_number LIKE ${'%' + cleanPhone}
           ORDER BY w.id, w.created_at ASC
         `
       } else {
+        // Auto-adopt any inbound messages whose phone has existing chat history in this tenant
+        try {
+          await sql`
+            UPDATE whatsapp_messages 
+            SET tenant_id = ${tenantId} 
+            WHERE direction = 'inbound' 
+              AND (tenant_id != ${tenantId} OR tenant_id IS NULL)
+              AND EXISTS (
+                SELECT 1 FROM whatsapp_messages w2 
+                WHERE w2.tenant_id = ${tenantId} 
+                  AND w2.direction = 'outbound'
+                  AND RIGHT(w2.phone_number, 10) = RIGHT(whatsapp_messages.phone_number, 10)
+              )
+          `
+        } catch {}
+
         messages = await sql`
           SELECT DISTINCT ON (w.id)
             w.*,
