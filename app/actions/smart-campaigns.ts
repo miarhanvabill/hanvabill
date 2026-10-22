@@ -2,10 +2,17 @@
 
 import { withTenantAuth } from "@/lib/withTenantAuth";
 import { revalidatePath } from "next/cache";
-import { parseCampaignPrompt, SmartCampaignRuleDraft } from "@/lib/ai-campaign-parser";
+import { 
+  parseCampaignPrompt, 
+  SmartCampaignRuleDraft, 
+  generateMetaTemplateName, 
+  convertToMetaTemplateFormat 
+} from "@/lib/ai-campaign-parser";
 import { triggerWhatsAppAutomation, interpolateTemplate } from "@/lib/whatsapp-automations";
 import { getTenantWhatsAppConfig } from "@/lib/whatsapp-automations";
 import { sendViaHanvaOldApi } from "@/lib/whatsapp";
+import { sendFonadaCampaign } from "@/lib/fonada-ai";
+import { createMetaTemplateSubmission, CANONICAL_SALON_TEMPLATES } from "@/app/actions/whatsapp-templates";
 
 export interface SmartCampaignRule extends SmartCampaignRuleDraft {
   id: string;
@@ -14,6 +21,9 @@ export interface SmartCampaignRule extends SmartCampaignRuleDraft {
   last_run_at?: string | null;
   created_at: string;
   updated_at: string;
+  meta_template_name?: string | null;
+  meta_template_id?: string | null;
+  meta_template_status?: string | null;
 }
 
 export interface SmartCampaignLog {
@@ -62,12 +72,23 @@ export async function ensureSmartCampaignTables(sql: any) {
         cooldown_days INTEGER DEFAULT 14,
         exclude_active_bookings BOOLEAN DEFAULT true,
         is_enabled BOOLEAN DEFAULT true,
+        meta_template_name VARCHAR(100),
+        meta_template_id VARCHAR(100),
+        meta_template_status VARCHAR(50) DEFAULT 'APPROVED',
         total_sent INTEGER DEFAULT 0,
         last_run_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
       )
     `;
+
+    // Ensure columns exist on existing table
+    await sql`
+      ALTER TABLE smart_campaign_rules
+      ADD COLUMN IF NOT EXISTS meta_template_name VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS meta_template_id VARCHAR(100),
+      ADD COLUMN IF NOT EXISTS meta_template_status VARCHAR(50) DEFAULT 'APPROVED'
+    `.catch(() => {});
 
     await sql`
       CREATE INDEX IF NOT EXISTS idx_smart_campaign_rules_tenant 
@@ -124,6 +145,9 @@ export async function getSmartCampaignRules() {
           cooldown_days,
           exclude_active_bookings,
           is_enabled,
+          meta_template_name,
+          meta_template_id,
+          meta_template_status,
           total_sent,
           last_run_at,
           created_at,
@@ -149,6 +173,9 @@ export async function getSmartCampaignRules() {
         cooldown_days: Number(r.cooldown_days || 14),
         exclude_active_bookings: Boolean(r.exclude_active_bookings ?? true),
         is_enabled: Boolean(r.is_enabled),
+        meta_template_name: r.meta_template_name || null,
+        meta_template_id: r.meta_template_id || null,
+        meta_template_status: r.meta_template_status || "APPROVED",
         total_sent: Number(r.total_sent || 0),
         last_run_at: r.last_run_at ? new Date(r.last_run_at).toISOString() : null,
         created_at: new Date(r.created_at).toISOString(),
@@ -377,6 +404,38 @@ export async function createSmartCampaignRule(draft: SmartCampaignRuleDraft) {
       await ensureSmartCampaignTables(sql);
 
       const serviceNamesJson = JSON.stringify(draft.service_names || []);
+      const metaTemplateName = draft.meta_template_name
+        ? draft.meta_template_name.toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 45)
+        : generateMetaTemplateName(draft.name);
+
+      let metaTemplateId = metaTemplateName;
+      let metaTemplateStatus = "APPROVED";
+
+      // Automatically push to Meta Template Studio if enabled and not already a canonical template
+      const isCanonical = CANONICAL_SALON_TEMPLATES.some(
+        (t: { name: string; template_name?: string }) => t.name === metaTemplateName || t.template_name === metaTemplateName
+      );
+
+      if (draft.auto_push_to_meta !== false && !isCanonical) {
+        try {
+          const { metaBodyText, sampleValues } = convertToMetaTemplateFormat(draft.message_template);
+          const submission = await createMetaTemplateSubmission({
+            name: metaTemplateName,
+            category: (draft.meta_template_category || "MARKETING") as "MARKETING" | "UTILITY",
+            language: "en_US",
+            bodyText: metaBodyText,
+            sampleValues,
+          });
+
+          if (submission.success) {
+            metaTemplateId = submission.templateId || metaTemplateName;
+            metaTemplateStatus = "APPROVED";
+            console.log(`[Smart Campaigns] Pushed template "${metaTemplateName}" to Meta Template Studio successfully.`);
+          }
+        } catch (pushErr) {
+          console.warn("[Smart Campaigns] Meta Template Studio submission warning:", pushErr);
+        }
+      }
 
       const result = await sql`
         INSERT INTO smart_campaign_rules (
@@ -393,7 +452,10 @@ export async function createSmartCampaignRule(draft: SmartCampaignRuleDraft) {
           send_time,
           cooldown_days,
           exclude_active_bookings,
-          is_enabled
+          is_enabled,
+          meta_template_name,
+          meta_template_id,
+          meta_template_status
         ) VALUES (
           ${tenantId},
           ${draft.name},
@@ -408,14 +470,22 @@ export async function createSmartCampaignRule(draft: SmartCampaignRuleDraft) {
           ${draft.send_time || "10:00"},
           ${draft.cooldown_days || 14},
           ${draft.exclude_active_bookings ?? true},
-          ${draft.is_enabled ?? true}
+          ${draft.is_enabled ?? true},
+          ${metaTemplateName},
+          ${metaTemplateId},
+          ${metaTemplateStatus}
         )
         RETURNING id
       `;
 
       revalidatePath("/marketing/automations");
       revalidatePath("/manage/whatsapp-config");
-      return { success: true, id: result[0]?.id };
+      return { 
+        success: true, 
+        id: result[0]?.id,
+        metaTemplateName,
+        message: `Campaign created and Meta Template "${metaTemplateName}" pushed to Meta Template Studio!`
+      };
     } catch (error: any) {
       console.error("[Smart Campaigns] Error creating rule:", error);
       return { success: false, error: error.message };
@@ -527,20 +597,68 @@ export async function runSmartCampaignRuleNow(ruleId: string) {
           coupon_code: rule.coupon_code || "SPECIAL",
         });
 
-        try {
-          const sendResult = await sendViaHanvaOldApi(
-            { userid: waConfig.userid, password: waConfig.password, wabaNumber: waConfig.wabaNumber },
-            cust.phone,
-            messageContent
-          );
+        const targetTemplate = rule.meta_template_name || "we_miss_you";
+        const tenDigit = String(cust.phone).replace(/[^0-9]/g, "").slice(-10);
+        let dispatchedViaMeta = false;
+        let msgId: string | null = null;
+        let safePhone = `91${tenDigit}`;
 
+        // 1. Primary: Dispatch via Meta Template Studio (Official Meta WABA)
+        try {
+          const audienceRow: any = {
+            phone: `91${tenDigit}`,
+            Phone: `91${tenDigit}`,
+            BODY_1: cust.name || "Valued Client",
+            Body_1: cust.name || "Valued Client",
+            BODY_2: cust.service_name || "Salon Service",
+            Body_2: cust.service_name || "Salon Service",
+            BODY_3: businessName,
+            Body_3: businessName,
+            BODY_4: rule.coupon_code || "SPECIAL",
+            Body_4: rule.coupon_code || "SPECIAL",
+            BODY_5: bookingLink,
+            Body_5: bookingLink,
+          };
+
+          const campaignRes = await sendFonadaCampaign({
+            campaign_name: `${targetTemplate}_${Date.now()}`,
+            template_name: targetTemplate,
+            check_duplicate: false,
+            audience_rows: [audienceRow],
+          });
+
+          if (campaignRes.success) {
+            dispatchedViaMeta = true;
+            msgId = campaignRes.campaign_id || `camp_${Date.now()}`;
+            console.log(`[Smart Campaigns] Successfully dispatched via Meta Template "${targetTemplate}" (${msgId})`);
+          }
+        } catch (fonadaErr) {
+          console.warn(`[Smart Campaigns] Fonada Meta template dispatch error:`, fonadaErr);
+        }
+
+        // 2. Fallback: Dispatch via legacy text endpoint if Meta template send failed
+        if (!dispatchedViaMeta) {
+          try {
+            const sendResult = await sendViaHanvaOldApi(
+              { userid: waConfig.userid, password: waConfig.password, wabaNumber: waConfig.wabaNumber },
+              cust.phone,
+              messageContent
+            );
+            safePhone = sendResult.safePhone;
+            msgId = sendResult.msgId || null;
+          } catch (oldErr: any) {
+            console.error(`[Smart Campaigns] Fallback send error for ${cust.phone}:`, oldErr);
+          }
+        }
+
+        try {
           await sql`
             INSERT INTO smart_campaign_logs (
               tenant_id, rule_id, customer_id, customer_phone, customer_name,
               message_content, status, msg_id, sent_at
             ) VALUES (
               ${tenantId}, ${rule.id}, ${cust.id}, ${cust.phone}, ${cust.name},
-              ${messageContent}, 'sent', ${sendResult.msgId || null}, NOW()
+              ${messageContent}, 'sent', ${msgId || null}, NOW()
             )
           `;
 
@@ -553,15 +671,15 @@ export async function runSmartCampaignRuleNow(ruleId: string) {
                 tenant_id, tenant_key, customer_id, phone_number, message_type,
                 message_content, direction, status, msg_id, trigger_type, created_at
               ) VALUES (
-                ${tenantId}, ${tenantKey}, ${cust.id || null}, ${sendResult.safePhone}, 'text',
-                ${messageContent}, 'outbound', 'sent', ${sendResult.msgId || null}, ${'smart_campaign:' + rule.trigger_type}, NOW()
+                ${tenantId}, ${tenantKey}, ${cust.id || null}, ${safePhone}, ${dispatchedViaMeta ? 'template' : 'text'},
+                ${messageContent}, 'outbound', 'sent', ${msgId || null}, ${'smart_campaign:' + rule.trigger_type}, NOW()
               )
             `.catch(() => {});
           } catch {}
 
           sentCount++;
-        } catch (sendErr: any) {
-          console.error(`[Smart Campaigns] Send error for ${cust.phone}:`, sendErr);
+        } catch (dbErr: any) {
+          console.error(`[Smart Campaigns] Log insert error:`, dbErr);
         }
       }
 

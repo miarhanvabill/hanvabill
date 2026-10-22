@@ -1318,43 +1318,88 @@ export async function runAutomationsCronForTenant(
                 coupon_code: rule.coupon_code || "SPECIAL",
               })
 
-              try {
-                const sendResult = await sendViaHanvaOldApi(
-                  { userid: waConfig.userid, password: waConfig.password, wabaNumber: waConfig.wabaNumber },
-                  cand.phone,
-                  msgText
-                )
+              const targetTemplate = rule.meta_template_name || "we_miss_you";
+              const tenDigit = String(cand.phone).replace(/[^0-9]/g, "").slice(-10);
+              let dispatchedViaMeta = false;
+              let msgId: string | null = null;
+              let safePhone = `91${tenDigit}`;
 
+              // 1. Primary: Official Meta Template Studio dispatch
+              try {
+                const audienceRow: any = {
+                  phone: `91${tenDigit}`,
+                  Phone: `91${tenDigit}`,
+                  BODY_1: cand.name || "Valued Client",
+                  Body_1: cand.name || "Valued Client",
+                  BODY_2: cand.service_name || "Salon Service",
+                  Body_2: cand.service_name || "Salon Service",
+                  BODY_3: businessName,
+                  Body_3: businessName,
+                  BODY_4: rule.coupon_code || "SPECIAL",
+                  Body_4: rule.coupon_code || "SPECIAL",
+                  BODY_5: bookingLink,
+                  Body_5: bookingLink,
+                };
+
+                const campaignRes = await sendFonadaCampaign({
+                  campaign_name: `${targetTemplate}_${Date.now()}`,
+                  template_name: targetTemplate,
+                  check_duplicate: false,
+                  audience_rows: [audienceRow],
+                });
+
+                if (campaignRes.success) {
+                  dispatchedViaMeta = true;
+                  msgId = campaignRes.campaign_id || `camp_${Date.now()}`;
+                }
+              } catch (fonadaErr) {
+                console.warn("[WhatsApp Cron] Smart campaign Meta dispatch error:", fonadaErr);
+              }
+
+              // 2. Fallback: Legacy API
+              if (!dispatchedViaMeta) {
+                try {
+                  const sendResult = await sendViaHanvaOldApi(
+                    { userid: waConfig.userid, password: waConfig.password, wabaNumber: waConfig.wabaNumber },
+                    cand.phone,
+                    msgText
+                  );
+                  safePhone = sendResult.safePhone;
+                  msgId = sendResult.msgId || null;
+                } catch (err: any) {
+                  console.error(`[WhatsApp Cron] Error sending smart campaign to ${cand.phone}:`, err);
+                }
+              }
+
+              if (dispatchedViaMeta || msgId) {
                 await sql`
                   INSERT INTO smart_campaign_logs (
                     tenant_id, rule_id, customer_id, customer_phone, customer_name,
                     message_content, status, msg_id, sent_at
                   ) VALUES (
                     ${tenantId}, ${rule.id}, ${cand.id}, ${cand.phone}, ${cand.name},
-                    ${msgText}, 'sent', ${sendResult.msgId || null}, NOW()
+                    ${msgText}, 'sent', ${msgId || null}, NOW()
                   )
-                `.catch(() => {})
+                `.catch(() => {});
 
                 // Log to whatsapp_messages table as well for chat timeline & unified analytics
                 try {
-                  const tenantRows = await sql`SELECT tenant_key FROM tenants WHERE id = ${tenantId} LIMIT 1`.catch(() => [])
-                  const tenantKey = tenantRows.length > 0 ? tenantRows[0].tenant_key : null
+                  const tenantRows = await sql`SELECT tenant_key FROM tenants WHERE id = ${tenantId} LIMIT 1`.catch(() => []);
+                  const tenantKey = tenantRows.length > 0 ? tenantRows[0].tenant_key : null;
                   await sql`
                     INSERT INTO whatsapp_messages (
                       tenant_id, tenant_key, customer_id, phone_number, message_type,
                       message_content, direction, status, msg_id, trigger_type, created_at
                     ) VALUES (
-                      ${tenantId}, ${tenantKey}, ${cand.id || null}, ${sendResult.safePhone}, 'text',
-                      ${msgText}, 'outbound', 'sent', ${sendResult.msgId || null}, ${'smart_campaign:' + rule.trigger_type}, NOW()
+                      ${tenantId}, ${tenantKey}, ${cand.id || null}, ${safePhone}, ${dispatchedViaMeta ? 'template' : 'text'},
+                      ${msgText}, 'outbound', 'sent', ${msgId || null}, ${'smart_campaign:' + rule.trigger_type}, NOW()
                     )
-                  `.catch(() => {})
+                  `.catch(() => {});
                 } catch {}
 
-                ruleSentCount++
-                summary.smartCampaignsSent = (summary.smartCampaignsSent || 0) + 1
-                summary.totalSent++
-              } catch (err: any) {
-                console.error(`[WhatsApp Cron] Error sending smart campaign to ${cand.phone}:`, err)
+                ruleSentCount++;
+                summary.smartCampaignsSent = (summary.smartCampaignsSent || 0) + 1;
+                summary.totalSent++;
               }
             }
 

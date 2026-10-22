@@ -24,7 +24,9 @@ export interface SmartCampaignRuleDraft {
   exclude_active_bookings: boolean;
   is_enabled: boolean;
   // Meta Template Studio integration
-  meta_template_name?: string;
+  meta_template_name?: string | null;
+  meta_template_id?: string | null;
+  meta_template_status?: string | null;
   meta_template_category?: "MARKETING" | "UTILITY";
   auto_push_to_meta?: boolean;
 }
@@ -109,6 +111,9 @@ export const PRESET_SALON_RECIPES: PresetSalonRecipe[] = [
       cooldown_days: 20,
       exclude_active_bookings: true,
       is_enabled: true,
+      meta_template_name: "hair_color_touchup_30d",
+      meta_template_category: "MARKETING",
+      auto_push_to_meta: true,
     },
   },
   {
@@ -130,6 +135,9 @@ export const PRESET_SALON_RECIPES: PresetSalonRecipe[] = [
       cooldown_days: 30,
       exclude_active_bookings: true,
       is_enabled: true,
+      meta_template_name: "keratin_care_check_60d",
+      meta_template_category: "MARKETING",
+      auto_push_to_meta: true,
     },
   },
   {
@@ -151,6 +159,9 @@ export const PRESET_SALON_RECIPES: PresetSalonRecipe[] = [
       cooldown_days: 21,
       exclude_active_bookings: true,
       is_enabled: true,
+      meta_template_name: "facial_glow_renewal_28d",
+      meta_template_category: "MARKETING",
+      auto_push_to_meta: true,
     },
   },
   {
@@ -172,6 +183,9 @@ export const PRESET_SALON_RECIPES: PresetSalonRecipe[] = [
       cooldown_days: 15,
       exclude_active_bookings: true,
       is_enabled: true,
+      meta_template_name: "haircut_refresh_25d",
+      meta_template_category: "MARKETING",
+      auto_push_to_meta: true,
     },
   },
   {
@@ -193,6 +207,9 @@ export const PRESET_SALON_RECIPES: PresetSalonRecipe[] = [
       cooldown_days: 30,
       exclude_active_bookings: true,
       is_enabled: true,
+      meta_template_name: "we_miss_you",
+      meta_template_category: "MARKETING",
+      auto_push_to_meta: true,
     },
   },
   {
@@ -215,6 +232,9 @@ export const PRESET_SALON_RECIPES: PresetSalonRecipe[] = [
       cooldown_days: 30,
       exclude_active_bookings: false,
       is_enabled: true,
+      meta_template_name: "vip_loyalty_perk",
+      meta_template_category: "MARKETING",
+      auto_push_to_meta: true,
     },
   },
 ];
@@ -382,6 +402,9 @@ export function parseCampaignPromptDeterministic(promptText: string): SmartCampa
     cooldown_days: 14,
     exclude_active_bookings: true,
     is_enabled: true,
+    meta_template_name: generateMetaTemplateName(name),
+    meta_template_category: "MARKETING",
+    auto_push_to_meta: true,
   };
 }
 
@@ -446,6 +469,9 @@ Respond with valid JSON only.`,
           cooldown_days: 14,
           exclude_active_bookings: true,
           is_enabled: true,
+          meta_template_name: generateMetaTemplateName(parsed.name || fallback.name),
+          meta_template_category: "MARKETING",
+          auto_push_to_meta: true,
         };
       }
     } catch (llmErr) {
@@ -471,6 +497,9 @@ Respond with valid JSON only.`,
         cooldown_days: 14,
         exclude_active_bookings: true,
         is_enabled: true,
+        meta_template_name: generateMetaTemplateName(parsed.name || fallback.name),
+        meta_template_category: "MARKETING",
+        auto_push_to_meta: true,
       };
     }
   } catch (geminiErr) {

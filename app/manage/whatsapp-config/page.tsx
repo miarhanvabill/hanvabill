@@ -115,6 +115,8 @@ import {
 } from "@/app/actions/smart-campaigns"
 import {
   PRESET_SALON_RECIPES,
+  generateMetaTemplateName,
+  convertToMetaTemplateFormat,
   type SmartCampaignRuleDraft,
   type CampaignTriggerType,
 } from "@/lib/ai-campaign-parser"
@@ -187,6 +189,9 @@ export default function WhatsAppConfigPage() {
     cooldown_days: 14,
     exclude_active_bookings: true,
     is_enabled: true,
+    meta_template_name: "hair_color_touchup_30d",
+    meta_template_category: "MARKETING",
+    auto_push_to_meta: true,
   })
   const [isSavingRule, setIsSavingRule] = useState(false)
   const [audiencePreview, setAudiencePreview] = useState<AudiencePreviewResult | null>(null)
@@ -370,11 +375,19 @@ export default function WhatsAppConfigPage() {
     try {
       const res = await createSmartCampaignRule(currentDraft)
       if (res.success) {
-        toast.success("Automated campaign created & activated!")
+        toast.success(
+          currentDraft.auto_push_to_meta
+            ? "Automated campaign created & submitted to Meta Template Studio!"
+            : "Automated campaign created & activated!"
+        )
         setIsCreateModalOpen(false)
         setPromptInput("")
-        const refreshed = await getSmartCampaignRules()
-        if (refreshed.success && refreshed.data) setSmartRules(refreshed.data)
+        const [refreshedRules, refreshedTemplates] = await Promise.all([
+          getSmartCampaignRules(),
+          fetchMetaTemplates(),
+        ])
+        if (refreshedRules.success && refreshedRules.data) setSmartRules(refreshedRules.data)
+        if (refreshedTemplates) setMetaTemplates(refreshedTemplates)
       } else {
         toast.error(res.error || "Failed to save rule")
       }
@@ -1737,7 +1750,7 @@ export default function WhatsAppConfigPage() {
 
                 <Button
                   onClick={() => {
-                    setCurrentDraft({
+                    const defaultDraft: SmartCampaignRuleDraft = {
                       name: "Custom Salon Automation",
                       prompt_input: "",
                       trigger_type: "days_after_service",
@@ -1750,20 +1763,13 @@ export default function WhatsAppConfigPage() {
                       cooldown_days: 14,
                       exclude_active_bookings: true,
                       is_enabled: true,
-                    })
+                      meta_template_name: "custom_salon_automation",
+                      meta_template_category: "MARKETING",
+                      auto_push_to_meta: true,
+                    }
+                    setCurrentDraft(defaultDraft)
                     setIsCreateModalOpen(true)
-                    fetchAudiencePreview({
-                      name: "Custom Salon Automation",
-                      prompt_input: "",
-                      trigger_type: "days_after_service",
-                      trigger_days: 30,
-                      service_names: [],
-                      message_template: "",
-                      send_time: "10:00",
-                      cooldown_days: 14,
-                      exclude_active_bookings: true,
-                      is_enabled: true,
-                    })
+                    fetchAudiencePreview(defaultDraft)
                   }}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs sm:text-sm gap-2 shrink-0 h-10 px-4 rounded-xl shadow-xs"
                 >
@@ -1908,6 +1914,26 @@ export default function WhatsAppConfigPage() {
 
                             <Badge variant="outline" className="bg-slate-50 text-slate-600 text-[11px]">
                               🕒 {rule.send_time}
+                            </Badge>
+
+                            <Badge
+                              variant="outline"
+                              className="bg-emerald-50 text-emerald-800 border-emerald-200 text-[11px] font-mono flex items-center gap-1"
+                              title="Meta Cloud API Template Linked"
+                            >
+                              <Sparkles className="w-3 h-3 text-emerald-600" />
+                              Meta: {rule.meta_template_name || "we_miss_you"}
+                              {rule.meta_template_status && (
+                                <span
+                                  className={`text-[9px] px-1 py-0.2 rounded font-sans uppercase font-bold tracking-wider ${
+                                    rule.meta_template_status === "APPROVED"
+                                      ? "bg-emerald-200 text-emerald-900"
+                                      : "bg-amber-100 text-amber-800"
+                                  }`}
+                                >
+                                  {rule.meta_template_status}
+                                </span>
+                              )}
                             </Badge>
                           </div>
 
@@ -2971,26 +2997,36 @@ export default function WhatsAppConfigPage() {
       {/* DIALOG 3: AI SMART CAMPAIGN BUILDER & AUDIENCE PREVIEW */}
       {/* ============================================================ */}
       <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
-        <DialogContent className="sm:max-w-[750px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[850px] max-h-[92vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-slate-900 text-lg font-bold">
               <Sparkles className="w-5 h-5 text-emerald-600" />
               Configure Automated WhatsApp Campaign
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
-              Review the schedule, target criteria, and message template. Hanva Billing will automatically scan and send this every day.
+              Review schedule, target audience, and Meta Template Studio linking. Hanva Billing automatically scans and dispatches via Meta Cloud API daily.
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid md:grid-cols-2 gap-5 py-3">
-            {/* Left Column: Rule Parameters */}
+            {/* Left Column: Rule Parameters & Meta Template Studio Settings */}
             <div className="space-y-3.5">
               <div className="space-y-1">
                 <Label htmlFor="camp-name" className="text-xs font-semibold text-slate-700">Campaign Name</Label>
                 <Input
                   id="camp-name"
                   value={currentDraft.name}
-                  onChange={(e) => setCurrentDraft((prev) => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) => {
+                    const newName = e.target.value
+                    setCurrentDraft((prev) => ({
+                      ...prev,
+                      name: newName,
+                      meta_template_name:
+                        !prev.meta_template_name || prev.meta_template_name === generateMetaTemplateName(prev.name)
+                          ? generateMetaTemplateName(newName)
+                          : prev.meta_template_name,
+                    }))
+                  }}
                   placeholder="e.g. 30-Day Hair Color Touchup"
                   className="h-9 text-xs"
                 />
@@ -3111,6 +3147,104 @@ export default function WhatsAppConfigPage() {
                   />
                 </div>
               </div>
+
+              {/* Meta Template Studio Delivery Integration */}
+              <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-200 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-emerald-950 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                    Meta Template Studio Integration
+                  </span>
+                  <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white text-[10px] uppercase font-semibold tracking-wider">
+                    Cloud API Ready
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-emerald-800 leading-relaxed">
+                  WhatsApp Cloud API requires approved templates for outbound messages. This campaign will automatically link to and push to <strong>Meta Template Studio</strong>.
+                </p>
+
+                <div className="space-y-1">
+                  <Label htmlFor="meta-tmpl-name" className="text-[11px] font-semibold text-emerald-900 flex items-center justify-between">
+                    <span>Meta Template Identifier</span>
+                    <span className="font-mono text-[10px] text-emerald-700">lowercase snake_case</span>
+                  </Label>
+                  <Input
+                    id="meta-tmpl-name"
+                    value={currentDraft.meta_template_name || generateMetaTemplateName(currentDraft.name)}
+                    onChange={(e) => {
+                      const val = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 40)
+                      setCurrentDraft((prev) => ({ ...prev, meta_template_name: val }))
+                    }}
+                    placeholder="e.g. hair_color_touchup_30d"
+                    className="h-8 text-xs font-mono bg-white border-emerald-300 focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-semibold text-emerald-900">Meta Category</Label>
+                    <Select
+                      value={currentDraft.meta_template_category || "MARKETING"}
+                      onValueChange={(val: "MARKETING" | "UTILITY") =>
+                        setCurrentDraft((prev) => ({ ...prev, meta_template_category: val }))
+                      }
+                    >
+                      <SelectTrigger className="h-8 text-xs bg-white border-emerald-300">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MARKETING">Marketing (Promos)</SelectItem>
+                        <SelectItem value="UTILITY">Utility (Reminders)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[11px] font-semibold text-emerald-900">Link Existing Template</Label>
+                    <Select
+                      value={currentDraft.meta_template_name || ""}
+                      onValueChange={(val) => {
+                        if (val === "__new__") {
+                          setCurrentDraft((prev) => ({
+                            ...prev,
+                            meta_template_name: generateMetaTemplateName(prev.name),
+                            auto_push_to_meta: true,
+                          }))
+                        } else {
+                          setCurrentDraft((prev) => ({
+                            ...prev,
+                            meta_template_name: val,
+                            auto_push_to_meta: false,
+                          }))
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-8 text-xs bg-white border-emerald-300 truncate">
+                        <SelectValue placeholder="Auto-push new or pick..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__new__">✨ Auto-push New to Meta Studio</SelectItem>
+                        {metaTemplates.map((t) => (
+                          <SelectItem key={t.id || t.name} value={t.name}>
+                            {t.name} ({t.status})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1 border-t border-emerald-200/70">
+                  <div className="space-y-0.5">
+                    <span className="text-[11px] font-medium text-emerald-950 block">Auto-push to Meta Template Studio on save</span>
+                    <span className="text-[10px] text-emerald-700 block">Submits directly to Meta Cloud API via Fonada WABA</span>
+                  </div>
+                  <Switch
+                    checked={currentDraft.auto_push_to_meta ?? true}
+                    onCheckedChange={(val) => setCurrentDraft((prev) => ({ ...prev, auto_push_to_meta: val }))}
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Right Column: WhatsApp Live Message Preview & Audience Match */}
@@ -3150,6 +3284,53 @@ export default function WhatsAppConfigPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Meta Cloud API Numbered Variables Box */}
+              {(() => {
+                const metaConv = convertToMetaTemplateFormat(currentDraft.message_template, {
+                  customer_name: "Priya Sharma",
+                  business_name: gatewayData.salonName || "Hanva Salon",
+                  service_name: currentDraft.service_names[0] || "Hair Color",
+                  coupon_code: currentDraft.coupon_code || "SPECIAL",
+                  booking_link: "https://biz.hanva.in/book/salon",
+                })
+                return (
+                  <div className="bg-slate-900 rounded-xl p-3 border border-slate-800 text-white space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                        Meta Studio Template Format
+                      </span>
+                      <Badge variant="outline" className="text-[10px] font-mono text-emerald-300 border-emerald-500/40 bg-emerald-500/10">
+                        {currentDraft.meta_template_name || generateMetaTemplateName(currentDraft.name)}
+                      </Badge>
+                    </div>
+
+                    <div className="bg-slate-950 rounded-lg p-2.5 font-mono text-[11px] text-slate-300 border border-slate-800 whitespace-pre-wrap leading-relaxed">
+                      {metaConv.metaBodyText}
+                    </div>
+
+                    {metaConv.variableOrder.length > 0 && (
+                      <div className="pt-1 border-t border-slate-800 flex flex-wrap gap-1.5">
+                        <span className="text-[10px] text-slate-400 font-medium py-0.5">Parameters:</span>
+                        {metaConv.variableOrder.map((varKey, idx) => (
+                          <span
+                            key={idx}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-emerald-300 font-mono"
+                          >
+                            &#123;&#123;{idx + 1}&#125;&#125; → {varKey}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-800/60">
+                      <span>Verified Meta Fallback: <strong className="text-slate-200">we_miss_you</strong></span>
+                      <span className="text-emerald-400 font-medium">✓ Zero message drops</span>
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* Live Matching Audience Box in Slate Grey & Emerald */}
               <div className="bg-slate-900 rounded-xl p-3.5 border border-slate-800 text-white space-y-2">

@@ -85,7 +85,7 @@ const DEFAULT_AFTER_HOURS_SETTINGS: AfterHoursSettings = {
     "Hello! Thank you for reaching out to {salon_name}. ✨\n\nWe are currently closed for the day. Our team will get back to you as soon as we open tomorrow!\n\nIn the meantime, you can explore our services and book your next appointment online anytime here: {booking_link} 🌸",
 }
 
-const CANONICAL_SALON_TEMPLATES: MetaTemplate[] = [
+export const CANONICAL_SALON_TEMPLATES: MetaTemplate[] = [
   {
     id: "canonical-booking-created",
     template_id: "988274373593627",
@@ -301,6 +301,8 @@ export async function fetchMetaTemplates(
   status?: string,
   category?: string
 ): Promise<MetaTemplate[]> {
+  let fetchedTemplates: MetaTemplate[] = []
+
   try {
     const url = new URL(FONADA_AI_TEMPLATES_URL)
     url.searchParams.set("account_id", FONADA_AI_HANVA_ACCOUNT_ID)
@@ -325,7 +327,7 @@ export async function fetchMetaTemplates(
       const rawTemplates = data?.data?.templates || data?.templates || []
 
       if (Array.isArray(rawTemplates) && rawTemplates.length > 0) {
-        let mapped: MetaTemplate[] = rawTemplates.map((t: any) => ({
+        fetchedTemplates = rawTemplates.map((t: any) => ({
           id: t.id || t.local_id || t.template_id || `tpl_${Date.now()}_${Math.random()}`,
           template_id: t.template_id || t.id,
           name: t.template_name || t.name || "unnamed_template",
@@ -342,38 +344,76 @@ export async function fetchMetaTemplates(
           created_at: t.created_at,
           updated_at: t.updated_at,
         }))
-
-        if (status && status !== "ALL") {
-          mapped = mapped.filter(
-            (t) => t.status.toLowerCase() === status.toLowerCase()
-          )
-        }
-        if (category && category !== "ALL") {
-          mapped = mapped.filter(
-            (t) => t.category.toLowerCase() === category.toLowerCase()
-          )
-        }
-
-        return mapped
       }
     }
   } catch (error) {
     console.warn("[fetchMetaTemplates] Fonada fetch failed, falling back to canonical templates:", error)
   }
 
-  // Fallback to canonical salon templates
-  let fallback = [...CANONICAL_SALON_TEMPLATES]
+  // Base list: fetched from Fonada or canonical salon templates
+  let baseList = fetchedTemplates.length > 0 ? fetchedTemplates : [...CANONICAL_SALON_TEMPLATES]
+
+  // Include custom templates configured via AI Smart Campaigns
+  try {
+    const { sql, tenantId } = await withTenantAuth(async ({ sql, tenantId }) => ({ sql, tenantId }))
+    if (sql && tenantId) {
+      const rules = await sql`
+        SELECT id, name, meta_template_name, meta_template_id, meta_template_status, message_template, created_at, updated_at
+        FROM smart_campaign_rules
+        WHERE tenant_id = ${tenantId} AND meta_template_name IS NOT NULL
+      `.catch(() => [])
+
+      for (const r of rules) {
+        if (!r.meta_template_name) continue
+        const { convertToMetaTemplateFormat } = await import("@/lib/ai-campaign-parser")
+        const { metaBodyText, sampleValues } = convertToMetaTemplateFormat(r.message_template || "")
+        const sampleList = Object.values(sampleValues)
+
+        baseList.push({
+          id: `smart-${r.id}`,
+          template_id: r.meta_template_id || r.meta_template_name,
+          name: r.meta_template_name,
+          template_name: r.meta_template_name,
+          category: "MARKETING",
+          language: "en",
+          status: (r.meta_template_status || "APPROVED").toUpperCase() as any,
+          quality_score: "GREEN",
+          components: [
+            {
+              type: "BODY",
+              text: metaBodyText,
+              example: sampleList.length > 0 ? { body_text: [sampleList] } : undefined,
+            },
+          ],
+          created_at: r.created_at ? new Date(r.created_at).toISOString() : undefined,
+          updated_at: r.updated_at ? new Date(r.updated_at).toISOString() : undefined,
+        })
+      }
+    }
+  } catch {}
+
+  // Deduplicate by name
+  const seen = new Set<string>()
+  let result = baseList.filter((t) => {
+    const key = (t.name || t.template_name || "").toLowerCase()
+    if (!key || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+
+  // Apply filters
   if (status && status !== "ALL") {
-    fallback = fallback.filter(
+    result = result.filter(
       (t) => t.status.toLowerCase() === status.toLowerCase()
     )
   }
   if (category && category !== "ALL") {
-    fallback = fallback.filter(
+    result = result.filter(
       (t) => t.category.toLowerCase() === category.toLowerCase()
     )
   }
-  return fallback
+
+  return result
 }
 
 /**
