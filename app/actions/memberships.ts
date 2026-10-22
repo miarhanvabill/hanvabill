@@ -170,13 +170,20 @@ export async function getAllMembershipPlans(): Promise<MembershipPlan[]> {
 export async function getCustomerMemberships(): Promise<CustomerMembership[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
+      // Ensure columns exist on customer_memberships table
+      await sql`
+        ALTER TABLE customer_memberships 
+        ADD COLUMN IF NOT EXISTS membership_plan_id INTEGER,
+        ADD COLUMN IF NOT EXISTS plan_id INTEGER
+      `.catch(() => {})
+
       const result = await sql`
         SELECT 
           cm.id,
           cm.customer_id,
           c.full_name as customer_name,
           c.email as customer_email,
-          COALESCE(cm.membership_plan_id, cm.plan_id) as plan_id,
+          cm.membership_plan_id as plan_id,
           mp.name as plan_name,
           cm.start_date,
           cm.end_date,
@@ -189,10 +196,34 @@ export async function getCustomerMemberships(): Promise<CustomerMembership[]> {
           cm.created_at
         FROM customer_memberships cm
         JOIN customers c ON cm.customer_id = c.id AND c.tenant_id = ${tenantId}
-        JOIN membership_plans mp ON (cm.membership_plan_id = mp.id OR cm.plan_id = mp.id) AND mp.tenant_id = ${tenantId}
+        JOIN membership_plans mp ON cm.membership_plan_id = mp.id AND mp.tenant_id = ${tenantId}
         WHERE cm.tenant_id = ${tenantId}
         ORDER BY cm.created_at DESC
-      `
+      `.catch(async () => {
+        return await sql`
+          SELECT 
+            cm.id,
+            cm.customer_id,
+            c.full_name as customer_name,
+            c.email as customer_email,
+            cm.plan_id as plan_id,
+            mp.name as plan_name,
+            cm.start_date,
+            cm.end_date,
+            cm.status,
+            cm.bookings_used,
+            COALESCE(mp.max_bookings_per_month, 0) as max_bookings,
+            cm.amount_paid,
+            cm.frozen_until,
+            cm.freeze_reason,
+            cm.created_at
+          FROM customer_memberships cm
+          JOIN customers c ON cm.customer_id = c.id AND c.tenant_id = ${tenantId}
+          JOIN membership_plans mp ON cm.plan_id = mp.id AND mp.tenant_id = ${tenantId}
+          WHERE cm.tenant_id = ${tenantId}
+          ORDER BY cm.created_at DESC
+        `.catch(() => [])
+      })
 
 
       const rows = result.rows || result
@@ -600,11 +631,18 @@ export async function getActiveCustomerMembership(customerId: number): Promise<a
           AND end_date < CURRENT_DATE
       `.catch(() => {})
 
+      // Ensure both columns exist for full backwards & forwards compatibility
+      await sql`
+        ALTER TABLE customer_memberships 
+        ADD COLUMN IF NOT EXISTS membership_plan_id INTEGER,
+        ADD COLUMN IF NOT EXISTS plan_id INTEGER
+      `.catch(() => {})
+
       const result = await sql`
         SELECT 
           cm.id,
           cm.customer_id,
-          COALESCE(cm.membership_plan_id, cm.plan_id) as plan_id,
+          cm.membership_plan_id as plan_id,
           mp.name as plan_name,
           mp.discount_percentage,
           mp.benefits,
@@ -619,14 +657,42 @@ export async function getActiveCustomerMembership(customerId: number): Promise<a
             ELSE false 
           END as is_frozen
         FROM customer_memberships cm
-        JOIN membership_plans mp ON (cm.membership_plan_id = mp.id OR cm.plan_id = mp.id) AND mp.tenant_id = ${tenantId}
+        JOIN membership_plans mp ON cm.membership_plan_id = mp.id AND mp.tenant_id = ${tenantId}
         WHERE cm.customer_id = ${customerId} 
         AND cm.tenant_id = ${tenantId}
         AND cm.status = 'active'
         AND cm.end_date >= CURRENT_DATE
         ORDER BY cm.created_at DESC
         LIMIT 1
-      `
+      `.catch(async () => {
+        return await sql`
+          SELECT 
+            cm.id,
+            cm.customer_id,
+            cm.plan_id as plan_id,
+            mp.name as plan_name,
+            mp.discount_percentage,
+            mp.benefits,
+            cm.start_date,
+            cm.end_date,
+            cm.status,
+            cm.bookings_used,
+            cm.frozen_until,
+            cm.freeze_reason,
+            CASE 
+              WHEN cm.frozen_until IS NOT NULL AND cm.frozen_until >= CURRENT_DATE THEN true
+              ELSE false 
+            END as is_frozen
+          FROM customer_memberships cm
+          JOIN membership_plans mp ON cm.plan_id = mp.id AND mp.tenant_id = ${tenantId}
+          WHERE cm.customer_id = ${customerId} 
+          AND cm.tenant_id = ${tenantId}
+          AND cm.status = 'active'
+          AND cm.end_date >= CURRENT_DATE
+          ORDER BY cm.created_at DESC
+          LIMIT 1
+        `.catch(() => [])
+      })
       const rows = result.rows || result
       if (!rows || rows.length === 0) return null
       
