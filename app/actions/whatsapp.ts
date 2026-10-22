@@ -191,7 +191,7 @@ export async function getWhatsAppMessages(phoneNumber?: string): Promise<WhatsAp
           status: m.status || "sent",
           trigger_type: m.trigger_type,
           created_at: m.created_at 
-            ? new Date(new Date(m.created_at).getTime() - (5.5 * 60 * 60 * 1000)).toISOString()
+            ? new Date(m.created_at).toISOString()
             : new Date().toISOString(),
         }))
       }
@@ -703,7 +703,17 @@ export async function sendMediaChatAttachment(params: {
         })
       }
 
-      const messageContent = params.caption?.trim() || params.filename?.trim() || params.url.trim()
+      const url = params.url.trim()
+      const caption = params.caption?.trim()
+      const filename = params.filename?.trim()
+      let messageContent = url
+      if (params.mediaType === "image") {
+        messageContent = caption ? `${url}\n${caption}` : url
+      } else {
+        messageContent = caption
+          ? `${url}\n[${filename || "document.pdf"}] ${caption}`
+          : `${url}\n[${filename || "document.pdf"}]`
+      }
       const status = fonadaRes.success ? "sent" : "failed"
 
       let customerId = params.customerId

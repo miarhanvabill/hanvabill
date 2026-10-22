@@ -532,12 +532,24 @@ export async function POST(req: Request) {
               let content = "";
               let msgType = msg.type || "text";
 
-              if (msg.type === "text") content = msg.text?.body || "";
-              else if (msg.type === "image") content = msg.image?.caption || "📷 Image";
-              else if (msg.type === "document") content = msg.document?.filename || "📄 Document";
-              else if (msg.type === "interactive") content = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || "Button Clicked";
-              else if (msg.type === "button") content = msg.button?.text || msg.button?.payload || "Button Clicked";
-              else content = `[${msg.type}]`;
+              if (msg.type === "text") {
+                content = msg.text?.body || "";
+              } else if (msg.type === "image") {
+                const imgLink = msg.image?.link || msg.image?.url;
+                const imgCaption = msg.image?.caption;
+                content = imgLink ? (imgCaption ? `${imgLink}\n${imgCaption}` : imgLink) : (imgCaption ? `📷 ${imgCaption}` : "📷 Photo");
+              } else if (msg.type === "document") {
+                const docLink = msg.document?.link || msg.document?.url;
+                const docFilename = msg.document?.filename || "document.pdf";
+                const docCaption = msg.document?.caption || "";
+                content = docLink ? `${docLink}\n[${docFilename}] ${docCaption}`.trim() : `📄 ${docFilename}`;
+              } else if (msg.type === "interactive") {
+                content = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || "Button Clicked";
+              } else if (msg.type === "button") {
+                content = msg.button?.text || msg.button?.payload || "Button Clicked";
+              } else {
+                content = `[${msg.type}]`;
+              }
 
               if (phone) {
                 await processInbound({
@@ -602,9 +614,37 @@ export async function POST(req: Request) {
       payload.content ||
       "";
 
-    if (dataObj.msgType === "IMAGE" || dataObj.type === "image") content = dataObj.imageUrl || dataObj.url || "📷 Image";
+    if (dataObj.msgType === "IMAGE" || dataObj.type === "image") {
+      const imgLink =
+        dataObj.image?.link ||
+        dataObj.image?.url ||
+        dataObj.imageUrl ||
+        dataObj.image_url ||
+        dataObj.media_url ||
+        dataObj.mediaUrl ||
+        dataObj.link ||
+        dataObj.url ||
+        dataObj.file_url ||
+        payload.imageUrl ||
+        payload.url;
+      const imgCaption = dataObj.image?.caption || dataObj.caption || "";
+      content = imgLink ? (imgCaption ? `${imgLink}\n${imgCaption}` : imgLink) : (imgCaption ? `📷 ${imgCaption}` : "📷 Photo");
+    }
     if (dataObj.msgType === "VIDEO" || dataObj.type === "video") content = dataObj.videoUrl || dataObj.url || "🎥 Video";
-    if (dataObj.msgType === "DOCUMENT" || dataObj.type === "document") content = dataObj.documentUrl || dataObj.url || "📄 Document";
+    if (dataObj.msgType === "DOCUMENT" || dataObj.type === "document") {
+      const docLink =
+        dataObj.document?.link ||
+        dataObj.document?.url ||
+        dataObj.documentUrl ||
+        dataObj.document_url ||
+        dataObj.file_url ||
+        dataObj.media_url ||
+        dataObj.link ||
+        dataObj.url;
+      const docFilename = dataObj.document?.filename || dataObj.filename || "document.pdf";
+      const docCaption = dataObj.document?.caption || dataObj.caption || "";
+      content = docLink ? `${docLink}\n[${docFilename}] ${docCaption}`.trim() : `📄 ${docFilename}`;
+    }
     if (dataObj.msgType === "AUDIO" || dataObj.type === "audio") content = dataObj.audioUrl || dataObj.url || "🎵 Audio";
 
     const msgId = dataObj.id || dataObj.msgId || dataObj.msg_id || dataObj.message_id || payload.msgId || payload.id;

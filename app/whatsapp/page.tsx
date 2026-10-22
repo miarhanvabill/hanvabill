@@ -156,29 +156,49 @@ export default function WhatsAppPage() {
   }, [messages])
 
   const liveWindowRemaining = useMemo(() => {
-    if (!windowStatus?.lastInboundAt) {
+    // 1. Inspect loaded messages in the current conversation for the latest customer message
+    const inboundMsgs = messages.filter((m) => m.direction === "inbound")
+    let latestInboundTime: number | null = null
+
+    if (inboundMsgs.length > 0) {
+      const lastInbound = inboundMsgs[inboundMsgs.length - 1]
+      if (lastInbound.created_at) {
+        latestInboundTime = new Date(lastInbound.created_at).getTime()
+      }
+    }
+
+    // 2. Fall back to windowStatus from server if messages haven't populated yet
+    if (!latestInboundTime && windowStatus?.lastInboundAt) {
+      latestInboundTime = new Date(windowStatus.lastInboundAt).getTime()
+    }
+
+    if (!latestInboundTime) {
       return {
         isWindowActive: false,
         hoursRemaining: 0,
         minutesRemaining: 0,
       }
     }
-    const inboundTime = new Date(windowStatus.lastInboundAt).getTime()
-    const elapsedMin = (Date.now() - inboundTime) / 60000
-    if (elapsedMin >= 0 && elapsedMin < 24 * 60) {
-      const rem = 24 * 60 - elapsedMin
+
+    const elapsedMin = (Date.now() - latestInboundTime) / 60000
+
+    // If latest customer message was within the last 24 hours (allowing for server clock skew)
+    if (elapsedMin < 24 * 60) {
+      const safeElapsed = Math.max(0, elapsedMin)
+      const rem = 24 * 60 - safeElapsed
       return {
         isWindowActive: true,
         hoursRemaining: Math.floor(rem / 60),
         minutesRemaining: Math.floor(rem % 60),
       }
     }
+
     return {
       isWindowActive: false,
       hoursRemaining: 0,
       minutesRemaining: 0,
     }
-  }, [windowStatus, messages])
+  }, [messages, windowStatus])
 
   const loadInitialData = async () => {
     setLoading(true)
@@ -863,38 +883,76 @@ export default function WhatsAppPage() {
                         ) : isImage ? (
                           /* Image attachment message */
                           <div className="space-y-1.5">
-                            {msg.message_content.startsWith("http") ? (
-                              <a href={msg.message_content} target="_blank" rel="noopener noreferrer">
-                                <img
-                                  src={msg.message_content}
-                                  alt="WhatsApp Image"
-                                  className="rounded-lg max-h-48 w-full object-cover border border-slate-200"
-                                />
-                              </a>
-                            ) : null}
-                            <p className="whitespace-pre-wrap">{msg.message_content}</p>
+                            {(() => {
+                              const urlMatch = msg.message_content.match(/https?:\/\/[^\s]+/i);
+                              const imgUrl = urlMatch ? urlMatch[0] : (msg.message_content.startsWith("http") ? msg.message_content : null);
+                              const rawCaption = imgUrl ? msg.message_content.replace(imgUrl, "").trim() : msg.message_content;
+                              const caption = rawCaption !== "📷 Image" && rawCaption !== "📷 Photo" ? rawCaption : "";
+
+                              if (imgUrl) {
+                                return (
+                                  <div>
+                                    <a href={imgUrl} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-xl">
+                                      <img
+                                        src={imgUrl}
+                                        alt="WhatsApp Photo"
+                                        className="rounded-xl max-h-56 w-full object-cover border border-slate-200 hover:opacity-95 transition-opacity"
+                                      />
+                                    </a>
+                                    {caption && <p className="whitespace-pre-wrap text-xs pt-1.5">{caption}</p>}
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <div className="p-2.5 bg-slate-100 rounded-xl border border-slate-200 flex items-center gap-2.5 text-slate-700">
+                                  <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 text-base">
+                                    📷
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-bold text-xs text-slate-900">WhatsApp Photo</p>
+                                    <p className="text-[10px] text-slate-500 truncate">
+                                      {caption || "Photo received on WhatsApp"}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                         ) : isDocument ? (
                           /* Document attachment message */
                           <div className="space-y-1">
-                            <div className="p-2.5 bg-white rounded-lg border border-slate-200 flex items-center gap-2.5">
-                              <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
-                                <FileText className="w-4 h-4" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <p className="text-xs font-bold text-slate-800 truncate">{msg.message_content}</p>
-                                {msg.message_content.startsWith("http") && (
-                                  <a
-                                    href={msg.message_content}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-[10px] text-emerald-600 hover:underline flex items-center gap-0.5 mt-0.5 font-medium"
-                                  >
-                                    Open Document <ExternalLink className="w-2.5 h-2.5" />
-                                  </a>
-                                )}
-                              </div>
-                            </div>
+                            {(() => {
+                              const urlMatch = msg.message_content.match(/https?:\/\/[^\s]+/i);
+                              const docUrl = urlMatch ? urlMatch[0] : (msg.message_content.startsWith("http") ? msg.message_content : null);
+                              const label = docUrl ? msg.message_content.replace(docUrl, "").trim() : msg.message_content;
+
+                              return (
+                                <div className="p-2.5 bg-white rounded-xl border border-slate-200/90 shadow-2xs flex items-center justify-between gap-2.5">
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-8 h-8 rounded-lg bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                                      <FileText className="w-4 h-4" />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="font-bold text-xs text-slate-900 truncate">
+                                        {label || "PDF Document"}
+                                      </p>
+                                      <p className="text-[10px] text-slate-400">PDF Invoice / File</p>
+                                    </div>
+                                  </div>
+                                  {docUrl && (
+                                    <a
+                                      href={docUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg shrink-0 flex items-center gap-1 transition-colors"
+                                    >
+                                      View <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         ) : (
                           /* Normal text message */
