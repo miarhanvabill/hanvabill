@@ -189,7 +189,7 @@ export async function POST(req: NextRequest) {
             formData.append('msgType', 'text')
             formData.append('sendMethod', 'quick')
             formData.append('output', 'json')
-            formData.append('check_duplicate', 'pause')
+            formData.append('check_duplicate', 'false')
             process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 
             const response = await fetch('https://waba.fonada.com/api/SendMsgOld', {

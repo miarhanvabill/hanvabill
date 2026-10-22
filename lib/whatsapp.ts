@@ -55,7 +55,7 @@ export async function sendViaHanvaOldApi(creds: any, phone: string, text: string
     formData.append("msgType", "text");
     formData.append("sendMethod", "quick");
     formData.append("output", "json");
-    formData.append("check_duplicate", "pause");
+    formData.append("check_duplicate", "false");
 
     try {
       const res = await fetch(apiUrl, { method: "POST", body: formData });
