@@ -6,8 +6,8 @@ import {
   sendFonadaInteractiveMessage,
   sendFonadaImageMessage,
   sendFonadaDocumentMessage,
-  type FonadaAudienceRow,
 } from "@/lib/fonada-ai"
+import type { FonadaAudienceRow } from "@/lib/fonada-ai"
 import { withTenantAuth } from "@/lib/withTenantAuth"
 import { getBusinessSettings } from "@/app/actions/settings"
 import { revalidatePath } from "next/cache"

@@ -4,7 +4,8 @@
 
 import { withTenantAuth } from '@/lib/withTenantAuth'
 import { revalidatePath } from "next/cache"
-import { CSVParser, serviceValidationRules, type CSVParseResult } from "@/lib/csv-parser"
+import { CSVParser, serviceValidationRules } from "@/lib/csv-parser"
+import type { CSVParseResult } from "@/lib/csv-parser"
 import { cacheFetch, cacheDel } from '@/lib/cache'
 
 export interface Service {

@@ -19,12 +19,12 @@ function safeRevalidate(path: string) {
 const FONADA_AI_TEMPLATE_MANAGER_URL =
   "https://app.fonada.ai/functions/v1/whatsapp_template_manager"
 
+import type {
+  MetaTemplate,
+  CreateTemplateInput,
+  AfterHoursSettings,
+} from "@/lib/whatsapp-templates-constants"
 import {
-  type MetaTemplateComponentButton,
-  type MetaTemplateComponent,
-  type MetaTemplate,
-  type CreateTemplateInput,
-  type AfterHoursSettings,
   DEFAULT_AFTER_HOURS_SETTINGS,
   CANONICAL_SALON_TEMPLATES,
 } from "@/lib/whatsapp-templates-constants"
