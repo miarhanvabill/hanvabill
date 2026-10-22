@@ -1,5 +1,7 @@
 // lib/ai-campaign-parser.ts
 
+import { generateCampaignWithGemini } from "@/lib/gemini";
+
 export type CampaignTriggerType =
   | "days_after_service"
   | "days_since_last_visit"
@@ -21,6 +23,61 @@ export interface SmartCampaignRuleDraft {
   cooldown_days: number;
   exclude_active_bookings: boolean;
   is_enabled: boolean;
+  // Meta Template Studio integration
+  meta_template_name?: string;
+  meta_template_category?: "MARKETING" | "UTILITY";
+  auto_push_to_meta?: boolean;
+}
+
+export function generateMetaTemplateName(name: string): string {
+  const clean = name
+    .toLowerCase()
+    .replace(/[^a-z0-9_]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 40);
+  return clean || `smart_camp_${Date.now()}`;
+}
+
+export interface MetaConvertedTemplate {
+  metaBodyText: string;
+  variableOrder: string[];
+  sampleValues: Record<string, string>;
+}
+
+export function convertToMetaTemplateFormat(
+  templateText: string,
+  sampleMap?: Record<string, string>
+): MetaConvertedTemplate {
+  const defaultSamples: Record<string, string> = {
+    customer_name: "Priya",
+    business_name: "Hanva Salon",
+    service_name: "Hair Color",
+    coupon_code: "SPECIAL10",
+    booking_link: "https://biz.hanva.in/book/salon",
+    ...(sampleMap || {}),
+  };
+
+  const variableOrder: string[] = [];
+  const sampleValues: Record<string, string> = {};
+
+  const convertedText = templateText.replace(/\{\{\s*([a-zA-Z0-9_-]+)\s*\}\}/g, (_, varName) => {
+    const cleanVar = varName.trim();
+    let idx = variableOrder.indexOf(cleanVar);
+    if (idx === -1) {
+      variableOrder.push(cleanVar);
+      idx = variableOrder.length - 1;
+    }
+    const paramNum = String(idx + 1);
+    sampleValues[paramNum] = defaultSamples[cleanVar] || cleanVar;
+    return `{{${paramNum}}}`;
+  });
+
+  return {
+    metaBodyText: convertedText,
+    variableOrder,
+    sampleValues,
+  };
 }
 
 export interface PresetSalonRecipe {
@@ -330,20 +387,21 @@ export function parseCampaignPromptDeterministic(promptText: string): SmartCampa
 
 /**
  * Main parser entry point:
- * - If an OpenAI API Key is provided or present in environment, calls gpt-4o-mini
- * - Automatically falls back to instant deterministic NLP compiler on any error or missing key
+ * - Uses Google Gemini AI (embedded system-wide for all tenants) as the primary intelligence engine
+ * - If a custom OpenAI API Key is provided, supports GPT-4o-mini
+ * - Automatically falls back to instant deterministic NLP compiler on any error or missing network
  */
 export async function parseCampaignPrompt(promptText: string, apiKey?: string): Promise<SmartCampaignRuleDraft> {
   const fallback = parseCampaignPromptDeterministic(promptText);
-  const key = apiKey || process.env.OPENAI_API_KEY;
 
-  if (key && key.startsWith("sk-")) {
+  // 1. If explicit OpenAI key provided, try OpenAI
+  if (apiKey && apiKey.startsWith("sk-")) {
     try {
       const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${key}`,
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           model: "gpt-4o-mini",
@@ -391,8 +449,32 @@ Respond with valid JSON only.`,
         };
       }
     } catch (llmErr) {
-      console.warn("[AI Parser] LLM call error, using deterministic compiler:", llmErr);
+      console.warn("[AI Parser] OpenAI call error, trying Gemini...", llmErr);
     }
+  }
+
+  // 2. Primary Engine: Google Gemini (Free & Embedded for all tenants)
+  try {
+    const geminiKey = apiKey && !apiKey.startsWith("sk-") ? apiKey : undefined;
+    const parsed = await generateCampaignWithGemini(promptText, "Hanva Salon", geminiKey);
+    if (parsed && (parsed.name || parsed.trigger_type)) {
+      return {
+        name: parsed.name || fallback.name,
+        prompt_input: promptText,
+        trigger_type: parsed.trigger_type || fallback.trigger_type,
+        trigger_days: Number(parsed.trigger_days !== undefined ? parsed.trigger_days : fallback.trigger_days),
+        service_names: Array.isArray(parsed.service_names) ? parsed.service_names : fallback.service_names,
+        min_spend: Number(parsed.min_spend !== undefined ? parsed.min_spend : fallback.min_spend || 0),
+        message_template: parsed.message_template || fallback.message_template,
+        coupon_code: parsed.coupon_code || fallback.coupon_code,
+        send_time: "10:00",
+        cooldown_days: 14,
+        exclude_active_bookings: true,
+        is_enabled: true,
+      };
+    }
+  } catch (geminiErr) {
+    console.warn("[AI Parser] Gemini call error, falling back to deterministic compiler:", geminiErr);
   }
 
   return fallback;
