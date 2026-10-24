@@ -243,7 +243,7 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
             <DialogTitle className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
               {showCreateForm ? (
                 <>
-                  <User className="h-5 w-5 text-emerald-600" />
+                  <User className="h-5 w-5 text-slate-900" />
                   Create New Customer
                 </>
               ) : (
@@ -346,12 +346,12 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
             /* Create Customer Form */
             <form onSubmit={handleCreateCustomer} className="space-y-4">
               {newCustomer.phone_number && (
-                <div className="bg-emerald-50 text-emerald-800 text-xs px-3 py-2 rounded-lg border border-emerald-200 flex items-center justify-between">
+                <div className="bg-slate-50 text-slate-800 text-xs px-3 py-2 rounded-lg border border-slate-200 flex items-center justify-between">
                   <span className="flex items-center gap-1.5 font-medium">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                    <Sparkles className="w-3.5 h-3.5 text-slate-500" />
                     Phone number <strong>{newCustomer.phone_number}</strong> auto-filled from search
                   </span>
-                  <span className="text-[10px] bg-emerald-200/70 text-emerald-900 px-1.5 py-0.5 rounded font-semibold uppercase">
+                  <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-semibold uppercase tracking-wide">
                     New Client
                   </span>
                 </div>
@@ -437,7 +437,7 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
                 <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)} className="flex-1 text-xs">
                   Cancel
                 </Button>
-                <Button type="submit" disabled={createLoading} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium">
+                <Button type="submit" disabled={createLoading} className="flex-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium">
                   {createLoading ? "Creating..." : "Save & Select Customer"}
                 </Button>
               </div>
