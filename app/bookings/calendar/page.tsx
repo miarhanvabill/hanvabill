@@ -17,6 +17,7 @@ import {
   CheckCircle,
   CheckCircle2,
   XCircle,
+  FileText,
   Plus,
   Sparkles,
   Phone,
@@ -1501,11 +1502,59 @@ export default function BookingCalendarPage() {
                   </Button>
                 )}
 
-                <Link href={`/new-sale?booking_id=${selectedBooking.id}&step=checkout`} className="w-full">
-                  <Button className="w-full gap-2 bg-slate-900 hover:bg-slate-800 text-white font-medium shadow-xs">
-                    Proceed to POS Checkout <ArrowRight className="w-3.5 h-3.5" />
-                  </Button>
-                </Link>
+                {/* Only show Proceed to POS Checkout when booking is NOT completed and NOT cancelled */}
+                {selectedBooking.status !== "completed" && selectedBooking.status !== "cancelled" && (
+                  <Link href={`/new-sale?booking_id=${selectedBooking.id}&step=checkout`} className="w-full">
+                    <Button className="w-full gap-2 bg-slate-900 hover:bg-slate-800 text-white font-medium shadow-xs">
+                      Proceed to POS Checkout <ArrowRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </Link>
+                )}
+
+                {/* Completed State Actions */}
+                {selectedBooking.status === "completed" && (
+                  <div className="w-full space-y-2">
+                    <div className="w-full flex items-center justify-between p-3 bg-emerald-50 text-emerald-900 rounded-lg border border-emerald-200 text-sm">
+                      <div className="flex items-center gap-2 font-medium">
+                        <CheckCircle className="w-4 h-4 text-emerald-600" />
+                        <span>Completed &amp; Billed</span>
+                      </div>
+                      <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-300 font-semibold text-xs">
+                        Paid
+                      </Badge>
+                    </div>
+
+                    {selectedBooking.share_token ? (
+                      <a href={`/inv/${selectedBooking.share_token}`} target="_blank" rel="noopener noreferrer" className="w-full block">
+                        <Button variant="outline" className="w-full gap-2 text-slate-800 border-slate-300 hover:bg-slate-50">
+                          <FileText className="w-4 h-4 text-slate-600" />
+                          View Invoice / Receipt
+                        </Button>
+                      </a>
+                    ) : (
+                      <Link href={`/invoices`} className="w-full block">
+                        <Button variant="outline" className="w-full gap-2 text-slate-800 border-slate-300 hover:bg-slate-50">
+                          <FileText className="w-4 h-4 text-slate-600" />
+                          View Invoices
+                        </Button>
+                      </Link>
+                    )}
+
+                    <Link href={`/bookings/details/${selectedBooking.id}`} className="w-full block">
+                      <Button variant="ghost" size="sm" className="w-full text-slate-600 hover:text-slate-900">
+                        View Booking Details
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+
+                {/* Cancelled State */}
+                {selectedBooking.status === "cancelled" && (
+                  <div className="w-full flex items-center justify-center gap-2 p-3 bg-rose-50 text-rose-800 rounded-lg border border-rose-200 text-sm font-medium">
+                    <XCircle className="w-4 h-4 text-rose-600" />
+                    <span>This booking has been cancelled</span>
+                  </div>
+                )}
 
                 {selectedBooking.status !== "cancelled" && selectedBooking.status !== "completed" && (
                   <Button
