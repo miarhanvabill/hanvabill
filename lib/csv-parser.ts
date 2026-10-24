@@ -75,6 +75,41 @@ const HEADER_ALIASES: Record<string, string> = {
   staff: "staff_name",
   stylist: "staff_name",
   employee: "staff_name",
+
+  // Product headers
+  product_name: "name",
+  item: "name",
+  product: "name",
+  retail_price: "price",
+  selling_price: "price",
+  cost_price: "cost",
+  purchase_price: "cost",
+  buy_price: "cost",
+  stock: "stock_quantity",
+  quantity: "stock_quantity",
+  qty: "stock_quantity",
+  inventory: "stock_quantity",
+  min_stock: "min_stock_level",
+  minimum_stock: "min_stock_level",
+  reorder_level: "min_stock_level",
+  barcode_number: "barcode",
+  upc: "barcode",
+  ean: "barcode",
+  sku_number: "sku",
+  product_code: "sku",
+
+  // Staff headers
+  employee_name: "name",
+  stylist_name: "name",
+  member_name: "name",
+  staff_phone: "phone",
+  staff_email: "email",
+  designation: "role",
+  position: "role",
+  job_title: "role",
+  commission: "commission_rate",
+  commission_percentage: "commission_rate",
+  commission_pct: "commission_rate",
 }
 
 export class CSVParser {
@@ -303,4 +338,24 @@ export const bookingValidationRules: CSVValidationRule[] = [
   },
   { field: "total_amount", required: false, type: "number" },
   { field: "notes", required: false, type: "string" },
+]
+
+export const productValidationRules: CSVValidationRule[] = [
+  { field: "name", required: true, type: "string", maxLength: 255 },
+  { field: "price", required: true, type: "number" },
+  { field: "cost", required: false, type: "number" },
+  { field: "stock_quantity", required: false, type: "number" },
+  { field: "category", required: false, type: "string", maxLength: 100 },
+  { field: "sku", required: false, type: "string", maxLength: 100 },
+  { field: "barcode", required: false, type: "string", maxLength: 100 },
+  { field: "description", required: false, type: "string" },
+  { field: "min_stock_level", required: false, type: "number" },
+]
+
+export const staffValidationRules: CSVValidationRule[] = [
+  { field: "name", required: true, type: "string", maxLength: 255 },
+  { field: "phone", required: false, type: "phone", maxLength: 20 },
+  { field: "email", required: false, type: "email", maxLength: 255 },
+  { field: "role", required: false, type: "string", maxLength: 100 },
+  { field: "commission_rate", required: false, type: "number" },
 ]

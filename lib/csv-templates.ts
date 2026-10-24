@@ -131,6 +131,40 @@ export const bookingTemplate: CSVTemplate = {
   filename: "bookings_sample_template.csv",
 }
 
+// Products CSV template
+export const productTemplate: CSVTemplate = {
+  headers: ["name", "price", "cost", "stock_quantity", "category", "sku", "barcode", "description", "min_stock_level"],
+  sampleData: [
+    ["L'Oreal Pro Shampoo 250ml", "650.00", "420.00", "24", "Hair Care", "SKU-LOR-01", "8901234567890", "Deep nourishing shampoo for treated hair", "5"],
+    ["Moroccan Argan Hair Serum 100ml", "1200.00", "780.00", "15", "Styling & Finish", "SKU-MOR-02", "8901234567891", "Frizz control and high shine Moroccan serum", "3"],
+    ["Schwarzkopf Hair Clay Wax 85g", "750.00", "490.00", "30", "Men's Styling", "SKU-SCH-03", "8901234567892", "Matte finish strong hold styling clay", "6"],
+    ["O3+ Brightening Facial Scrub 200g", "950.00", "600.00", "10", "Skin & Facial", "SKU-O3-04", "8901234567893", "Exfoliating salon scrub with botanical extracts", "2"],
+  ],
+  filename: "products_sample_template.csv",
+}
+
+// Staff CSV template
+export const staffTemplate: CSVTemplate = {
+  headers: ["name", "phone", "email", "role", "commission_rate"],
+  sampleData: [
+    ["Anita Sharma", "+919876543210", "anita.sharma@hanva.in", "Senior Hair Stylist", "12"],
+    ["Rahul Verma", "+919876543211", "rahul.verma@hanva.in", "Creative Director", "15"],
+    ["Pooja Patel", "+919876543212", "pooja.patel@hanva.in", "Skin & Esthetician", "10"],
+    ["Vikram Singh", "+919876543213", "vikram.singh@hanva.in", "Salon Manager", "5"],
+  ],
+  filename: "staff_sample_template.csv",
+}
+
+// Invoices CSV template
+export const invoiceTemplate: CSVTemplate = {
+  headers: ["invoice_number", "invoice_date", "customer_name", "customer_phone", "subtotal", "discount_amount", "gst_amount", "total_amount", "payment_method", "notes"],
+  sampleData: [
+    ["INV-2026-001", "2026-10-24", "Priya Sen", "+919321501389", "1500.00", "100.00", "252.00", "1652.00", "UPI", "Haircut and Spa treatment"],
+    ["INV-2026-002", "2026-10-24", "Amitabh Roy", "+919876543210", "800.00", "0.00", "144.00", "944.00", "Cash", "Beard trim and cleanup"],
+  ],
+  filename: "invoices_sample_template.csv",
+}
+
 // Utility function to generate CSV content from template
 export function generateCSVContent(template: CSVTemplate, includeData = true): string {
   let csvContent = template.headers.join(",") + "\n"
@@ -167,8 +201,10 @@ export function downloadCSVTemplate(template: CSVTemplate, includeData = true): 
   window.URL.revokeObjectURL(url)
 }
 
+export type CSVEntityType = "customers" | "services" | "bookings" | "products" | "staff" | "invoices"
+
 // Get template by entity type
-export function getTemplateByType(entityType: "customers" | "services" | "bookings"): CSVTemplate {
+export function getTemplateByType(entityType: CSVEntityType): CSVTemplate {
   switch (entityType) {
     case "customers":
       return customerTemplate
@@ -176,19 +212,25 @@ export function getTemplateByType(entityType: "customers" | "services" | "bookin
       return serviceTemplate
     case "bookings":
       return bookingTemplate
+    case "products":
+      return productTemplate
+    case "staff":
+      return staffTemplate
+    case "invoices":
+      return invoiceTemplate
     default:
       throw new Error(`Unknown entity type: ${entityType}`)
   }
 }
 
 // Generate headers-only template (for empty template downloads)
-export function generateEmptyTemplate(entityType: "customers" | "services" | "bookings"): string {
+export function generateEmptyTemplate(entityType: CSVEntityType): string {
   const template = getTemplateByType(entityType)
   return generateCSVContent(template, false)
 }
 
 // Generate template with sample data
-export function generateSampleTemplate(entityType: "customers" | "services" | "bookings"): string {
+export function generateSampleTemplate(entityType: CSVEntityType): string {
   const template = getTemplateByType(entityType)
   return generateCSVContent(template, true)
 }
@@ -196,7 +238,7 @@ export function generateSampleTemplate(entityType: "customers" | "services" | "b
 // Validation helpers for templates
 export function validateCSVHeaders(
   csvHeaders: string[],
-  entityType: "customers" | "services" | "bookings",
+  entityType: CSVEntityType,
 ): {
   isValid: boolean
   missingRequired: string[]
@@ -221,7 +263,7 @@ export function validateCSVHeaders(
 }
 
 // Get required headers for each entity type
-export function getRequiredHeaders(entityType: "customers" | "services" | "bookings"): string[] {
+export function getRequiredHeaders(entityType: CSVEntityType): string[] {
   switch (entityType) {
     case "customers":
       return ["phone_number", "full_name"]
@@ -229,13 +271,19 @@ export function getRequiredHeaders(entityType: "customers" | "services" | "booki
       return ["name", "price"]
     case "bookings":
       return ["booking_number", "booking_date", "booking_time"]
+    case "products":
+      return ["name", "price"]
+    case "staff":
+      return ["name"]
+    case "invoices":
+      return ["invoice_number", "customer_name", "total_amount"]
     default:
       return []
   }
 }
 
 // Get optional headers for each entity type
-export function getOptionalHeaders(entityType: "customers" | "services" | "bookings"): string[] {
+export function getOptionalHeaders(entityType: CSVEntityType): string[] {
   const template = getTemplateByType(entityType)
   const required = getRequiredHeaders(entityType)
   return template.headers.filter((header) => !required.includes(header))

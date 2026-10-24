@@ -1,23 +1,43 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Bell, Search, Menu } from "lucide-react"
-import { playNotificationSound } from "@/lib/notification-sound"
+import {
+  Bell,
+  Menu,
+  Store,
+  Volume2,
+  VolumeX,
+  CheckCheck,
+  GraduationCap,
+  Sparkles,
+  ExternalLink,
+} from "lucide-react"
+import {
+  playNotificationSound,
+  isNotificationSoundEnabled,
+  setNotificationSoundEnabled,
+} from "@/lib/notification-sound"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Badge } from "@/components/ui/badge"
-import { SyncStatus } from "./sync-status"
-import { RealTimeIndicator } from "./real-time-indicator"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import Link from "next/link"
 import { useAuth, SignInButton, SignUpButton, UserButton, OrganizationSwitcher } from "@clerk/nextjs"
+import { HeaderCommandPalette } from "./header-command-palette"
+import { HeaderQuickAction } from "./header-quick-action"
+import { HeaderLivePulse } from "./header-live-pulse"
+import { HeaderFullscreenToggle } from "./header-fullscreen-toggle"
 
 interface HeaderProps {
   onMenuToggle?: () => void
@@ -67,14 +87,25 @@ function saveAllLocalReadIds(ids: string[]) {
 }
 
 export function Header({ onMenuToggle }: HeaderProps) {
-  const [searchQuery, setSearchQuery] = useState("")
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [soundEnabled, setSoundEnabled] = useState(true)
+  const [notifFilter, setNotifFilter] = useState<"all" | "unread">("all")
   const prevNotificationIds = useRef<Set<string>>(new Set())
   const isInitialLoad = useRef(true)
-  
-  const { isLoaded, isSignedIn } = useAuth();
+
+  const { isLoaded, isSignedIn } = useAuth()
+
+  useEffect(() => {
+    setSoundEnabled(isNotificationSoundEnabled())
+  }, [])
+
+  const toggleSound = () => {
+    const next = !soundEnabled
+    setSoundEnabled(next)
+    setNotificationSoundEnabled(next)
+  }
 
   const fetchNotifications = async () => {
     try {
@@ -149,13 +180,8 @@ export function Header({ onMenuToggle }: HeaderProps) {
     // Poll every 12 seconds for fresh business/system notifications
     const interval = setInterval(fetchNotifications, 12000)
 
-    // Check when user returns to tab or window gains focus
-    const handleFocus = () => {
-      fetchNotifications()
-    }
-    const handleCustomRefresh = () => {
-      fetchNotifications()
-    }
+    const handleFocus = () => fetchNotifications()
+    const handleCustomRefresh = () => fetchNotifications()
 
     window.addEventListener("focus", handleFocus)
     window.addEventListener("refresh-notifications", handleCustomRefresh)
@@ -170,6 +196,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
   }, [])
 
   const unreadCount = notifications.filter((n) => !n.is_read).length
+  const displayedNotifications = notifications.filter((n) => notifFilter === "all" || !n.is_read)
 
   const formatRelativeTime = (dateString: string) => {
     if (!dateString) return "Just now"
@@ -182,136 +209,250 @@ export function Header({ onMenuToggle }: HeaderProps) {
     if (diffInSeconds < 60) return "Just now"
 
     const diffInMinutes = Math.floor(diffInSeconds / 60)
-    if (diffInMinutes < 60) return `${diffInMinutes} min ago`
+    if (diffInMinutes < 60) return `${diffInMinutes}m ago`
 
     const diffInHours = Math.floor(diffInMinutes / 60)
-    if (diffInHours < 24) return `${diffInHours} hr ago`
+    if (diffInHours < 24) return `${diffInHours}h ago`
 
     const diffInDays = Math.floor(diffInHours / 24)
     if (diffInDays === 1) return "Yesterday"
-    if (diffInDays < 7) return `${diffInDays} days ago`
+    if (diffInDays < 7) return `${diffInDays}d ago`
 
     return date.toLocaleDateString("en-IN", { day: "numeric", month: "short" })
   }
 
-  return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-white px-4 md:px-6">
-      {/* Mobile menu button */}
-      <Button variant="ghost" size="icon" className="md:hidden" onClick={onMenuToggle} aria-label="Toggle menu">
-        <Menu className="h-5 w-5" />
-      </Button>
+  const getNotificationLink = (message: string) => {
+    const msg = message.toLowerCase()
+    if (msg.includes("booking") || msg.includes("appointment")) return "/bookings/calendar"
+    if (msg.includes("bill") || msg.includes("invoice") || msg.includes("sale") || msg.includes("payment")) return "/invoices"
+    if (msg.includes("stock") || msg.includes("inventory")) return "/inventory"
+    if (msg.includes("customer")) return "/customers"
+    return "/notifications"
+  }
 
-      {/* Left side items */}
-      <div className="flex-1 flex items-center gap-4 max-w-2xl">
-        <div className="relative w-full max-w-md hidden sm:block">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-500" />
-          <Input
-            type="search"
-            placeholder="Search customers, bookings..."
-            className="pl-8"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-        
-        {isLoaded && isSignedIn && (
-          <div className="hidden md:flex items-center gap-2">
-            <OrganizationSwitcher 
-              afterSelectOrganizationUrl="/" 
-              appearance={{
-                elements: {
-                  organizationSwitcherTrigger: "flex gap-2 items-center px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 transition"
-                }
-              }}
-            />
-            
-          </div>
-        )}
+  return (
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-2.5 sm:gap-4 border-b border-slate-200/80 bg-white/95 backdrop-blur-md px-3 sm:px-4 md:px-6 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+      {/* Left side: Mobile menu toggle + Universal Command Palette Search */}
+      <div className="flex items-center gap-2 sm:gap-3 flex-1 max-w-xs sm:max-w-md lg:max-w-lg">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="md:hidden h-9 w-9 text-slate-600 hover:text-slate-900"
+          onClick={onMenuToggle}
+          aria-label="Toggle menu"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+
+        {/* Global Command Palette Search */}
+        <HeaderCommandPalette />
       </div>
 
-      {/* Right side items */}
-      <div className="flex items-center gap-4 ml-auto">
-        {/* Real-time sync status */}
-        <div className="hidden lg:flex items-center gap-2">
-          <SyncStatus />
-          <RealTimeIndicator />
+      {/* Middle: Store / Branch Location Switcher */}
+      {isLoaded && isSignedIn && (
+        <div className="hidden lg:flex items-center">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200/90 bg-slate-50/70 text-slate-700 hover:border-slate-300 transition-colors">
+            <Store className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+            <OrganizationSwitcher
+              afterSelectOrganizationUrl="/"
+              appearance={{
+                elements: {
+                  organizationSwitcherTrigger:
+                    "flex items-center gap-1.5 text-xs font-semibold text-slate-800 p-0 hover:text-slate-900 border-0 bg-transparent shadow-none focus:outline-none focus:ring-0",
+                  organizationPreviewTextContainer: "text-xs font-semibold text-slate-800",
+                  organizationSwitcherTriggerIcon: "text-slate-500 h-3 w-3",
+                },
+              }}
+            />
+          </div>
         </div>
+      )}
 
-        {/* Notifications */}
+      {/* Right side items & tools */}
+      <div className="flex items-center gap-2 sm:gap-3 ml-auto">
+        {/* + Quick Action Fast POS Button */}
+        <HeaderQuickAction />
+
+        {/* Consolidated Live Status & Salon Local Clock */}
+        <HeaderLivePulse />
+
+        {/* Fullscreen Touchscreen / Kiosk Toggle */}
+        <HeaderFullscreenToggle />
+
+        {/* Direct Link to Hanva University */}
+        <TooltipProvider delayDuration={300}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                href="/university"
+                className="hidden xl:inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                aria-label="Hanva University"
+              >
+                <GraduationCap className="h-4 w-4" />
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">
+              <span>Hanva University Masterclasses</span>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+
+        {/* Notifications Center */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="h-5 w-5" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative h-9 w-9 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+              aria-label="Notifications"
+            >
+              <Bell className="h-4 w-4" />
               {unreadCount > 0 && (
-                <Badge variant="destructive" className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs">
-                  {unreadCount}
+                <Badge
+                  variant="destructive"
+                  className="absolute -top-1 -right-1 h-4 w-4 min-w-[16px] rounded-full p-0 flex items-center justify-center text-[10px] font-bold border-2 border-white shadow-xs"
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
                 </Badge>
               )}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80">
-            <div className="flex items-center justify-between px-2 py-1.5">
-              <span className="font-semibold text-sm">Notifications</span>
-              {unreadCount > 0 && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={handleMarkAllAsRead} 
-                  className="h-auto p-0 text-xs text-blue-600 hover:text-blue-800"
+          <DropdownMenuContent align="end" className="w-80 sm:w-88 p-0 shadow-lg border-slate-200">
+            {/* Notification Header */}
+            <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-100 bg-slate-50/70">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-xs text-slate-900">Notifications</span>
+                {unreadCount > 0 && (
+                  <span className="rounded-full bg-blue-100 px-1.5 py-0.2 text-[10px] font-bold text-blue-700">
+                    {unreadCount} new
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1">
+                {/* Sound alert toggle */}
+                <button
+                  type="button"
+                  onClick={toggleSound}
+                  title={soundEnabled ? "Mute alert chimes" : "Unmute alert chimes"}
+                  className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
                 >
-                  Mark all as read
-                </Button>
-              )}
+                  {soundEnabled ? <Volume2 className="h-3.5 w-3.5 text-blue-600" /> : <VolumeX className="h-3.5 w-3.5 text-slate-400" />}
+                </button>
+
+                {/* Mark all as read */}
+                {unreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleMarkAllAsRead}
+                    title="Mark all as read"
+                    className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                  >
+                    <CheckCheck className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
-            <DropdownMenuSeparator />
-            <div className="max-h-80 overflow-y-auto">
+
+            {/* Quick Filter: All vs Unread */}
+            <div className="flex border-b border-slate-100 px-2 pt-1 gap-1 bg-white">
+              <button
+                type="button"
+                onClick={() => setNotifFilter("all")}
+                className={`px-2.5 py-1 text-[11px] font-medium border-b-2 transition-colors ${
+                  notifFilter === "all"
+                    ? "border-blue-600 text-blue-600"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                All ({notifications.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setNotifFilter("unread")}
+                className={`px-2.5 py-1 text-[11px] font-medium border-b-2 transition-colors ${
+                  notifFilter === "unread"
+                    ? "border-blue-600 text-blue-600"
+                    : "border-transparent text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                Unread ({unreadCount})
+              </button>
+            </div>
+
+            {/* Notification Items List */}
+            <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
               {loading ? (
-                <DropdownMenuItem className="text-center text-gray-500">Loading notifications...</DropdownMenuItem>
+                <div className="py-6 text-center text-xs text-slate-400">Loading notifications...</div>
               ) : error ? (
-                <DropdownMenuItem className="text-center text-red-500">Failed to load notifications</DropdownMenuItem>
-              ) : notifications.length === 0 ? (
-                <DropdownMenuItem className="text-center text-gray-500">No notifications</DropdownMenuItem>
+                <div className="py-6 text-center text-xs text-rose-500">Failed to load alerts</div>
+              ) : displayedNotifications.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  {notifFilter === "unread" ? "No unread notifications" : "No notifications yet"}
+                </div>
               ) : (
-                notifications.map((notification) => (
-                  <DropdownMenuItem
+                displayedNotifications.map((notification) => (
+                  <div
                     key={notification.id}
-                    className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                    className={`flex items-start gap-2.5 p-3 hover:bg-slate-50 transition-colors cursor-pointer group ${
+                      !notification.is_read ? "bg-blue-50/30" : ""
+                    }`}
                     onClick={() => markAsRead(notification.id)}
                   >
-                    <div className="flex items-center gap-2 w-full">
-                      <span className={`text-sm ${!notification.is_read ? "font-medium" : ""}`}>
-                        {notification.message}
-                      </span>
-                      {!notification.is_read && <div className="h-2 w-2 bg-blue-600 rounded-full" />}
+                    <div className="mt-1">
+                      {!notification.is_read ? (
+                        <div className="h-2 w-2 rounded-full bg-blue-600 shadow-xs" />
+                      ) : (
+                        <div className="h-2 w-2 rounded-full bg-transparent" />
+                      )}
                     </div>
-                    <span className="text-xs text-gray-500">{formatRelativeTime(notification.created_at)}</span>
-                  </DropdownMenuItem>
+
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs leading-snug ${!notification.is_read ? "font-semibold text-slate-900" : "text-slate-700"}`}>
+                        {notification.message}
+                      </p>
+                      <div className="flex items-center justify-between mt-1 text-[10px] text-slate-400">
+                        <span>{formatRelativeTime(notification.created_at)}</span>
+                        <Link
+                          href={getNotificationLink(notification.message)}
+                          className="opacity-0 group-hover:opacity-100 text-blue-600 hover:underline flex items-center gap-0.5"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span>Open</span>
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
                 ))
               )}
             </div>
-            <DropdownMenuSeparator />
+
+            {/* Bottom Footer */}
+            <DropdownMenuSeparator className="m-0" />
             <DropdownMenuItem asChild>
-              <Link href="/notifications" className="text-center w-full">
-                <span className="text-sm text-blue-600">View all notifications</span>
+              <Link
+                href="/notifications"
+                className="flex items-center justify-center py-2.5 text-center w-full text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-slate-50 transition-colors"
+              >
+                View all notifications in Activity Center
               </Link>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* User menu / Clerk Auth */}
+        {/* User Account Button (Clerk) */}
         {isLoaded && !isSignedIn && (
           <div className="flex items-center gap-2">
             <SignInButton />
             <SignUpButton>
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white" size="sm">
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-8 px-3" size="sm">
                 Sign Up
               </Button>
             </SignUpButton>
           </div>
         )}
-        {isLoaded && isSignedIn && (
-          <UserButton />
-        )}
+        {isLoaded && isSignedIn && <UserButton />}
       </div>
     </header>
   )
