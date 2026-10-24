@@ -38,11 +38,23 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
   let giftCardDiscount = 0;
   let loyaltyPointsEarned = undefined;
   let loyaltyPointsAvailable = undefined;
+  let isTaxInclusive = res.businessSettings?.payments?.taxInclusive !== undefined
+    ? Boolean(res.businessSettings.payments.taxInclusive)
+    : true;
+  let taxRateFromNote: number | undefined = undefined;
   
   if (inv.notes) {
     const noteParts = inv.notes.split(' | ');
     for (const part of noteParts) {
-      if (part.startsWith('Coupon: ')) {
+      if (part.startsWith('Tax: Inclusive')) {
+        isTaxInclusive = true;
+        const rateMatch = part.match(/\((\d+(\.\d+)?)%\)/);
+        if (rateMatch) taxRateFromNote = parseFloat(rateMatch[1]);
+      } else if (part.startsWith('Tax: Exclusive')) {
+        isTaxInclusive = false;
+        const rateMatch = part.match(/\((\d+(\.\d+)?)%\)/);
+        if (rateMatch) taxRateFromNote = parseFloat(rateMatch[1]);
+      } else if (part.startsWith('Coupon: ')) {
         const match = part.match(/Coupon: (.*) \(-\d+(\.\d+)?\)/);
         if (match) {
           couponCode = match[1];
@@ -85,7 +97,10 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     giftCardDiscount,
     loyaltyPointsEarned,
     loyaltyPointsAvailable,
-    gstRate: bizOps.taxRate !== undefined ? Number(bizOps.taxRate) : 18,
+    gstRate: taxRateFromNote !== undefined ? taxRateFromNote : (bizOps.taxRate !== undefined ? Number(bizOps.taxRate) : 18),
+    gstAmount: Number(inv.gst_amount),
+    total: Number(inv.amount),
+    taxInclusive: isTaxInclusive,
     isInterState: false,
     placeOfSupply: "Karnataka",
     businessLogo: bizProfile.logo || "",

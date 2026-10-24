@@ -58,6 +58,8 @@ interface Invoice {
   discount: number
   gst: number
   total: number
+  taxInclusive?: boolean
+  taxRate?: number
   couponCode?: string
   couponDiscount?: number
   loyaltyDiscount?: number
@@ -141,7 +143,7 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
   const giftCardDiscount = useMemo(() => giftCards.reduce((s, g) => s + (g.amount || 0), 0), [giftCards])
 
   const [taxRate, setTaxRate] = useState<number>(18)
-  const [taxInclusive, setTaxInclusive] = useState<boolean>(false)
+  const [taxInclusive, setTaxInclusive] = useState<boolean>(true)
   const [discountLimit, setDiscountLimit] = useState<number>(100)
 
   // Split payment state
@@ -528,6 +530,8 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
         payment_method: finalPaymentMethod,
         split_cash_amount: paymentMethod === "split" ? splitCashAmount : undefined,
         split_second_method: paymentMethod === "split" ? splitSecondMethod : undefined,
+        tax_inclusive: taxInclusive,
+        tax_rate: taxRate,
         referral_code: appliedReferral?.code || null,
         notes: combinedNotes,
         coupon_code: appliedCoupon?.code,
@@ -573,6 +577,8 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
         giftCardDiscount,
         loyaltyDiscount,
         total,
+        taxInclusive,
+        taxRate,
       }
 
       const invoice: Invoice = {
@@ -587,6 +593,8 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
         giftCardDiscount: serverTotals.giftCardDiscount,
         gst: serverTotals.gstAmount,
         total: serverTotals.total,
+        taxInclusive: serverTotals.taxInclusive !== undefined ? serverTotals.taxInclusive : taxInclusive,
+        taxRate: serverTotals.taxRate !== undefined ? serverTotals.taxRate : taxRate,
         share_token: data.invoice.share_token,
         loyaltyPointsAvailable: (customerLoyalty?.points || 0) - (redeemEnabled ? loyaltyRedeemPoints : 0),
         loyaltyPointsEarned: pointsEarned,

@@ -508,6 +508,96 @@ export default function BookingCalendarPage() {
     }
   }
 
+  const getTooltipStatusBadge = (status: string, isLive: boolean) => {
+    if (isLive) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/25 text-emerald-300 border border-emerald-400/50 shadow-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          Live
+        </span>
+      )
+    }
+
+    const s = String(status || "").toLowerCase().trim()
+    switch (s) {
+      case "confirmed":
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/40">
+            Confirmed
+          </span>
+        )
+      case "completed":
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-500/25 text-blue-300 border border-blue-400/40">
+            Completed
+          </span>
+        )
+      case "pending":
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/25 text-amber-300 border border-amber-400/40">
+            Pending
+          </span>
+        )
+      case "cancelled":
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-500/25 text-rose-300 border border-rose-400/40">
+            Cancelled
+          </span>
+        )
+      default:
+        return (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-700 text-slate-100 border border-slate-500/50">
+            {status}
+          </span>
+        )
+    }
+  }
+
+  const getCardStatusBadge = (status: string, isLive: boolean) => {
+    if (isLive) {
+      return (
+        <span className="shrink-0 flex items-center gap-1 bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse shadow-xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+          Live
+        </span>
+      )
+    }
+
+    const s = String(status || "").toLowerCase().trim()
+    switch (s) {
+      case "confirmed":
+        return (
+          <span className="shrink-0 text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800">
+            Confirmed
+          </span>
+        )
+      case "completed":
+        return (
+          <span className="shrink-0 text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800">
+            Completed
+          </span>
+        )
+      case "pending":
+        return (
+          <span className="shrink-0 text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800">
+            Pending
+          </span>
+        )
+      case "cancelled":
+        return (
+          <span className="shrink-0 text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800">
+            Cancelled
+          </span>
+        )
+      default:
+        return (
+          <span className="shrink-0 text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700">
+            {status}
+          </span>
+        )
+    }
+  }
+
   // Columns to display (Staff or Resources)
   const displayedColumns = useMemo(() => {
     if (groupBy === "staff") {
@@ -889,16 +979,7 @@ export default function BookingCalendarPage() {
                                         <span className="font-bold text-xs truncate text-foreground">
                                           {booking.customer_name}
                                         </span>
-                                        {isLive ? (
-                                          <span className="shrink-0 flex items-center gap-1 bg-emerald-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider animate-pulse">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
-                                            Live
-                                          </span>
-                                        ) : (
-                                          <span className="shrink-0 text-[9px] uppercase font-bold tracking-wider px-1 rounded bg-black/5 dark:bg-white/10">
-                                            {booking.status}
-                                          </span>
-                                        )}
+                                        {getCardStatusBadge(booking.status, isLive)}
                                       </div>
 
                                       <p className="text-[11px] font-medium opacity-90 truncate">
@@ -916,29 +997,27 @@ export default function BookingCalendarPage() {
                                     </div>
                                   </div>
                                 </TooltipTrigger>
-                                <TooltipContent className="text-xs space-y-1 p-2.5 max-w-xs">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <p className="font-bold text-sm">{booking.customer_name}</p>
-                                    <Badge variant="outline" className="text-[10px] uppercase">
-                                      {booking.status}
-                                    </Badge>
+                                <TooltipContent className="text-xs space-y-1.5 p-3 max-w-xs shadow-2xl border border-white/15 bg-neutral-900 text-neutral-100">
+                                  <div className="flex items-center justify-between gap-3 pb-1 border-b border-white/10">
+                                    <p className="font-bold text-sm text-white truncate">{booking.customer_name}</p>
+                                    {getTooltipStatusBadge(booking.status, isLive)}
                                   </div>
-                                  <p className="text-muted-foreground">{booking.service_name}</p>
-                                  <p className="text-[11px]">
-                                    Staff: <strong>{booking.staff_name || "Unassigned"}</strong>
+                                  <p className="text-neutral-300 font-medium text-[12px]">{booking.service_name}</p>
+                                  <p className="text-[11px] text-neutral-300">
+                                    Staff: <strong className="text-white">{booking.staff_name || "Unassigned"}</strong>
                                   </p>
-                                  <p className="text-[11px]">
+                                  <p className="text-[11px] text-neutral-300">
                                     Time:{" "}
-                                    <strong>
+                                    <strong className="text-white">
                                       {format(parseISO(`2000-01-01T${booking.booking_time}`), "h:mm a")} ({durationMins} mins)
                                     </strong>
                                   </p>
-                                  <p className="text-emerald-600 font-bold">
+                                  <p className="text-emerald-400 font-bold text-[12px]">
                                     Total: ₹{Number(booking.total_amount).toLocaleString()}
                                   </p>
                                   {isLive && (
-                                    <p className="text-emerald-600 font-bold text-[10px] flex items-center gap-1">
-                                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                                    <p className="text-emerald-300 font-semibold text-[10px] flex items-center gap-1.5 pt-0.5">
+                                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
                                       Currently in progress right now
                                     </p>
                                   )}

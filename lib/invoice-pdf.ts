@@ -29,6 +29,7 @@ export interface InvoicePDFData {
   giftCardDiscount?: number
   gstRate?: number
   gstAmount?: number
+  taxInclusive?: boolean
   totalAmount: number
   paymentMethod?: string
   staffName?: string
@@ -208,9 +209,16 @@ export async function generateAndDownloadInvoicePDF(data: InvoicePDFData): Promi
     // Calculations
     const subtotal = data.subtotal || 0
     const totalDiscount = (data.discount || 0) + (data.couponDiscount || 0) + (data.loyaltyDiscount || 0) + (data.giftCardDiscount || 0)
+    const netSubtotal = Math.max(0, subtotal - totalDiscount)
     const gstRate = data.gstRate !== undefined ? data.gstRate : 18
-    const gstAmount = data.gstAmount !== undefined ? data.gstAmount : Math.round((subtotal - totalDiscount) * (gstRate / 100))
-    const grandTotal = data.totalAmount || (subtotal - totalDiscount + gstAmount)
+    const gstAmount = data.gstAmount !== undefined 
+      ? data.gstAmount 
+      : (data.taxInclusive 
+          ? (gstRate > 0 ? Math.round((netSubtotal - (netSubtotal / (1 + (gstRate / 100)))) * 100) / 100 : 0)
+          : Math.round(netSubtotal * (gstRate / 100) * 100) / 100)
+    const grandTotal = data.totalAmount !== undefined 
+      ? data.totalAmount 
+      : (data.taxInclusive ? netSubtotal : (netSubtotal + gstAmount))
 
     // Summary Section (Right Aligned)
     const summaryX = pageWidth - 85
@@ -233,7 +241,7 @@ export async function generateAndDownloadInvoicePDF(data: InvoicePDFData): Promi
     }
 
     if (gstAmount > 0) {
-      doc.text(`GST (${gstRate}%):`, summaryX, summaryY)
+      doc.text(`GST (${gstRate}%${data.taxInclusive ? " incl." : ""}):`, summaryX, summaryY)
       doc.text(`Rs. ${gstAmount.toFixed(2)}`, pageWidth - 14, summaryY, { align: "right" })
       summaryY += 6
     }

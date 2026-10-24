@@ -9,22 +9,38 @@ export interface ConsentRecord {
 }
 
 export class GDPRManager {
-  static async recordConsent(consent: ConsentRecord) {
+  static async recordConsent(consent: ConsentRecord, context?: { sql?: any; tenantId?: string }) {
+    const client = context?.sql || sql
     try {
-      const result = await sql`
+      await client`
+        CREATE TABLE IF NOT EXISTS user_consent (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER,
+          consent_type VARCHAR(50) NOT NULL,
+          consent_given BOOLEAN NOT NULL,
+          consent_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          ip_address VARCHAR(100),
+          user_agent TEXT,
+          withdrawal_date TIMESTAMP NULL
+        );
+      `.catch(() => {})
+
+      const result = await client`
         INSERT INTO user_consent (user_id, consent_type, consent_given, ip_address, user_agent)
         VALUES (${consent.userId}, ${consent.consentType}, ${consent.consentGiven}, ${consent.ipAddress}, ${consent.userAgent})
         RETURNING *
       `
       return result[0]
     } catch (error) {
-      throw new Error(`Failed to record consent: ${error}`)
+      console.warn(`[GDPRManager] Failed to record consent:`, error)
+      return null
     }
   }
 
-  static async getUserConsent(userId: number, consentType: string) {
+  static async getUserConsent(userId: number, consentType: string, context?: { sql?: any; tenantId?: string }) {
+    const client = context?.sql || sql
     try {
-      const result = await sql`
+      const result = await client`
         SELECT * FROM user_consent 
         WHERE user_id = ${userId} AND consent_type = ${consentType}
         ORDER BY consent_date DESC 

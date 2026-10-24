@@ -50,6 +50,7 @@ export async function downloadInvoicePDF(invoiceData: any) {
       giftCardDiscount: Number(invoiceData.giftCardDiscount) || 0,
       gstRate: invoiceData.gstRate !== undefined ? Number(invoiceData.gstRate) : 18,
       gstAmount: invoiceData.gstAmount !== undefined ? Number(invoiceData.gstAmount) : undefined,
+      taxInclusive: invoiceData.taxInclusive,
       totalAmount: totalAmount,
       paymentMethod: invoiceData.paymentMethod || "Cash",
       staffName: invoiceData.staffName,

@@ -18,6 +18,9 @@ export interface FinalizeCheckoutInput {
   payment_method: string
   split_cash_amount?: number
   split_second_method?: string
+  payment_splits?: Array<{ method: string; amount: number }>
+  tax_inclusive?: boolean
+  tax_rate?: number
   referral_code?: string | null
   notes?: string | null
   coupon_code?: string | null
@@ -56,6 +59,8 @@ export interface FinalizeCheckoutResult {
     giftCardDiscount: number
     loyaltyDiscount: number
     total: number
+    taxInclusive?: boolean
+    taxRate?: number
     pointsRedeemed?: number
     pointsEarned?: number
   }
@@ -115,7 +120,7 @@ export async function finalizeCheckout(
 
       // Fetch business tax and payment settings
       let taxRate = 18;
-      let taxInclusive = false;
+      let taxInclusive = true; // Default to tax-inclusive matching DEFAULT_BUSINESS_SETTINGS
       let discountLimit = 100;
       try {
         const settingsRows = await sql`
@@ -137,6 +142,14 @@ export async function finalizeCheckout(
         }
       } catch(e) {
          console.error("Error fetching tax and discount settings:", e);
+      }
+
+      // Respect explicit client-provided tax preferences from active checkout screen
+      if (input.tax_inclusive !== undefined) {
+        taxInclusive = Boolean(input.tax_inclusive);
+      }
+      if (input.tax_rate !== undefined && !isNaN(Number(input.tax_rate))) {
+        taxRate = Number(input.tax_rate);
       }
 
       // Calculate totals with discount limit cap
@@ -469,6 +482,7 @@ export async function finalizeCheckout(
             ${invoiceDate},
             ${dueDate},
             ${[
+              taxInclusive ? `Tax: Inclusive (${taxRate}%)` : `Tax: Exclusive (${taxRate}%)`,
               input.notes,
               input.coupon_code ? `Coupon: ${input.coupon_code} (-${couponDiscount})` : null,
               input.manual_discount && input.manual_discount > 0 ? `Manual Discount: -${input.manual_discount}` : null,
@@ -505,6 +519,7 @@ export async function finalizeCheckout(
             ${invoiceDate},
             ${dueDate},
             ${[
+              taxInclusive ? `Tax: Inclusive (${taxRate}%)` : `Tax: Exclusive (${taxRate}%)`,
               input.notes,
               input.coupon_code ? `Coupon: ${input.coupon_code} (-${couponDiscount})` : null,
               input.manual_discount && input.manual_discount > 0 ? `Manual Discount: -${input.manual_discount}` : null,
@@ -998,6 +1013,8 @@ export async function finalizeCheckout(
           giftCardDiscount,
           loyaltyDiscount,
           total,
+          taxInclusive,
+          taxRate,
           pointsRedeemed,
           pointsEarned,
         },

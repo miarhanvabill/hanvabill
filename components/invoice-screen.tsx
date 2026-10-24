@@ -39,6 +39,8 @@ export interface Invoice {
   discount: number
   gst: number
   total: number
+  taxInclusive?: boolean
+  taxRate?: number
   couponCode?: string
   couponDiscount?: number
   loyaltyDiscount?: number
@@ -68,6 +70,14 @@ export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
   const bizProfile = bizSettings?.profile || {}
   const bizOps = bizSettings?.business || {}
 
+  const isTaxInclusive = invoice.taxInclusive !== undefined 
+    ? Boolean(invoice.taxInclusive)
+    : (bizSettings?.payments?.taxInclusive !== undefined ? Boolean(bizSettings.payments.taxInclusive) : true)
+
+  const currentTaxRate = invoice.taxRate !== undefined
+    ? Number(invoice.taxRate)
+    : (bizOps?.taxRate !== undefined ? Number(bizOps.taxRate) : 18)
+
   const handleDownload = async () => {
     setDownloading(true)
     try {
@@ -94,6 +104,10 @@ export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
                 giftCardDiscount: invoice.giftCardDiscount,
                 loyaltyPointsAvailable: invoice.loyaltyPointsAvailable,
                 loyaltyPointsEarned: invoice.loyaltyPointsEarned,
+                gstRate: currentTaxRate,
+                gstAmount: Number(invoice.gst),
+                totalAmount: Number(invoice.total),
+                taxInclusive: isTaxInclusive,
         placeOfSupply: "Karnataka",
       }
 
@@ -243,9 +257,10 @@ Thank you for your business!
                 giftCardDiscount: Number(invoice.giftCardDiscount || 0),
                 loyaltyPointsAvailable: invoice.loyaltyPointsAvailable,
                 loyaltyPointsEarned: invoice.loyaltyPointsEarned,
-                gstRate: bizOps?.taxRate !== undefined ? Number(bizOps.taxRate) : 18,
+                gstRate: currentTaxRate,
                 gstAmount: Number(invoice.gst),
                 total: Number(invoice.total),
+                taxInclusive: isTaxInclusive,
                 isInterState: false,
                 placeOfSupply: "Karnataka",
                 businessLogo: bizProfile.logo || "",
@@ -301,7 +316,7 @@ Thank you for your business!
                 )}
 
                 <div className="flex justify-between">
-                  <span>GST ({bizOps?.taxRate !== undefined ? Number(bizOps.taxRate) : 18}%):</span>
+                  <span>GST ({currentTaxRate}%{isTaxInclusive ? " included" : ""}):</span>
                   <span>{formatCurrency(invoice.gst)}</span>
                 </div>
 

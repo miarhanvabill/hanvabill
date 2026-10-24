@@ -46,7 +46,10 @@ export interface InvoiceData {
 }
 
 export function InvoiceTemplate({ data, className = "" }: { data: InvoiceData; className?: string }) {
-  const calculatedGst = (data.subtotal - data.discount - (data.couponDiscount || 0)) * (data.gstRate / 100)
+  const netSubtotal = Math.max(0, data.subtotal - data.discount - (data.couponDiscount || 0))
+  const calculatedGst = data.taxInclusive
+    ? (data.gstRate > 0 ? netSubtotal - (netSubtotal / (1 + (data.gstRate / 100))) : 0)
+    : (netSubtotal * data.gstRate) / 100
   const gstAmount = data.gstAmount !== undefined ? data.gstAmount : calculatedGst
   const calculatedTotal =
     data.subtotal -
@@ -177,7 +180,7 @@ export function InvoiceTemplate({ data, className = "" }: { data: InvoiceData; c
           )}
           {data.gstRate > 0 && (
             <div className="flex justify-between text-sm text-slate-600 px-2">
-              <span>GST ({data.gstRate}%)</span>
+              <span>GST ({data.gstRate}%{data.taxInclusive ? " included" : ""})</span>
               <span className="font-medium">₹{Number(gstAmount).toFixed(2)}</span>
             </div>
           )}

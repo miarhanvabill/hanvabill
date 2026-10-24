@@ -257,11 +257,18 @@ export async function getInvoiceByShareToken(token: string) {
         },
         business: {
           taxRate: 18,
+        },
+        payments: {
+          taxInclusive: true,
         }
       };
       
-            // Reconstruct settings from individual keys
-      businessSettings = { profile: { ...defaultSettings.profile }, business: { ...defaultSettings.business } };
+      // Reconstruct settings from individual keys
+      businessSettings = { 
+        profile: { ...defaultSettings.profile }, 
+        business: { ...defaultSettings.business },
+        payments: { ...defaultSettings.payments } 
+      };
       
       for (const row of settingsResult) {
         const { setting_key, setting_value, setting_type } = row;
@@ -272,7 +279,7 @@ export async function getInvoiceByShareToken(token: string) {
         const section = parts[0] as keyof typeof businessSettings;
         const key = parts.slice(1).join('.');
         
-        if (section === 'profile' || section === 'business') {
+        if (section === 'profile' || section === 'business' || section === 'payments') {
           let value = setting_value;
           try {
             if (setting_type === "boolean") {
