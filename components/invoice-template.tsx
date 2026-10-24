@@ -30,6 +30,9 @@ export interface InvoiceData {
   loyaltyPointsAvailable?: number
   loyaltyPointsEarned?: number
   gstRate: number
+  gstAmount?: number
+  total?: number
+  taxInclusive?: boolean
   isInterState: boolean
   placeOfSupply: string
   businessLogo?: string
@@ -43,8 +46,16 @@ export interface InvoiceData {
 }
 
 export function InvoiceTemplate({ data, className = "" }: { data: InvoiceData; className?: string }) {
-  const gstAmount = (data.subtotal - data.discount - (data.couponDiscount || 0)) * (data.gstRate / 100)
-  const totalAmount = data.subtotal - data.discount - (data.couponDiscount || 0) - (data.loyaltyDiscount || 0) - (data.giftCardDiscount || 0) + gstAmount
+  const calculatedGst = (data.subtotal - data.discount - (data.couponDiscount || 0)) * (data.gstRate / 100)
+  const gstAmount = data.gstAmount !== undefined ? data.gstAmount : calculatedGst
+  const calculatedTotal =
+    data.subtotal -
+    data.discount -
+    (data.couponDiscount || 0) -
+    (data.loyaltyDiscount || 0) -
+    (data.giftCardDiscount || 0) +
+    (data.taxInclusive ? 0 : gstAmount)
+  const totalAmount = data.total !== undefined ? data.total : calculatedTotal
 
   return (
     <Card className={`p-8 md:p-12 overflow-hidden border border-slate-100 shadow-xl bg-white ${className}`}>

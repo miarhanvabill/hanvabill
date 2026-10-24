@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { CheckCircle, Download, Printer as Print, Share, Plus, User, CreditCard } from "lucide-react"
+import { CheckCircle, Download, Printer as Print, Share, Plus, User, CreditCard, MessageCircle } from "lucide-react"
 import { downloadInvoicePDF, printInvoice } from "@/lib/invoice-actions"
 import { getBusinessSettings } from "@/app/actions/settings"
 import { InvoiceTemplate } from "@/components/invoice-template"
@@ -141,6 +141,19 @@ export function InvoiceScreen({ invoice, onStartNewSale }: InvoiceScreenProps) {
     }
   }
 
+  const handleWhatsAppShare = () => {
+    const rawPhone = (invoice.customer.phone || "").replace(/\D/g, "")
+    const cleanPhone = rawPhone.length === 10 ? `91${rawPhone}` : rawPhone
+    const invoiceUrl = invoice.share_token ? `${window.location.origin}/inv/${invoice.share_token}` : window.location.href
+    const salon = bizProfile.salonName || "Hanva Salon"
+    const text = `Hi ${invoice.customer.name || "Customer"}, thank you for visiting ${salon}! 🌸\n\nYour Invoice #${invoice.id} for ₹${Number(invoice.total).toFixed(2)} is ready.\nView & download your bill here:\n${invoiceUrl}\n\nWe look forward to seeing you again!`
+    const isWalkIn = !rawPhone || rawPhone === "0000000000" || rawPhone.endsWith("0000000000")
+    const url = !isWalkIn
+      ? `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`
+    window.open(url, "_blank")
+  }
+
   const generateInvoiceText = () => {
     return `
 INVOICE #${invoice.id}
@@ -225,12 +238,14 @@ Thank you for your business!
                 })),
                 subtotal: Number(invoice.subtotal),
                 discount: Number(invoice.discount),
-                couponDiscount: Number(invoice.couponDiscount),
-                loyaltyDiscount: Number(invoice.loyaltyDiscount),
-                giftCardDiscount: Number(invoice.giftCardDiscount),
+                couponDiscount: Number(invoice.couponDiscount || 0),
+                loyaltyDiscount: Number(invoice.loyaltyDiscount || 0),
+                giftCardDiscount: Number(invoice.giftCardDiscount || 0),
                 loyaltyPointsAvailable: invoice.loyaltyPointsAvailable,
                 loyaltyPointsEarned: invoice.loyaltyPointsEarned,
                 gstRate: bizOps?.taxRate !== undefined ? Number(bizOps.taxRate) : 18,
+                gstAmount: Number(invoice.gst),
+                total: Number(invoice.total),
                 isInterState: false,
                 placeOfSupply: "Karnataka",
                 businessLogo: bizProfile.logo || "",
@@ -319,6 +334,15 @@ Thank you for your business!
               >
                 <Print className="w-4 h-4" />
                 {printing ? "Preparing..." : "Print Invoice"}
+              </Button>
+
+              <Button
+                onClick={handleWhatsAppShare}
+                variant="outline"
+                className="w-full gap-2 border-emerald-300 text-emerald-800 hover:bg-emerald-50 bg-emerald-50/50"
+              >
+                <MessageCircle className="w-4 h-4 text-emerald-600" />
+                Send via WhatsApp
               </Button>
 
               <Button onClick={handleShare} variant="outline" className="w-full gap-2 bg-transparent">

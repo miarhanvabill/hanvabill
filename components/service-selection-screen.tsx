@@ -605,6 +605,33 @@ export function ServiceSelectionScreen({
     if (newQty <= 0) return removeFromCart(index)
     onCartUpdate(cartItems.map((i, idx) => (idx === index ? { ...i, quantity: newQty } : i)))
   }
+  const updateCartItemStaff = (index: number, newStaffId: number | "any") => {
+    if (newStaffId === "any") {
+      onCartUpdate(
+        cartItems.map((item, idx) =>
+          idx === index
+            ? { ...item, staff_id: undefined, staff_name: undefined, staff_members: undefined }
+            : item
+        )
+      )
+      return
+    }
+    const staffMember = staff.find((s) => s.id === Number(newStaffId))
+    if (staffMember) {
+      onCartUpdate(
+        cartItems.map((item, idx) =>
+          idx === index
+            ? {
+                ...item,
+                staff_id: staffMember.id,
+                staff_name: staffMember.name,
+                staff_members: [{ id: staffMember.id, name: staffMember.name, split_percentage: 100 }],
+              }
+            : item
+        )
+      )
+    }
+  }
   const removeFromCart = (index: number) => onCartUpdate(cartItems.filter((_, i) => i !== index))
   const cartTotal = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
 
@@ -1298,9 +1325,23 @@ export function ServiceSelectionScreen({
                                   {item.staff_members.map(s => `₹${((item.price * item.quantity * s.split_percentage) / 100).toFixed(2)}`).join(' / ')}
                                 </span>
                               </p>
-                            ) : item.staff_name ? (
-                              <p className="text-xs text-muted-foreground">Staff: {item.staff_name}</p>
-                            ) : null}
+                            ) : (
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <Users className="w-3 h-3 text-slate-400 shrink-0" />
+                                <select
+                                  value={item.staff_id || "any"}
+                                  onChange={(e) => updateCartItemStaff(index, e.target.value === "any" ? "any" : Number(e.target.value))}
+                                  className="text-[11px] bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-700 focus:outline-none focus:ring-1 focus:ring-slate-400 max-w-[150px] truncate"
+                                >
+                                  <option value="any">Any Staff</option>
+                                  {staff.map((st) => (
+                                    <option key={st.id} value={st.id}>
+                                      {st.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
                             
                             <p className="text-sm text-muted-foreground mt-1">
                               {formatCurrency(item.price)} each • {item.type}

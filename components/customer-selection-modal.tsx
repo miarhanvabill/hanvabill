@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { Search, Plus, User, Phone, Mail, ArrowLeft, Sparkles } from "lucide-react"
-import { getCustomers, createCustomerData, type Customer } from "@/app/actions/customers"
+import { getCustomers, createCustomerData, getOrCreateWalkInCustomer, type Customer } from "@/app/actions/customers"
 import { toast } from "sonner"
 
 interface CustomerSelectionModalProps {
@@ -245,6 +245,23 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
     onSelect(customer)
   }
 
+  const handleSelectWalkIn = async () => {
+    try {
+      const walkIn = await getOrCreateWalkInCustomer()
+      onSelect(walkIn)
+      onClose()
+    } catch (err) {
+      console.warn("Walk-in fallback:", err)
+      onSelect({
+        id: 0,
+        full_name: "Walk In",
+        phone_number: "0000000000",
+        created_at: new Date().toISOString(),
+      } as Customer)
+      onClose()
+    }
+  }
+
   const handleClose = () => {
     setSearchTerm("")
     setShowCreateForm(false)
@@ -305,11 +322,20 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
                 />
               </div>
 
-              {/* Create New Customer Button */}
+              {/* Create New Customer & Walk-in Buttons */}
               <div className="flex gap-2">
-                <Button onClick={handleOpenCreateForm} className="w-full bg-slate-900 hover:bg-slate-800 text-white gap-2">
+                <Button onClick={handleOpenCreateForm} className="flex-1 bg-slate-900 hover:bg-slate-800 text-white gap-2 text-xs sm:text-sm">
                   <Plus className="h-4 w-4" />
                   Create New Customer
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSelectWalkIn}
+                  className="gap-1.5 border-slate-300 text-slate-700 hover:bg-slate-100 text-xs sm:text-sm shrink-0"
+                >
+                  <User className="h-4 w-4 text-slate-500" />
+                  Walk-In
                 </Button>
               </div>
 

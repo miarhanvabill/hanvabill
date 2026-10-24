@@ -345,13 +345,31 @@ export async function finalizeCheckout(
         const amountPaid = Number(membershipItem.price) || Number(membershipPlan.price) || 0
 
         await sql`
+          ALTER TABLE customer_memberships 
+          ADD COLUMN IF NOT EXISTS membership_plan_id INTEGER,
+          ADD COLUMN IF NOT EXISTS plan_id INTEGER,
+          ADD COLUMN IF NOT EXISTS tenant_id TEXT,
+          ADD COLUMN IF NOT EXISTS amount_paid DECIMAL(10,2) DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS bookings_used INTEGER DEFAULT 0
+        `.catch(() => {})
+
+        await sql`
           INSERT INTO customer_memberships (
-            customer_id, membership_plan_id, start_date, end_date, tenant_id, status, amount_paid, bookings_used, created_at, updated_at
+            customer_id, membership_plan_id, plan_id, start_date, end_date, tenant_id, status, amount_paid, bookings_used, created_at, updated_at
           )
           VALUES (
-            ${customerId}, ${membershipItem.id}, ${startDate}, ${endDate}, ${tenantId}, 'active', ${amountPaid}, 0, NOW(), NOW()
+            ${customerId}, ${membershipItem.id}, ${membershipItem.id}, ${startDate}, ${endDate}, ${tenantId}, 'active', ${amountPaid}, 0, NOW(), NOW()
           )
-        `
+        `.catch(async () => {
+          await sql`
+            INSERT INTO customer_memberships (
+              customer_id, plan_id, start_date, end_date, tenant_id, status, amount_paid, bookings_used, created_at, updated_at
+            )
+            VALUES (
+              ${customerId}, ${membershipItem.id}, ${startDate}, ${endDate}, ${tenantId}, 'active', ${amountPaid}, 0, NOW(), NOW()
+            )
+          `.catch((err) => console.error("Error creating customer membership:", err))
+        })
       }
 
       // Generate invoice number
@@ -740,7 +758,12 @@ export async function finalizeCheckout(
 
 
       // Trigger WhatsApp Automations (Invoice Receipt & Loyalty Alert)
-      if (customer?.phone_number) {
+      if (
+        customer?.phone_number &&
+        customer.phone_number !== "0000000000" &&
+        !customer.phone_number.endsWith("0000000000") &&
+        customer.phone_number.replace(/\D/g, "").length >= 10
+      ) {
         // Run asynchronously so it doesn't block the checkout response
         import("@/lib/whatsapp-automations").then(({ triggerWhatsAppAutomation }) => {
           // 1. Send Invoice Receipt

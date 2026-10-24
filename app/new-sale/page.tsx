@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { ArrowLeft, User, ShoppingCart, CreditCard, FileText } from "lucide-react"
 
 import type { Customer as DbCustomer } from "@/app/actions/customers"
+import { getOrCreateWalkInCustomer } from "@/app/actions/customers"
 
 interface CartItem {
   id: number
@@ -53,6 +54,21 @@ export default function NewSalePage() {
     setSelectedCustomer(mappedCustomer)
     setCurrentStep("services")
     setShowCustomerModal(false)
+  }
+
+  // Handle Quick Walk-in Selection
+  const handleSelectWalkIn = async () => {
+    try {
+      const walkIn = await getOrCreateWalkInCustomer()
+      handleCustomerSelect(walkIn)
+    } catch {
+      handleCustomerSelect({
+        id: 0,
+        full_name: "Walk In",
+        phone_number: "0000000000",
+        created_at: new Date().toISOString(),
+      } as DbCustomer)
+    }
   }
 
   // Handle cart updates
@@ -128,28 +144,44 @@ export default function NewSalePage() {
       {/* Progress Steps */}
       <div className="bg-white border-b print:hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-center py-4">
+          <div className="flex items-center justify-center py-3 overflow-x-auto">
             {steps.map((step, index) => {
               const Icon = step.icon
               const isActive = step.key === currentStep
               const isCompleted = steps.findIndex((s) => s.key === currentStep) > index
+              const canNavigate =
+                step.key === "customer" ||
+                (step.key === "services" && !!selectedCustomer) ||
+                (step.key === "checkout" && !!selectedCustomer && cartItems.length > 0) ||
+                (step.key === "invoice" && !!invoice)
 
               return (
-                <div key={step.key} className="flex items-center">
-                  <div
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+                <div key={step.key} className="flex items-center shrink-0">
+                  <button
+                    type="button"
+                    disabled={!canNavigate}
+                    onClick={() => {
+                      if (step.key === "customer") {
+                        setShowCustomerModal(true)
+                      } else {
+                        setCurrentStep(step.key)
+                      }
+                    }}
+                    className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
                       isActive
-                        ? "bg-blue-100 text-blue-700"
+                        ? "bg-slate-900 text-white shadow-xs font-semibold"
                         : isCompleted
-                          ? "bg-green-100 text-green-700"
-                          : "text-gray-500"
+                          ? "bg-slate-100 text-slate-800 hover:bg-slate-200 cursor-pointer"
+                          : canNavigate
+                            ? "hover:bg-slate-100 cursor-pointer text-slate-600"
+                            : "text-slate-400 cursor-not-allowed opacity-50"
                     }`}
                   >
                     <Icon className="w-4 h-4" />
-                    <span className="text-sm font-medium">{step.label}</span>
-                  </div>
+                    <span>{step.label}</span>
+                  </button>
                   {index < steps.length - 1 && (
-                    <div className={`w-8 h-px mx-2 ${isCompleted ? "bg-green-300" : "bg-gray-300"}`} />
+                    <div className={`w-6 sm:w-8 h-px mx-1.5 sm:mx-2 ${isCompleted ? "bg-slate-400" : "bg-slate-200"}`} />
                   )}
                 </div>
               )
@@ -186,12 +218,24 @@ export default function NewSalePage() {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 print:p-0 print:max-w-none">
         {currentStep === "customer" && (
-          <Card>
+          <Card className="max-w-xl mx-auto shadow-sm">
             <CardContent className="p-8 text-center">
-              <User className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Select Customer</h2>
-              <p className="text-gray-600 mb-6">Choose an existing customer or create a new one to start the sale.</p>
-              <Button onClick={() => setShowCustomerModal(true)}>Select Customer</Button>
+              <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <User className="w-8 h-8 text-slate-700" />
+              </div>
+              <h2 className="text-xl font-bold text-slate-900 mb-2">Select Customer to Start Sale</h2>
+              <p className="text-slate-600 mb-6 text-sm">
+                Choose an existing client by name/phone, register a new client, or proceed quickly with Walk-In.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Button onClick={() => setShowCustomerModal(true)} className="bg-slate-900 hover:bg-slate-800 text-white gap-2">
+                  <User className="w-4 h-4" />
+                  Select / Create Customer
+                </Button>
+                <Button onClick={handleSelectWalkIn} variant="outline" className="border-slate-300 gap-2 hover:bg-slate-50 text-slate-700">
+                  Quick Walk-In Sale
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -211,6 +255,7 @@ export default function NewSalePage() {
             cartItems={cartItems}
             onComplete={handleCheckoutComplete}
             onBack={() => setCurrentStep("services")}
+            onChangeCustomer={() => setShowCustomerModal(true)}
           />
         )}
 
