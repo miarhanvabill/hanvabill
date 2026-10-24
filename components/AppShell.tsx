@@ -16,8 +16,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
   const { canAccessRoute, isLoading, isAdmin } = usePermissions();
 
+  // Check if current route belongs to Staff Portal (isolated from admin dashboard)
+  const isStaffRoute =
+    pathname?.startsWith('/staff-portal') ||
+    (typeof window !== 'undefined' &&
+      (window.location.hostname.startsWith('staff.') ||
+        window.location.hostname.includes('staff.biz.hanva.in')));
+
   // Hide sidebar/header on public invoice, customer booking, and auth pages
   const isPublic = 
+    isStaffRoute ||
     pathname?.startsWith('/inv/') || 
     pathname?.startsWith('/sign-in') || 
     pathname?.startsWith('/sign-up') || 
@@ -36,6 +44,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       router.replace(`/sign-in?redirect_url=${encodeURIComponent(currentUrl)}`);
     }
   }, [isAuthLoaded, isSignedIn, isPublic, pathname, router]);
+
+  if (isStaffRoute) {
+    return <div className="min-h-screen bg-slate-50 antialiased selection:bg-slate-900 selection:text-white">{children}</div>;
+  }
 
   if (isPublic) {
     return (

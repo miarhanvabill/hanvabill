@@ -23,11 +23,25 @@ export interface Staff {
   shift_start?: string | null
   shift_end?: string | null
   avatar_url?: string | null
+  portal_enabled?: boolean | null // Staff portal access toggle
+  has_pin?: boolean | null // Indicator if PIN is already set
   created_at?: string | null // TIMESTAMP in DB, fetched as string
   updated_at?: string | null // VARCHAR in DB, fetched as string
   attendance_status?: string | null
   check_in_time?: string | null
   check_out_time?: string | null
+}
+
+let portalSchemaEnsured = false
+async function ensureStaffPortalSchema(sql: any) {
+  if (portalSchemaEnsured) return
+  try {
+    const { ensureStaffPortalSchema: fullEnsure } = await import("@/app/actions/staff-portal")
+    await fullEnsure(sql)
+    portalSchemaEnsured = true
+  } catch (err) {
+    // Column might already exist or ignore
+  }
 }
 
 export interface StaffStats {
@@ -41,24 +55,51 @@ export async function getStaff(): Promise<Staff[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     return await cacheFetch(`staff:${tenantId}`, async () => {
       try {
-        const staffResult = await sql`
-          SELECT 
-            s.id, s.name, s.phone, s.email, s.role, s.salary, 
-            TO_CHAR(s.hire_date, 'YYYY-MM-DD') as hire_date,
-            s.is_active, s.address, s.emergency_contact, s.skills, s.commission_rate, 
-            s.commission_profile_id,
-            s.avatar_url,
-            s.created_at::text,
-            s.updated_at::text,
-            a.status as attendance_status,
-            a.check_in_time,
-            a.check_out_time
-          FROM staff s
-          LEFT JOIN attendance a ON s.id = a.staff_id AND a.date = CURRENT_DATE AND a.tenant_id = ${tenantId}
-          WHERE s.is_active = true 
-            AND s.tenant_id = ${tenantId}
-          ORDER BY s.name
-        `
+        await ensureStaffPortalSchema(sql)
+
+        let staffResult: any[] = []
+        try {
+          staffResult = await sql`
+            SELECT 
+              s.id, s.name, s.phone, s.email, s.role, s.salary, 
+              TO_CHAR(s.hire_date, 'YYYY-MM-DD') as hire_date,
+              s.is_active, s.address, s.emergency_contact, s.skills, s.commission_rate, 
+              s.commission_profile_id,
+              s.avatar_url,
+              s.portal_enabled,
+              CASE WHEN (s.portal_pin IS NOT NULL OR s.pin_hash IS NOT NULL) THEN true ELSE false END as has_pin,
+              s.created_at::text,
+              s.updated_at::text,
+              a.status as attendance_status,
+              a.check_in_time,
+              a.check_out_time
+            FROM staff s
+            LEFT JOIN attendance a ON s.id = a.staff_id AND a.date = CURRENT_DATE AND a.tenant_id = ${tenantId}
+            WHERE s.is_active = true 
+              AND s.tenant_id = ${tenantId}
+            ORDER BY s.name
+          `
+        } catch {
+          // Fallback if portal_enabled column hasn't finished creating
+          staffResult = await sql`
+            SELECT 
+              s.id, s.name, s.phone, s.email, s.role, s.salary, 
+              TO_CHAR(s.hire_date, 'YYYY-MM-DD') as hire_date,
+              s.is_active, s.address, s.emergency_contact, s.skills, s.commission_rate, 
+              s.commission_profile_id,
+              s.avatar_url,
+              s.created_at::text,
+              s.updated_at::text,
+              a.status as attendance_status,
+              a.check_in_time,
+              a.check_out_time
+            FROM staff s
+            LEFT JOIN attendance a ON s.id = a.staff_id AND a.date = CURRENT_DATE AND a.tenant_id = ${tenantId}
+            WHERE s.is_active = true 
+              AND s.tenant_id = ${tenantId}
+            ORDER BY s.name
+          `
+        }
 
         const staffRows = Array.isArray(staffResult) ? staffResult : []
         return staffRows.map((staff: any) => ({
@@ -67,6 +108,8 @@ export async function getStaff(): Promise<Staff[]> {
           salary: staff.salary ? Number(staff.salary) : null,
           commission_profile_id: staff.commission_profile_id ? Number(staff.commission_profile_id) : null,
           is_active: Boolean(staff.is_active),
+          portal_enabled: Boolean(staff.portal_enabled),
+          has_pin: Boolean(staff.has_pin),
           department: null,
           shift_start: null,
           shift_end: null,
@@ -121,17 +164,36 @@ export async function getStaffMember(id: number) {
         return null
       }
 
-      const staffResult = await sql`
-        SELECT 
-          id, name, phone, email, role, salary, 
-          TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date,
-          is_active, address, emergency_contact, skills, commission_rate, 
-          commission_profile_id,
-          avatar_url,
-          created_at,
-          updated_at
-        FROM staff WHERE id = ${id} AND tenant_id = ${tenantId}
-      `
+      await ensureStaffPortalSchema(sql)
+
+      let staffResult: any[] = []
+      try {
+        staffResult = await sql`
+          SELECT 
+            id, name, phone, email, role, salary, 
+            TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date,
+            is_active, address, emergency_contact, skills, commission_rate, 
+            commission_profile_id,
+            avatar_url,
+            portal_enabled,
+            CASE WHEN (portal_pin IS NOT NULL OR pin_hash IS NOT NULL) THEN true ELSE false END as has_pin,
+            created_at,
+            updated_at
+          FROM staff WHERE id = ${id} AND tenant_id = ${tenantId}
+        `
+      } catch {
+        staffResult = await sql`
+          SELECT 
+            id, name, phone, email, role, salary, 
+            TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date,
+            is_active, address, emergency_contact, skills, commission_rate, 
+            commission_profile_id,
+            avatar_url,
+            created_at,
+            updated_at
+          FROM staff WHERE id = ${id} AND tenant_id = ${tenantId}
+        `
+      }
 
       const staffRows = staffResult as Staff[]
 
@@ -146,6 +208,8 @@ export async function getStaffMember(id: number) {
         salary: staff.salary ? Number(staff.salary) : null,
         commission_profile_id: staff.commission_profile_id ? Number(staff.commission_profile_id) : null,
         is_active: Boolean(staff.is_active),
+        portal_enabled: Boolean(staff.portal_enabled),
+        has_pin: Boolean(staff.has_pin),
         department: null,
         shift_start: null,
         shift_end: null,
@@ -168,29 +232,59 @@ export async function createStaff(data: Omit<Staff, "id" | "created_at" | "updat
         return { success: false, message: "Name and phone are required" }
       }
 
-      const result = await sql`
-        INSERT INTO staff (
-          tenant_id, name, phone, email, role, salary, hire_date, 
-          is_active, address, emergency_contact, skills, commission_rate, 
-          commission_profile_id, avatar_url
-        )
-        VALUES (
-          ${tenantId}, ${data.name}, ${data.phone}, ${data.email || null}, ${data.role || null}, 
-          ${data.salary || null}, ${data.hire_date || null}, ${data.is_active ?? true}, 
-          ${data.address || null}, ${data.emergency_contact || null}, 
-          ${data.skills || null},
-          ${data.commission_rate || null},
-          ${data.commission_profile_id || null},
-          ${data.avatar_url || null}
-        )
-        RETURNING 
-          id, name, phone, email, role, salary, 
-          TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date, 
-          is_active, address, emergency_contact, skills, commission_rate, 
-          commission_profile_id, avatar_url,
-          created_at, 
-          updated_at 
-      `
+      await ensureStaffPortalSchema(sql)
+
+      let result: any[] = []
+      try {
+        result = await sql`
+          INSERT INTO staff (
+            tenant_id, name, phone, email, role, salary, hire_date, 
+            is_active, address, emergency_contact, skills, commission_rate, 
+            commission_profile_id, avatar_url, portal_enabled
+          )
+          VALUES (
+            ${tenantId}, ${data.name}, ${data.phone}, ${data.email || null}, ${data.role || null}, 
+            ${data.salary || null}, ${data.hire_date || null}, ${data.is_active ?? true}, 
+            ${data.address || null}, ${data.emergency_contact || null}, 
+            ${data.skills || null},
+            ${data.commission_rate || null},
+            ${data.commission_profile_id || null},
+            ${data.avatar_url || null},
+            ${data.portal_enabled ?? false}
+          )
+          RETURNING 
+            id, name, phone, email, role, salary, 
+            TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date, 
+            is_active, address, emergency_contact, skills, commission_rate, 
+            commission_profile_id, avatar_url, portal_enabled,
+            created_at, 
+            updated_at 
+        `
+      } catch {
+        result = await sql`
+          INSERT INTO staff (
+            tenant_id, name, phone, email, role, salary, hire_date, 
+            is_active, address, emergency_contact, skills, commission_rate, 
+            commission_profile_id, avatar_url
+          )
+          VALUES (
+            ${tenantId}, ${data.name}, ${data.phone}, ${data.email || null}, ${data.role || null}, 
+            ${data.salary || null}, ${data.hire_date || null}, ${data.is_active ?? true}, 
+            ${data.address || null}, ${data.emergency_contact || null}, 
+            ${data.skills || null},
+            ${data.commission_rate || null},
+            ${data.commission_profile_id || null},
+            ${data.avatar_url || null}
+          )
+          RETURNING 
+            id, name, phone, email, role, salary, 
+            TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date, 
+            is_active, address, emergency_contact, skills, commission_rate, 
+            commission_profile_id, avatar_url,
+            created_at, 
+            updated_at 
+        `
+      }
 
       const staffRows = result as Staff[]
 
@@ -205,6 +299,8 @@ export async function createStaff(data: Omit<Staff, "id" | "created_at" | "updat
         salary: staff.salary ? Number(staff.salary) : null,
         commission_profile_id: staff.commission_profile_id ? Number(staff.commission_profile_id) : null,
         is_active: Boolean(staff.is_active),
+        portal_enabled: Boolean(staff.portal_enabled),
+        has_pin: false,
         department: null,
         shift_start: null,
         shift_end: null,
@@ -231,36 +327,71 @@ export async function updateStaff(id: number, data: Partial<Staff>) {
         return { success: false, message: "Invalid staff ID" }
       }
 
+      await ensureStaffPortalSchema(sql)
+
       const hasProfileId = data.commission_profile_id !== undefined
       const profileId = data.commission_profile_id ?? null
+      const hasPortalEnabled = data.portal_enabled !== undefined
+      const portalEnabledVal = Boolean(data.portal_enabled)
 
-      const result = await sql`
-        UPDATE staff 
-        SET 
-          name = COALESCE(${data.name}, name),
-          phone = COALESCE(${data.phone}, phone),
-          email = COALESCE(${data.email}, email),
-          role = COALESCE(${data.role}, role),
-          salary = COALESCE(${data.salary}, salary),
-          hire_date = COALESCE(${data.hire_date}, hire_date), 
-          is_active = COALESCE(${data.is_active}, is_active),
-          address = COALESCE(${data.address}, address),
-          emergency_contact = COALESCE(${data.emergency_contact}, emergency_contact),
-          skills = COALESCE(${data.skills || null}, skills),
-          commission_rate = COALESCE(${data.commission_rate}, commission_rate),
-          commission_profile_id = CASE WHEN ${hasProfileId} THEN ${profileId} ELSE commission_profile_id END,
-          avatar_url = COALESCE(${data.avatar_url}, avatar_url),
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = ${id} AND tenant_id = ${tenantId}
-        RETURNING 
-          id, name, phone, email, role, salary, 
-          TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date, 
-          is_active, address, emergency_contact, skills, commission_rate, 
-          commission_profile_id, avatar_url,
-          created_at, 
-          updated_at 
-      `
-
+      let result: any[] = []
+      try {
+        result = await sql`
+          UPDATE staff 
+          SET 
+            name = COALESCE(${data.name}, name),
+            phone = COALESCE(${data.phone}, phone),
+            email = COALESCE(${data.email}, email),
+            role = COALESCE(${data.role}, role),
+            salary = COALESCE(${data.salary}, salary),
+            hire_date = COALESCE(${data.hire_date}, hire_date), 
+            is_active = COALESCE(${data.is_active}, is_active),
+            address = COALESCE(${data.address}, address),
+            emergency_contact = COALESCE(${data.emergency_contact}, emergency_contact),
+            skills = COALESCE(${data.skills || null}, skills),
+            commission_rate = COALESCE(${data.commission_rate}, commission_rate),
+            commission_profile_id = CASE WHEN ${hasProfileId} THEN ${profileId} ELSE commission_profile_id END,
+            avatar_url = COALESCE(${data.avatar_url}, avatar_url),
+            portal_enabled = CASE WHEN ${hasPortalEnabled} THEN ${portalEnabledVal} ELSE portal_enabled END,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${id} AND tenant_id = ${tenantId}
+          RETURNING 
+            id, name, phone, email, role, salary, 
+            TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date, 
+            is_active, address, emergency_contact, skills, commission_rate, 
+            commission_profile_id, avatar_url, portal_enabled,
+            CASE WHEN (portal_pin IS NOT NULL OR pin_hash IS NOT NULL) THEN true ELSE false END as has_pin,
+            created_at, 
+            updated_at 
+        `
+      } catch {
+        result = await sql`
+          UPDATE staff 
+          SET 
+            name = COALESCE(${data.name}, name),
+            phone = COALESCE(${data.phone}, phone),
+            email = COALESCE(${data.email}, email),
+            role = COALESCE(${data.role}, role),
+            salary = COALESCE(${data.salary}, salary),
+            hire_date = COALESCE(${data.hire_date}, hire_date), 
+            is_active = COALESCE(${data.is_active}, is_active),
+            address = COALESCE(${data.address}, address),
+            emergency_contact = COALESCE(${data.emergency_contact}, emergency_contact),
+            skills = COALESCE(${data.skills || null}, skills),
+            commission_rate = COALESCE(${data.commission_rate}, commission_rate),
+            commission_profile_id = CASE WHEN ${hasProfileId} THEN ${profileId} ELSE commission_profile_id END,
+            avatar_url = COALESCE(${data.avatar_url}, avatar_url),
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ${id} AND tenant_id = ${tenantId}
+          RETURNING 
+            id, name, phone, email, role, salary, 
+            TO_CHAR(hire_date, 'YYYY-MM-DD') as hire_date, 
+            is_active, address, emergency_contact, skills, commission_rate, 
+            commission_profile_id, avatar_url,
+            created_at, 
+            updated_at 
+        `
+      }
 
       const staffRows = result as Staff[]
 
@@ -275,6 +406,8 @@ export async function updateStaff(id: number, data: Partial<Staff>) {
         salary: staff.salary ? Number(staff.salary) : null,
         commission_profile_id: staff.commission_profile_id ? Number(staff.commission_profile_id) : null,
         is_active: Boolean(staff.is_active),
+        portal_enabled: Boolean(staff.portal_enabled),
+        has_pin: Boolean(staff.has_pin),
       } as Staff
 
       revalidatePath("/staff")
@@ -527,3 +660,110 @@ export async function getStaffCommissionSplits(
     }
   })
 }
+
+export async function setStaffPin(staffId: number, pin: string) {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      if (!staffId || isNaN(staffId) || staffId <= 0) {
+        return { success: false, message: "Invalid staff ID" }
+      }
+
+      const cleanPin = String(pin || "").trim()
+      if (!/^\d{4}$/.test(cleanPin)) {
+        return { success: false, message: "PIN must be exactly 4 numeric digits" }
+      }
+
+      await ensureStaffPortalSchema(sql)
+
+      let pinHash: string
+      try {
+        const { hashPin } = await import("@/lib/staff-auth")
+        pinHash = hashPin(cleanPin)
+      } catch {
+        const crypto = await import("crypto")
+        pinHash = crypto.createHash("sha256").update(cleanPin).digest("hex")
+      }
+
+      const result = await sql`
+        UPDATE staff
+        SET
+          portal_pin = NULL,
+          pin_hash = ${pinHash},
+          portal_enabled = true,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${staffId} AND tenant_id = ${tenantId}
+        RETURNING id, name, portal_enabled
+      `
+
+      if (!result || result.length === 0) {
+        return { success: false, message: "Staff member not found" }
+      }
+
+      revalidatePath("/staff")
+      revalidatePath("/manage/staff")
+      revalidatePath(`/staff/${staffId}`)
+      await cacheDel(`staff:${tenantId}`)
+
+      return {
+        success: true,
+        message: "Staff portal PIN set successfully!",
+      }
+    } catch (error) {
+      console.error("[staff] Error setting staff PIN:", error)
+      return {
+        success: false,
+        message: `Failed to set PIN: ${error instanceof Error ? error.message : "Unknown error"}`,
+      }
+    }
+  })
+}
+
+export async function toggleStaffPortal(staffId: number, enabled: boolean) {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      if (!staffId || isNaN(staffId) || staffId <= 0) {
+        return { success: false, message: "Invalid staff ID" }
+      }
+
+      await ensureStaffPortalSchema(sql)
+
+      const result = await sql`
+        UPDATE staff
+        SET
+          portal_enabled = ${enabled},
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${staffId} AND tenant_id = ${tenantId}
+        RETURNING id, name, portal_enabled
+      `
+
+      if (!result || result.length === 0) {
+        return { success: false, message: "Staff member not found" }
+      }
+
+      revalidatePath("/staff")
+      revalidatePath("/manage/staff")
+      revalidatePath(`/staff/${staffId}`)
+      await cacheDel(`staff:${tenantId}`)
+
+      return {
+        success: true,
+        message: `Staff portal access ${enabled ? "enabled" : "disabled"} successfully!`,
+      }
+    } catch (error) {
+      console.error("[staff] Error toggling staff portal:", error)
+      return {
+        success: false,
+        message: `Failed to update portal access: ${error instanceof Error ? error.message : "Unknown error"}`,
+      }
+    }
+  })
+}
+
+// Re-export leave request actions so they can be imported from either @/app/actions/staff or @/app/actions/attendance
+export {
+  getTenantLeaveRequests,
+  reviewStaffLeave,
+  createStaffLeaveRequest,
+  type StaffLeaveRequest,
+} from "./attendance"
+

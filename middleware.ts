@@ -10,6 +10,10 @@ const isProtectedRoute = createRouteMatcher([
 ]);
 
 const isPublicRoute = createRouteMatcher([
+  "/staff-portal/login",
+  "/staff-portal(.*)",
+  "/staff-manifest.json",
+  "/api/staff-portal(.*)",
   "/book",
   "/book/(.*)",
   "/bookings/customer-schedule(.*)",
@@ -125,6 +129,59 @@ const clerkMw = clerkMiddleware(async (auth, req) => {
 
 export default async function middleware(req: NextRequest, event: any) {
   try {
+    const host = req.headers.get("host") || req.nextUrl.host || "";
+    const isStaffSubdomain = host.startsWith("staff.") || host.includes("staff.biz.hanva.in");
+    const { pathname } = req.nextUrl;
+
+    // Staff manifest and static assets
+    if (pathname === "/staff-manifest.json") {
+      return NextResponse.next();
+    }
+
+    // 1. Staff Subdomain Handling (e.g. staff.biz.hanva.in or staff.localhost:3000)
+    if (isStaffSubdomain) {
+      // Allow Next.js assets, static files, and staff portal API
+      if (
+        pathname.startsWith("/_next") ||
+        pathname.startsWith("/favicon.ico") ||
+        pathname === "/sw.js" ||
+        pathname.startsWith("/api/staff-portal") ||
+        pathname.match(/\.(png|jpg|jpeg|svg|webp|ico|css|js|json|mp3|woff|woff2)$/)
+      ) {
+        return NextResponse.next();
+      }
+
+      // Login page on subdomain
+      if (pathname === "/login" || pathname === "/staff-portal/login") {
+        return NextResponse.rewrite(new URL("/staff-portal/login", req.url));
+      }
+
+      // Check staff session
+      const hasStaffSession = req.cookies.has("staff_session");
+      if (!hasStaffSession) {
+        return NextResponse.redirect(new URL("/login", req.url));
+      }
+
+      // Rewrite internally so staff stays on staff.domain.com in browser URL
+      if (pathname.startsWith("/staff-portal")) {
+        return NextResponse.next();
+      }
+      const targetPath = pathname === "/" ? "/staff-portal" : `/staff-portal${pathname}`;
+      return NextResponse.rewrite(new URL(targetPath, req.url));
+    }
+
+    // 2. Direct Staff Portal Path Handling (e.g. localhost:3000/staff-portal or biz.hanva.in/staff-portal)
+    if (pathname.startsWith("/staff-portal")) {
+      if (pathname === "/staff-portal/login") {
+        return NextResponse.next();
+      }
+      const hasStaffSession = req.cookies.has("staff_session");
+      if (!hasStaffSession) {
+        return NextResponse.redirect(new URL("/staff-portal/login", req.url));
+      }
+      return NextResponse.next();
+    }
+
     return await clerkMw(req, event);
   } catch (error: any) {
     console.error("Middleware crash caught:", error);

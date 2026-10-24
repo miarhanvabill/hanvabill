@@ -10,9 +10,9 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { ArrowLeft, Save, X } from 'lucide-react'
+import { ArrowLeft, Save, X, Smartphone, KeyRound, Copy } from 'lucide-react'
 import Link from "next/link"
-import { getStaffMember, updateStaff, type Staff } from "@/app/actions/staff"
+import { getStaffMember, updateStaff, setStaffPin, type Staff } from "@/app/actions/staff"
 import { getCommissionProfiles, type CommissionProfile } from "@/app/actions/commissions"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/components/ui/use-toast"
@@ -44,6 +44,8 @@ function EditStaffForm({ staff }: { staff: Staff }) {
     notes: "", // Not in DB, client-side only
     is_active: staff.is_active ?? true,
     avatar_url: staff.avatar_url || "",
+    portal_enabled: staff.portal_enabled ?? true,
+    pin: "",
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -121,11 +123,15 @@ function EditStaffForm({ staff }: { staff: Staff }) {
           skills: Array.isArray(formData.specialties) ? formData.specialties.join(", ") || null : formData.specialties || null, // Map specialties array to skills string
           emergency_contact: null, // Not in form, set to null
           avatar_url: formData.avatar_url || null,
+          portal_enabled: formData.portal_enabled,
         }
 
         const result = await updateStaff(staff.id, updateData)
 
         if (result.success) {
+          if (formData.pin.trim()) {
+            await setStaffPin(staff.id, formData.pin.trim())
+          }
           toast({
             title: "Success",
             description: "Staff member updated successfully",
@@ -362,6 +368,80 @@ function EditStaffForm({ staff }: { staff: Staff }) {
                     </Select>
                     <p className="text-sm text-gray-500 mt-1">Assign a structured commission profile to override the manual commission rate above.</p>
                   </div>
+                </CardContent>
+              </Card>
+
+              {/* Staff Portal Access */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="w-5 h-5 text-indigo-600" />
+                      <CardTitle>Staff Portal Access</CardTitle>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        id="portal_enabled"
+                        checked={formData.portal_enabled}
+                        onCheckedChange={(checked) => handleInputChange("portal_enabled", checked)}
+                      />
+                      <Label htmlFor="portal_enabled" className="text-sm cursor-pointer">
+                        {formData.portal_enabled ? "Enabled" : "Disabled"}
+                      </Label>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-gray-500">
+                    Grant this staff member access to their personal portal at <span className="font-mono text-indigo-600">staff.biz.hanva.in</span> to record attendance, view client schedules, and track commission earnings.
+                  </p>
+
+                  {formData.portal_enabled && (
+                    <div className="pt-2 border-t space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="pin" className="flex items-center gap-1.5">
+                            <KeyRound className="w-3.5 h-3.5 text-indigo-600" />
+                            Set 4-Digit PIN
+                          </Label>
+                          <Input
+                            id="pin"
+                            type="password"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            maxLength={4}
+                            value={formData.pin}
+                            onChange={(e) => handleInputChange("pin", e.target.value.replace(/\D/g, "").slice(0, 4))}
+                            placeholder={staff.has_pin ? "•••• (enter new 4 digits to reset)" : "e.g. 1234"}
+                            className="font-mono tracking-widest mt-1"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Staff uses their phone ({formData.phone || "registered number"}) and this 4-digit PIN to sign in.
+                          </p>
+                        </div>
+
+                        <div className="flex flex-col justify-end">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              if (navigator?.clipboard) {
+                                navigator.clipboard.writeText("https://staff.biz.hanva.in")
+                              }
+                              toast({
+                                title: "Link Copied!",
+                                description: "Staff portal link copied! Send to staff on WhatsApp",
+                              })
+                            }}
+                            className="gap-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                          >
+                            <Copy className="w-4 h-4" />
+                            Copy Staff Portal Link
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 

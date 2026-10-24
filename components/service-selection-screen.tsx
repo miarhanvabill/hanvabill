@@ -129,6 +129,8 @@ interface StaffRowFromAPI {
 interface Staff {
   id: number
   name: string
+  attendance_status?: string | null
+  check_out_time?: string | null
 }
 
 // Safe string helpers to avoid calling .includes on undefined
