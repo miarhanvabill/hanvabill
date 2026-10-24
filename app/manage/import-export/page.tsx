@@ -1,492 +1,977 @@
 "use client"
 
-import { Badge } from "@/components/ui/badge"
-import type React from "react"
-import { useState } from "react"
+import { useState, useEffect, useTransition, useMemo } from "react"
 import { PageHeader } from "@/components/page-header"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
-import { toast } from "@/hooks/use-toast"
-import { Upload, Download, FileText, Database, Users, Calendar, Package, AlertCircle, CheckCircle } from "lucide-react"
-import { bulkUploadCustomers } from "@/app/actions/customers"
-import { bulkUploadServices } from "@/app/actions/services"
-import { bulkUploadBookings } from "@/app/actions/bookings"
-import { downloadCSVTemplate, getTemplateByType } from "@/lib/csv-templates"
+import {
+  Upload,
+  Download,
+  FileText,
+  Database,
+  Users,
+  Calendar,
+  Package,
+  AlertCircle,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  FileSpreadsheet,
+  Receipt,
+  Sparkles,
+  ArrowRight,
+  ShieldCheck,
+  Check,
+  Filter,
+  FileCheck,
+  AlertTriangle,
+  History,
+  Info,
+  Clock,
+  Layers,
+} from "lucide-react"
+import { toast } from "sonner"
+import {
+  getImportExportStats,
+  getOperationsHistory,
+  logOperation,
+  processEntityImport,
+  type EntityStats,
+  type ImportExportHistoryItem,
+} from "@/app/actions/import-export"
+import {
+  getTemplateByType,
+  downloadCSVTemplate,
+  type CSVEntityType,
+} from "@/lib/csv-templates"
+import { CSVParser } from "@/lib/csv-parser"
 
-interface ImportExportOperation {
+interface ExportEntityConfig {
   id: string
-  type: "import" | "export"
-  dataType: string
-  status: "pending" | "processing" | "completed" | "failed"
-  progress: number
-  recordsProcessed: number
-  totalRecords: number
-  createdAt: string
-  fileName?: string
-  errorMessage?: string
+  name: string
+  icon: any
+  description: string
+  countKey: keyof EntityStats
+  endpoint: string
+  hasDateFilter?: boolean
 }
 
-const dataTypes = [
-  { id: "customers", name: "Customers", icon: Users, description: "Customer information and contact details" },
-  { id: "services", name: "Services", icon: Package, description: "Service catalog with pricing and duration" },
-  { id: "bookings", name: "Bookings", icon: Calendar, description: "Appointment and booking data" },
-  { id: "products", name: "Products", icon: Package, description: "Product inventory and stock information" },
-  { id: "staff", name: "Staff", icon: Users, description: "Employee information and roles" },
+const EXPORT_ENTITIES: ExportEntityConfig[] = [
+  {
+    id: "customers",
+    name: "Customers & Clients",
+    icon: Users,
+    description: "Contact details, birthdays, notes, total spend, and visit history",
+    countKey: "customers",
+    endpoint: "/api/export/customers",
+  },
+  {
+    id: "services",
+    name: "Services & Treatments",
+    icon: Layers,
+    description: "Service menu with pricing, duration minutes, categories, and codes",
+    countKey: "services",
+    endpoint: "/api/export/services",
+  },
+  {
+    id: "products",
+    name: "Products & Retail Inventory",
+    icon: Package,
+    description: "Retail stock, SKU barcodes, cost price, selling price, and stock levels",
+    countKey: "products",
+    endpoint: "/api/export/products",
+  },
+  {
+    id: "invoices",
+    name: "Sales & GST Invoices Ledger",
+    icon: Receipt,
+    description: "Comprehensive billing ledger with taxes, discounts, payment modes, and client info",
+    countKey: "invoices",
+    endpoint: "/api/export/invoices",
+    hasDateFilter: true,
+  },
+  {
+    id: "bookings",
+    name: "Appointments & Bookings",
+    icon: Calendar,
+    description: "Historical bookings, schedule dates, assigned stylists, and statuses",
+    countKey: "bookings",
+    endpoint: "/api/export/bookings",
+  },
+  {
+    id: "staff",
+    name: "Staff & Team Members",
+    icon: Users,
+    description: "Stylist roster, contact info, job roles, and commission percentages",
+    countKey: "staff",
+    endpoint: "/api/export/staff",
+  },
 ]
 
 export default function ImportExportPage() {
-  const [operations, setOperations] = useState<ImportExportOperation[]>([])
-  const [selectedDataType, setSelectedDataType] = useState("")
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [isProcessing, setIsProcessing] = useState(false)
+  const [activeTab, setActiveTab] = useState<string>("export")
+  const [stats, setStats] = useState<EntityStats>({
+    customers: 0,
+    services: 0,
+    products: 0,
+    bookings: 0,
+    staff: 0,
+    invoices: 0,
+  })
+  const [isLoadingStats, setIsLoadingStats] = useState(false)
 
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      if (file.type !== "text/csv" && !file.name.endsWith(".csv")) {
-        toast({
-          title: "Invalid File Type",
-          description: "Please select a CSV file",
-          variant: "destructive",
-        })
-        return
+  // Export State
+  const [exportingId, setExportingId] = useState<string | null>(null)
+  const [invoiceDateRange, setInvoiceDateRange] = useState<string>("all")
+
+  // Import State
+  const [importEntity, setImportEntity] = useState<"customers" | "services" | "products" | "staff">("customers")
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [fileContent, setFileContent] = useState<string>("")
+  const [parsedRows, setParsedRows] = useState<string[][]>([])
+  const [duplicateMode, setDuplicateMode] = useState<"skip" | "update">("skip")
+  const [isImporting, setIsImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState(0)
+  const [importResult, setImportResult] = useState<{
+    success: boolean
+    message: string
+    recordsProcessed?: number
+    errors?: string[]
+  } | null>(null)
+
+  // History State
+  const [history, setHistory] = useState<ImportExportHistoryItem[]>([])
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+
+  // Load stats and history on mount
+  useEffect(() => {
+    loadLiveStats()
+    loadHistory()
+  }, [])
+
+  async function loadLiveStats() {
+    setIsLoadingStats(true)
+    try {
+      const res = await getImportExportStats()
+      if (res.success && res.data) {
+        setStats(res.data)
       }
-      setSelectedFile(file)
+    } catch (err) {
+      console.warn("Could not load import/export stats:", err)
+    } finally {
+      setIsLoadingStats(false)
     }
   }
 
-  const handleImport = async () => {
-    if (!selectedFile || !selectedDataType) {
-      toast({
-        title: "Missing Information",
-        description: "Please select a file and data type",
-        variant: "destructive",
+  async function loadHistory() {
+    setIsLoadingHistory(true)
+    try {
+      const res = await getOperationsHistory()
+      if (res.success && res.data) {
+        setHistory(res.data)
+      }
+    } catch (err) {
+      console.warn("Could not load history:", err)
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }
+
+  // Handle Export Action
+  async function handleExport(entity: ExportEntityConfig) {
+    setExportingId(entity.id)
+    try {
+      let url = entity.endpoint
+      if (entity.id === "invoices" && invoiceDateRange !== "all") {
+        url += `?range=${invoiceDateRange}`
+      }
+
+      const res = await fetch(url)
+      if (!res.ok) {
+        throw new Error(`Export failed with status ${res.status}`)
+      }
+
+      const blob = await res.blob()
+      const recordCount = Number.parseInt(res.headers.get("X-Record-Count") || "0", 10)
+      const fileName = `${entity.id}_export_${new Date().toISOString().split("T")[0]}.csv`
+
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = downloadUrl
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(downloadUrl)
+      document.body.removeChild(a)
+
+      toast.success(`Successfully exported ${recordCount} ${entity.name} records to CSV`)
+
+      // Log export operation
+      await logOperation({
+        type: "export",
+        dataType: entity.id,
+        status: "completed",
+        recordsProcessed: recordCount,
+        totalRecords: recordCount,
+        fileName,
       })
+
+      loadHistory()
+    } catch (err: any) {
+      console.error("Export error:", err)
+      toast.error(err?.message || `Failed to export ${entity.name}`)
+    } finally {
+      setExportingId(null)
+    }
+  }
+
+  // Handle File Selection for Import
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    setImportResult(null)
+    if (!file) {
+      setSelectedFile(null)
+      setFileContent("")
+      setParsedRows([])
       return
     }
 
-    setIsProcessing(true)
-
-    const newOperation: ImportExportOperation = {
-      id: Date.now().toString(),
-      type: "import",
-      dataType: selectedDataType,
-      status: "processing",
-      progress: 0,
-      recordsProcessed: 0,
-      totalRecords: 0,
-      createdAt: new Date().toISOString(),
-      fileName: selectedFile.name,
+    if (!file.name.endsWith(".csv") && file.type !== "text/csv") {
+      toast.error("Please upload a standard CSV (.csv) file.")
+      e.target.value = ""
+      return
     }
 
-    setOperations([newOperation, ...operations])
-
-    try {
-      let result: { success: boolean; message: string; recordsProcessed?: number }
-
-      // Call the appropriate server action based on data type
-      switch (selectedDataType) {
-        case "customers":
-          result = await bulkUploadCustomers(selectedFile)
-          break
-        case "services":
-          result = await bulkUploadServices(selectedFile)
-          break
-        case "bookings":
-          result = await bulkUploadBookings(selectedFile)
-          break
-        default:
-          throw new Error(`Import not yet implemented for ${selectedDataType}`)
-      }
-
-      const completedOperation = {
-        ...newOperation,
-        status: result.success ? ("completed" as const) : ("failed" as const),
-        progress: 100,
-        recordsProcessed: result.recordsProcessed || 0,
-        totalRecords: result.recordsProcessed || 0,
-        errorMessage: result.success ? undefined : result.message,
-      }
-
-      setOperations((prev) => prev.map((op) => (op.id === newOperation.id ? completedOperation : op)))
-
-      if (result.success) {
-        toast({
-          title: "Import Completed",
-          description: result.message,
-        })
-      } else {
-        toast({
-          title: "Import Failed",
-          description: result.message,
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      const failedOperation = {
-        ...newOperation,
-        status: "failed" as const,
-        progress: 100,
-        errorMessage: error instanceof Error ? error.message : "Unknown error occurred",
-      }
-
-      setOperations((prev) => prev.map((op) => (op.id === newOperation.id ? failedOperation : op)))
-
-      toast({
-        title: "Import Failed",
-        description: error instanceof Error ? error.message : "Unknown error occurred",
-        variant: "destructive",
-      })
-    } finally {
-      setIsProcessing(false)
-      setSelectedFile(null)
-      setSelectedDataType("")
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File exceeds 10MB limit. Please upload a smaller CSV file.")
+      e.target.value = ""
+      return
     }
+
+    setSelectedFile(file)
+
+    // Read and preview file content
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const text = (event.target?.result as string) || ""
+      setFileContent(text)
+      try {
+        const rows = CSVParser.parseCSV(text)
+        setParsedRows(rows)
+        toast.info(`CSV parsed: detected ${Math.max(0, rows.length - 1)} data rows`)
+      } catch (err) {
+        console.warn("CSV parse preview warning:", err)
+      }
+    }
+    reader.readAsText(file)
   }
 
-  const handleExport = async (dataType: string) => {
-    setIsProcessing(true)
-
-    const newOperation: ImportExportOperation = {
-      id: Date.now().toString(),
-      type: "export",
-      dataType,
-      status: "processing",
-      progress: 0,
-      recordsProcessed: 0,
-      totalRecords: 0,
-      createdAt: new Date().toISOString(),
-      fileName: `${dataType}_export_${new Date().toISOString().split("T")[0]}.csv`,
-    }
-
-    setOperations([newOperation, ...operations])
-
+  // Handle Template Download
+  function handleDownloadTemplate(entity: CSVEntityType) {
     try {
-      // Fetch real data from the database via API
-      const response = await fetch(`/api/export/${dataType}`)
-
-      if (!response.ok) {
-        throw new Error(`Export failed: ${response.statusText}`)
-      }
-
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = newOperation.fileName || `${dataType}_export.csv`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-
-      // Get the actual record count from response headers if available
-      const recordCount = Number.parseInt(response.headers.get("X-Record-Count") || "0")
-
-      const completedOperation = {
-        ...newOperation,
-        status: "completed" as const,
-        progress: 100,
-        recordsProcessed: recordCount,
-        totalRecords: recordCount,
-      }
-
-      setOperations((prev) => prev.map((op) => (op.id === newOperation.id ? completedOperation : op)))
-
-      toast({
-        title: "Export Completed",
-        description: `Successfully exported ${recordCount} ${dataType} records`,
-      })
-    } catch (error) {
-      const failedOperation = {
-        ...newOperation,
-        status: "failed" as const,
-        progress: 100,
-        errorMessage: error instanceof Error ? error.message : "Export failed",
-      }
-
-      setOperations((prev) => prev.map((op) => (op.id === newOperation.id ? failedOperation : op)))
-
-      toast({
-        title: "Export Failed",
-        description: error instanceof Error ? error.message : "Export failed",
-        variant: "destructive",
-      })
-    } finally {
-      setIsProcessing(false)
-    }
-  }
-
-  const handleDownloadTemplate = (dataType: string) => {
-    try {
-      if (!["customers", "services", "bookings"].includes(dataType)) {
-        toast({
-          title: "Template Not Available",
-          description: `Template for ${dataType} is not yet available`,
-          variant: "destructive",
-        })
-        return
-      }
-
-      const template = getTemplateByType(dataType as "customers" | "services" | "bookings")
+      const template = getTemplateByType(entity)
       downloadCSVTemplate(template, true)
-
-      toast({
-        title: "Template Downloaded",
-        description: `${dataType} template with sample data has been downloaded`,
-      })
-    } catch (error) {
-      toast({
-        title: "Download Failed",
-        description: "Failed to download template",
-        variant: "destructive",
-      })
+      toast.success(`${template.filename} downloaded with sample data!`)
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to download CSV template")
     }
   }
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "completed":
-        return <CheckCircle className="w-4 h-4 text-green-600" />
-      case "failed":
-        return <AlertCircle className="w-4 h-4 text-red-600" />
-      case "processing":
-        return <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-      default:
-        return <div className="w-4 h-4 bg-gray-300 rounded-full" />
+  // Execute Import
+  async function handleExecuteImport() {
+    if (!selectedFile || !fileContent.trim()) {
+      toast.error("Please select a valid CSV file first")
+      return
+    }
+
+    setIsImporting(true)
+    setImportProgress(25)
+    setImportResult(null)
+
+    try {
+      setImportProgress(50)
+      const res = await processEntityImport(
+        importEntity,
+        fileContent,
+        selectedFile.name,
+        duplicateMode
+      )
+
+      setImportProgress(100)
+      setImportResult(res)
+
+      if (res.success) {
+        toast.success(res.message || "Import completed successfully!")
+        loadLiveStats()
+        loadHistory()
+      } else {
+        toast.error(res.message || "Import encountered issues")
+      }
+    } catch (err: any) {
+      const errMsg = err?.message || "Unexpected error occurred during import"
+      toast.error(errMsg)
+      setImportResult({
+        success: false,
+        message: errMsg,
+      })
+    } finally {
+      setIsImporting(false)
     }
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "completed":
-        return "bg-green-100 text-green-800"
-      case "failed":
-        return "bg-red-100 text-red-800"
-      case "processing":
-        return "bg-blue-100 text-blue-800"
-      default:
-        return "bg-gray-100 text-gray-800"
-    }
+  // Reset file input
+  function handleResetImport() {
+    setSelectedFile(null)
+    setFileContent("")
+    setParsedRows([])
+    setImportResult(null)
+    setImportProgress(0)
   }
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col bg-slate-50/50 min-h-screen">
       <PageHeader
-        title="Import and Export"
-        subtitle="Quickly import and export customer, service, product, and booking data for efficient management"
+        title="Data Import & Export Center"
+        subtitle="Live multi-tenant backup, bulk customer onboarding, inventory replenishment, and financial ledger exports."
       />
 
-      <main className="flex-1 p-6 bg-gray-50">
-        <div className="max-w-7xl mx-auto space-y-6">
-          {/* Import Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Upload className="w-5 h-5" />
-                Import Data
-              </CardTitle>
-              <CardDescription>Upload CSV files to import data into your system</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="dataType">Data Type</Label>
-                  <Select value={selectedDataType} onValueChange={setSelectedDataType}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select data type to import" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {dataTypes.map((type) => (
-                        <SelectItem key={type.id} value={type.id}>
-                          <div className="flex items-center gap-2">
-                            <type.icon className="w-4 h-4" />
-                            {type.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="file">CSV File</Label>
-                  <Input id="file" type="file" accept=".csv" onChange={handleFileSelect} disabled={isProcessing} />
-                </div>
-              </div>
+      <main className="flex-1 px-4 sm:px-6 lg:px-8 pb-12 max-w-7xl mx-auto w-full space-y-6">
+        {/* Live Entity Counts Header Strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="bg-white p-3.5 rounded-xl border shadow-2xs">
+            <span className="text-xs text-slate-500 font-medium">Customers</span>
+            <div className="text-xl font-bold text-slate-900 mt-1">
+              {isLoadingStats ? "..." : stats.customers.toLocaleString()}
+            </div>
+            <span className="text-[10px] text-emerald-600 font-medium">Live Database</span>
+          </div>
 
-              {selectedFile && (
-                <div className="p-3 bg-blue-50 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-600" />
-                    <span className="text-sm font-medium">{selectedFile.name}</span>
-                    <span className="text-xs text-gray-500">({(selectedFile.size / 1024).toFixed(1)} KB)</span>
-                  </div>
-                </div>
-              )}
+          <div className="bg-white p-3.5 rounded-xl border shadow-2xs">
+            <span className="text-xs text-slate-500 font-medium">Services</span>
+            <div className="text-xl font-bold text-slate-900 mt-1">
+              {isLoadingStats ? "..." : stats.services.toLocaleString()}
+            </div>
+            <span className="text-[10px] text-emerald-600 font-medium">Active Menu</span>
+          </div>
 
-              {selectedDataType && (
-                <div className="p-3 bg-green-50 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-green-600" />
-                      <span className="text-sm font-medium">Need a template?</span>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDownloadTemplate(selectedDataType)}
-                      disabled={!["customers", "services", "bookings"].includes(selectedDataType)}
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      Download Template
-                    </Button>
-                  </div>
-                </div>
-              )}
+          <div className="bg-white p-3.5 rounded-xl border shadow-2xs">
+            <span className="text-xs text-slate-500 font-medium">Products</span>
+            <div className="text-xl font-bold text-slate-900 mt-1">
+              {isLoadingStats ? "..." : stats.products.toLocaleString()}
+            </div>
+            <span className="text-[10px] text-emerald-600 font-medium">Retail & Stock</span>
+          </div>
 
-              <Button
-                onClick={handleImport}
-                disabled={!selectedFile || !selectedDataType || isProcessing}
-                className="w-full md:w-auto"
+          <div className="bg-white p-3.5 rounded-xl border shadow-2xs">
+            <span className="text-xs text-slate-500 font-medium">Sales Invoices</span>
+            <div className="text-xl font-bold text-slate-900 mt-1">
+              {isLoadingStats ? "..." : stats.invoices.toLocaleString()}
+            </div>
+            <span className="text-[10px] text-emerald-600 font-medium">GST Ledger</span>
+          </div>
+
+          <div className="bg-white p-3.5 rounded-xl border shadow-2xs">
+            <span className="text-xs text-slate-500 font-medium">Bookings</span>
+            <div className="text-xl font-bold text-slate-900 mt-1">
+              {isLoadingStats ? "..." : stats.bookings.toLocaleString()}
+            </div>
+            <span className="text-[10px] text-emerald-600 font-medium">Appointments</span>
+          </div>
+
+          <div className="bg-white p-3.5 rounded-xl border shadow-2xs">
+            <span className="text-xs text-slate-500 font-medium">Staff Stylists</span>
+            <div className="text-xl font-bold text-slate-900 mt-1">
+              {isLoadingStats ? "..." : stats.staff.toLocaleString()}
+            </div>
+            <span className="text-[10px] text-emerald-600 font-medium">Active Team</span>
+          </div>
+        </div>
+
+        {/* Navigation Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-4">
+            <TabsList className="bg-white border p-1 rounded-xl shadow-2xs h-auto flex flex-wrap gap-1">
+              <TabsTrigger
+                value="export"
+                className="gap-2 px-4 py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white font-medium text-xs sm:text-sm"
               >
-                <Upload className="w-4 h-4 mr-2" />
-                {isProcessing ? "Importing..." : "Import Data"}
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Export Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Download className="w-5 h-5" />
+                <Download className="w-4 h-4" />
                 Export Data
-              </CardTitle>
-              <CardDescription>Download your data as CSV files for backup or analysis</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {dataTypes.map((type) => (
-                  <Card key={type.id} className="hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                          <type.icon className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <h3 className="font-medium">{type.name}</h3>
-                          <p className="text-xs text-gray-500">{type.description}</p>
-                        </div>
-                      </div>
-                      <Button
-                        onClick={() => handleExport(type.id)}
-                        disabled={isProcessing}
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                      >
-                        <Download className="w-4 h-4 mr-2" />
-                        Export
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+              </TabsTrigger>
+              <TabsTrigger
+                value="import"
+                className="gap-2 px-4 py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white font-medium text-xs sm:text-sm"
+              >
+                <Upload className="w-4 h-4" />
+                Import Data & Migrations
+              </TabsTrigger>
+              <TabsTrigger
+                value="history"
+                className="gap-2 px-4 py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white font-medium text-xs sm:text-sm"
+              >
+                <History className="w-4 h-4" />
+                Operations History
+                {history.length > 0 && (
+                  <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-800">
+                    {history.length}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger
+                value="templates"
+                className="gap-2 px-4 py-2 rounded-lg data-[state=active]:bg-primary data-[state=active]:text-white font-medium text-xs sm:text-sm"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Sample Templates
+              </TabsTrigger>
+            </TabsList>
 
-          {/* Operations History */}
-          {operations.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Database className="w-5 h-5" />
-                  Recent Operations
-                </CardTitle>
-                <CardDescription>Track the progress of your import and export operations</CardDescription>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                loadLiveStats()
+                loadHistory()
+                toast.success("Refreshed latest database stats")
+              }}
+              className="gap-1.5 text-xs self-start sm:self-auto"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Refresh Counts
+            </Button>
+          </div>
+
+          {/* TAB 1: EXPORT DATA */}
+          <TabsContent value="export" className="space-y-6 m-0">
+            <Card className="border shadow-2xs bg-white">
+              <CardHeader className="pb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-lg font-bold flex items-center gap-2">
+                      <Download className="w-5 h-5 text-primary" />
+                      Live Data Export Hub
+                    </CardTitle>
+                    <CardDescription className="text-xs text-slate-500 mt-1">
+                      Download clean, formatted CSV spreadsheets with all active tenant records for CA filing, offline backup, or Excel analysis.
+                    </CardDescription>
+                  </div>
+
+                  {/* Date range filter for invoices */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 whitespace-nowrap">Invoice Range:</span>
+                    <Select value={invoiceDateRange} onValueChange={setInvoiceDateRange}>
+                      <SelectTrigger className="w-[140px] h-8 text-xs bg-slate-50">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Invoices</SelectItem>
+                        <SelectItem value="today">Today Only</SelectItem>
+                        <SelectItem value="month">This Month</SelectItem>
+                        <SelectItem value="last30">Last 30 Days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {operations.slice(0, 10).map((operation) => {
-                    const dataType = dataTypes.find((t) => t.id === operation.dataType)
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {EXPORT_ENTITIES.map((entity) => {
+                    const count = stats[entity.countKey] || 0
+                    const isBusy = exportingId === entity.id
 
                     return (
-                      <div key={operation.id} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-3">
-                            {getStatusIcon(operation.status)}
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium capitalize">
-                                  {operation.type} {dataType?.name}
-                                </span>
-                                <Badge className={getStatusColor(operation.status)}>{operation.status}</Badge>
-                              </div>
-                              {operation.fileName && <p className="text-sm text-gray-500">{operation.fileName}</p>}
+                      <Card key={entity.id} className="border shadow-2xs flex flex-col justify-between hover:border-primary/40 hover:shadow-md transition-all">
+                        <CardHeader className="p-4 pb-2">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                              <entity.icon className="w-5 h-5" />
                             </div>
+                            <Badge variant="secondary" className="text-[11px] font-semibold bg-slate-100 text-slate-700">
+                              {count.toLocaleString()} Records
+                            </Badge>
                           </div>
-                          <div className="text-right">
-                            <p className="text-sm font-medium">
-                              {operation.recordsProcessed} / {operation.totalRecords}
-                            </p>
-                            <p className="text-xs text-gray-500">{new Date(operation.createdAt).toLocaleString()}</p>
-                          </div>
-                        </div>
+                          <CardTitle className="text-base font-semibold text-slate-900 mt-3">
+                            {entity.name}
+                          </CardTitle>
+                          <CardDescription className="text-xs text-slate-500 leading-relaxed min-h-[34px]">
+                            {entity.description}
+                          </CardDescription>
+                        </CardHeader>
 
-                        {operation.status === "processing" && (
-                          <div className="space-y-2">
-                            <Progress value={operation.progress} className="h-2" />
-                            <p className="text-xs text-gray-500">{Math.round(operation.progress)}% complete</p>
-                          </div>
-                        )}
-
-                        {operation.errorMessage && (
-                          <div className="mt-2 p-2 bg-red-50 rounded text-sm text-red-600">
-                            {operation.errorMessage}
-                          </div>
-                        )}
-                      </div>
+                        <CardFooter className="p-4 pt-2 border-t bg-slate-50/50">
+                          <Button
+                            onClick={() => handleExport(entity)}
+                            disabled={isBusy}
+                            variant="outline"
+                            size="sm"
+                            className="w-full gap-2 text-xs font-medium hover:bg-primary hover:text-white transition-colors"
+                          >
+                            {isBusy ? (
+                              <>
+                                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                Exporting CSV...
+                              </>
+                            ) : (
+                              <>
+                                <Download className="w-3.5 h-3.5" />
+                                Export {entity.name.split(" ")[0]} CSV
+                              </>
+                            )}
+                          </Button>
+                        </CardFooter>
+                      </Card>
                     )
                   })}
                 </div>
               </CardContent>
             </Card>
-          )}
+          </TabsContent>
 
-          {/* Help Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Import/Export Guidelines</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-medium mb-2">Import Requirements</h4>
-                  <ul className="text-sm text-gray-600 space-y-1">
-                    <li>• Files must be in CSV format</li>
-                    <li>• First row should contain column headers</li>
-                    <li>• Maximum file size: 10MB</li>
-                    <li>• Ensure data matches the expected format</li>
-                    <li>• Duplicate entries will be skipped</li>
-                  </ul>
+          {/* TAB 2: IMPORT DATA */}
+          <TabsContent value="import" className="space-y-6 m-0">
+            <Card className="border shadow-2xs bg-white">
+              <CardHeader>
+                <CardTitle className="text-lg font-bold flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-primary" />
+                  Bulk CSV Import & Data Migration
+                </CardTitle>
+                <CardDescription className="text-xs text-slate-500">
+                  Easily migrate your existing client lists, price lists, or retail stock from Zenoti, Fresha, Excel, or other salon software.
+                </CardDescription>
+              </CardHeader>
+
+              <CardContent className="space-y-6">
+                {/* Step 1: Select Entity & Duplicate Strategy */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50/70 border">
+                  <div>
+                    <Label htmlFor="import-entity" className="text-xs font-semibold text-slate-800">
+                      1. Select What You Are Importing <span className="text-red-500">*</span>
+                    </Label>
+                    <Select
+                      value={importEntity}
+                      onValueChange={(val: any) => {
+                        setImportEntity(val)
+                        setImportResult(null)
+                      }}
+                    >
+                      <SelectTrigger id="import-entity" className="mt-1.5 bg-white text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="customers">👥 Customers & Clients</SelectItem>
+                        <SelectItem value="services">💇‍♀️ Services & Menu Prices</SelectItem>
+                        <SelectItem value="products">📦 Retail Products & Stock</SelectItem>
+                        <SelectItem value="staff">✂️ Staff & Stylists</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="dup-mode" className="text-xs font-semibold text-slate-800">
+                      2. Duplicate Record Strategy
+                    </Label>
+                    <Select
+                      value={duplicateMode}
+                      onValueChange={(val: any) => setDuplicateMode(val)}
+                    >
+                      <SelectTrigger id="dup-mode" className="mt-1.5 bg-white text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="skip">Skip existing records (Keep original)</SelectItem>
+                        <SelectItem value="update">Update existing records with new values</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-medium mb-2">Export Features</h4>
-                  <ul className="text-sm text-gray-600 space-y-1">
-                    <li>• All data exported in CSV format</li>
-                    <li>• Includes all active records</li>
-                    <li>• Files are automatically downloaded</li>
-                    <li>• Export history is maintained</li>
-                    <li>• Data is formatted for easy import</li>
-                  </ul>
+
+                {/* Step 2: Download Template Callout */}
+                <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <FileSpreadsheet className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+                    <div>
+                      <h4 className="text-sm font-semibold text-blue-900">
+                        Need the pre-formatted CSV template?
+                      </h4>
+                      <p className="text-xs text-blue-700 mt-0.5">
+                        Download the official template with sample salon data and required column headers.
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDownloadTemplate(importEntity as CSVEntityType)}
+                    className="bg-white hover:bg-blue-100 text-blue-700 border-blue-300 text-xs shrink-0 gap-1.5"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download {importEntity.toUpperCase()} Template
+                  </Button>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+
+                {/* Step 3: File Dropzone */}
+                <div>
+                  <Label htmlFor="csv-file-input" className="text-xs font-semibold text-slate-800">
+                    3. Upload CSV File (.csv)
+                  </Label>
+                  <div className="mt-1.5 border-2 border-dashed rounded-xl p-6 text-center hover:border-primary/50 transition-colors bg-white">
+                    <Input
+                      id="csv-file-input"
+                      type="file"
+                      accept=".csv,text/csv"
+                      onChange={handleFileSelect}
+                      disabled={isImporting}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="csv-file-input"
+                      className="cursor-pointer flex flex-col items-center justify-center space-y-2"
+                    >
+                      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                        <Upload className="w-6 h-6" />
+                      </div>
+                      <div className="text-sm font-medium text-slate-800">
+                        {selectedFile ? (
+                          <span className="text-primary font-bold">{selectedFile.name}</span>
+                        ) : (
+                          "Click to browse or drop your CSV file here"
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        {selectedFile
+                          ? `${(selectedFile.size / 1024).toFixed(1)} KB • Click to choose a different file`
+                          : "Supports .csv up to 10MB • UTF-8 encoding"}
+                      </p>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Step 4: Preview Table (if file loaded) */}
+                {parsedRows.length > 0 && (
+                  <div className="space-y-3 p-4 rounded-xl border bg-slate-50/50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FileCheck className="w-4 h-4 text-emerald-600" />
+                        <h4 className="text-sm font-semibold text-slate-900">
+                          Data Preview ({parsedRows.length - 1} records detected)
+                        </h4>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={handleResetImport} className="text-xs h-7 text-red-600 hover:text-red-700">
+                        Remove File
+                      </Button>
+                    </div>
+
+                    <div className="overflow-x-auto border rounded-lg bg-white max-h-56">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-100 text-slate-700 sticky top-0 border-b">
+                          <tr>
+                            <th className="px-3 py-2 font-semibold">#</th>
+                            {parsedRows[0]?.map((header, idx) => (
+                              <th key={idx} className="px-3 py-2 font-semibold uppercase tracking-wider text-[10px]">
+                                {header}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-mono">
+                          {parsedRows.slice(1, 6).map((row, rIdx) => (
+                            <tr key={rIdx} className="hover:bg-slate-50">
+                              <td className="px-3 py-1.5 text-slate-400 text-[11px]">{rIdx + 1}</td>
+                              {row.map((cell, cIdx) => (
+                                <td key={cIdx} className="px-3 py-1.5 text-slate-700 truncate max-w-[160px]">
+                                  {cell || "—"}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {parsedRows.length > 6 && (
+                      <p className="text-[11px] text-slate-500 italic">
+                        Showing first 5 rows of {parsedRows.length - 1} records.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Step 5: Import Progress Bar */}
+                {isImporting && (
+                  <div className="space-y-2 p-4 rounded-xl border bg-blue-50/40">
+                    <div className="flex justify-between text-xs font-medium text-blue-900">
+                      <span>Importing records into PostgreSQL database...</span>
+                      <span>{importProgress}%</span>
+                    </div>
+                    <Progress value={importProgress} className="h-2 bg-blue-100" />
+                  </div>
+                )}
+
+                {/* Step 6: Import Result Callout */}
+                {importResult && (
+                  <div
+                    className={`p-4 rounded-xl border flex items-start gap-3 ${
+                      importResult.success
+                        ? "bg-emerald-50/70 border-emerald-300 text-emerald-900"
+                        : "bg-red-50/70 border-red-300 text-red-900"
+                    }`}
+                  >
+                    {importResult.success ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
+                    )}
+                    <div className="space-y-1 text-xs">
+                      <h4 className="font-bold text-sm">
+                        {importResult.success ? "Import Succeeded" : "Import Failed"}
+                      </h4>
+                      <p>{importResult.message}</p>
+                      {importResult.errors && importResult.errors.length > 0 && (
+                        <div className="mt-2 p-2 bg-white/80 rounded border max-h-32 overflow-y-auto space-y-1 font-mono text-[11px] text-red-700">
+                          {importResult.errors.map((err, i) => (
+                            <div key={i}>• {err}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Submit Import Button */}
+                <div className="pt-2 flex items-center justify-end gap-3">
+                  {selectedFile && (
+                    <Button variant="outline" size="sm" onClick={handleResetImport} disabled={isImporting}>
+                      Cancel
+                    </Button>
+                  )}
+                  <Button
+                    onClick={handleExecuteImport}
+                    disabled={!selectedFile || isImporting}
+                    className="gap-2 px-6"
+                  >
+                    {isImporting ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Processing Import...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4" />
+                        Execute {importEntity.toUpperCase()} Import
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* TAB 3: OPERATIONS HISTORY */}
+          <TabsContent value="history" className="space-y-6 m-0">
+            <Card className="border shadow-2xs bg-white">
+              <CardHeader className="flex flex-row items-center justify-between pb-4">
+                <div>
+                  <CardTitle className="text-lg font-bold flex items-center gap-2">
+                    <History className="w-5 h-5 text-primary" />
+                    Persistent Operations Audit Trail
+                  </CardTitle>
+                  <CardDescription className="text-xs text-slate-500">
+                    Real-time log of previous import and export events for your salon account.
+                  </CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={loadHistory} disabled={isLoadingHistory} className="gap-1.5 text-xs">
+                  <RefreshCw className={`w-3.5 h-3.5 ${isLoadingHistory ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              </CardHeader>
+
+              <CardContent>
+                {isLoadingHistory ? (
+                  <div className="py-12 text-center text-xs text-slate-400">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-primary" />
+                    Loading operations audit trail...
+                  </div>
+                ) : history.length === 0 ? (
+                  <div className="py-12 text-center border rounded-xl bg-slate-50">
+                    <Database className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                    <h4 className="text-sm font-semibold text-slate-800">No operations recorded yet</h4>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                      Whenever you export data or import new records, an audit entry will be safely logged here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {history.map((op) => {
+                      const isExport = op.type === "export"
+                      const isCompleted = op.status === "completed"
+
+                      return (
+                        <div
+                          key={op.id}
+                          className="p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div
+                              className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                                isExport ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
+                              }`}
+                            >
+                              {isExport ? <Download className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
+                            </div>
+
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-bold capitalize text-slate-900">
+                                  {op.type}: {op.data_type}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    isCompleted
+                                      ? "border-emerald-400 text-emerald-700 bg-emerald-50 text-[10px]"
+                                      : "border-red-400 text-red-700 bg-red-50 text-[10px]"
+                                  }
+                                >
+                                  {op.status}
+                                </Badge>
+                              </div>
+
+                              <p className="text-xs text-slate-500">
+                                {op.file_name ? `File: ${op.file_name}` : "Direct database stream"} •{" "}
+                                <span className="font-semibold text-slate-700">
+                                  {op.records_processed} records processed
+                                </span>
+                              </p>
+
+                              {op.error_message && (
+                                <p className="text-xs text-red-600 font-mono mt-1">
+                                  Error: {op.error_message}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="text-xs text-slate-400 sm:text-right shrink-0">
+                            <div>{new Date(op.created_at).toLocaleDateString()}</div>
+                            <div className="text-[11px]">
+                              {new Date(op.created_at).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* TAB 4: TEMPLATES & GUIDELINES */}
+          <TabsContent value="templates" className="space-y-6 m-0">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Quick Downloads */}
+              <Card className="border shadow-2xs bg-white">
+                <CardHeader>
+                  <CardTitle className="text-base font-bold flex items-center gap-2">
+                    <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                    Downloadable CSV Templates
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Pre-configured templates with sample salon data and correct headers.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {[
+                    { id: "customers", label: "Customers & Clients Template", desc: "Includes phone_number, full_name, email, gender, dob, notes" },
+                    { id: "services", label: "Services & Treatments Template", desc: "Includes name, price, duration_minutes, category, code" },
+                    { id: "products", label: "Retail Products & Inventory Template", desc: "Includes name, price, cost, stock_quantity, category, sku, barcode" },
+                    { id: "staff", label: "Staff Stylists Template", desc: "Includes name, phone, email, role, commission_rate" },
+                  ].map((tpl) => (
+                    <div key={tpl.id} className="p-3 rounded-lg border flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">{tpl.label}</div>
+                        <div className="text-xs text-slate-500">{tpl.desc}</div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDownloadTemplate(tpl.id as CSVEntityType)}
+                        className="gap-1.5 text-xs shrink-0"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        CSV
+                      </Button>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+
+              {/* Migration Guide */}
+              <Card className="border shadow-2xs bg-white">
+                <CardHeader>
+                  <CardTitle className="text-base font-bold flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-primary" />
+                    Import & Migration Rules
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Best practices for seamless data migration into Hanva POS.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 text-xs text-slate-600">
+                  <div className="space-y-1.5">
+                    <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                      Customer Phone Numbers
+                    </div>
+                    <p>
+                      Phone number is the unique primary identifier for customers in Hanva. Ensure each row has a valid 10-digit Indian mobile number (e.g. <code>9321501389</code> or <code>+919321501389</code>).
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                      Products & Inventory
+                    </div>
+                    <p>
+                      Products must contain a product name and price. If you provide a SKU or Barcode, Hanva will automatically map it to thermal barcode scanners during POS checkout.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                      Duplicate Protection
+                    </div>
+                    <p>
+                      You can select "Skip existing records" to avoid overwriting current salon entries, or choose "Update existing records" to perform a bulk price or contact refresh.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary"></span>
+                      File Format & Encodings
+                    </div>
+                    <p>
+                      Ensure files are saved in standard comma-separated format (.csv) with UTF-8 encoding. Maximum file upload limit is 10MB per batch.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   )
