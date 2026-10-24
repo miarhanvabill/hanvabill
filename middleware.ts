@@ -10,7 +10,8 @@ const isProtectedRoute = createRouteMatcher([
 ]);
 
 const isPublicRoute = createRouteMatcher([
-  "/book(.*)",
+  "/book",
+  "/book/(.*)",
   "/bookings/customer-schedule(.*)",
   "/terms-of-service",
   "/privacy-policy",
@@ -24,7 +25,6 @@ const isPublicRoute = createRouteMatcher([
   "/inv/(.*)",
   "/login",
   "/api/webhooks(.*)",
-  "/api/public/(.*)",
   "/test-forms(.*)",
   "/manifest(.*)",
   "/sw.js",
@@ -38,6 +38,14 @@ const clerkMw = clerkMiddleware(async (auth, req) => {
   // If we don't skip them, auth.protect() will intercept them and redirect back to sign-in recursively!
   if (pathname.startsWith("/__clerk")) {
     return NextResponse.next();
+  }
+
+  // Redirect /login directly to /sign-in
+  if (pathname === "/login") {
+    const signInUrl = new URL("/sign-in", req.url);
+    const redirectUrl = req.nextUrl.searchParams.get("redirect_url");
+    if (redirectUrl) signInUrl.searchParams.set("redirect_url", redirectUrl);
+    return NextResponse.redirect(signInUrl);
   }
 
   // Always allow public endpoints and webhooks

@@ -1,7 +1,8 @@
 "use client"
-import React from 'react';
-import { usePathname } from 'next/navigation';
+import React, { useEffect } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useAuth } from '@clerk/nextjs';
 import Sidebar from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { ErrorBoundary } from "@/components/error-boundary"
@@ -11,11 +12,31 @@ import { Button } from "@/components/ui/button"
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
   const { canAccessRoute, isLoading, isAdmin } = usePermissions();
 
-  // Hide sidebar/header on public invoice and auth pages
-  const isPublic = pathname?.startsWith('/inv/') || pathname?.startsWith('/sign-in') || pathname?.startsWith('/sign-up') || pathname?.startsWith('/terms-of-service') || pathname?.startsWith('/privacy-policy') || pathname?.startsWith('/unauthorized-sign-in') || pathname?.startsWith('/book/');
-  
+  // Hide sidebar/header on public invoice, customer booking, and auth pages
+  const isPublic = 
+    pathname?.startsWith('/inv/') || 
+    pathname?.startsWith('/sign-in') || 
+    pathname?.startsWith('/sign-up') || 
+    pathname?.startsWith('/terms-of-service') || 
+    pathname?.startsWith('/privacy-policy') || 
+    pathname?.startsWith('/unauthorized-sign-in') || 
+    pathname?.startsWith('/book/') ||
+    pathname === '/book' ||
+    pathname?.startsWith('/bookings/customer-schedule') ||
+    pathname === '/login';
+
+  // If user is definitely not logged in on a protected salon route, redirect directly to login
+  useEffect(() => {
+    if (isAuthLoaded && !isSignedIn && !isPublic) {
+      const currentUrl = typeof window !== 'undefined' ? window.location.href : (pathname || '/');
+      router.replace(`/sign-in?redirect_url=${encodeURIComponent(currentUrl)}`);
+    }
+  }, [isAuthLoaded, isSignedIn, isPublic, pathname, router]);
+
   if (isPublic) {
     return (
       <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
@@ -26,8 +47,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Admins always have access, loading states never block, otherwise check permissions
-  const isRestricted = !isLoading && !isAdmin && !canAccessRoute(pathname || "");
+  // If not logged in on a protected page, show a redirecting indicator instead of flashing Access Restricted
+  if (isAuthLoaded && !isSignedIn) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="flex flex-col items-center justify-center space-y-3">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+            Redirecting to login...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Admins always have access, loading states never block, otherwise check permissions for signed-in staff
+  const isRestricted = isAuthLoaded && isSignedIn && !isLoading && !isAdmin && !canAccessRoute(pathname || "");
   
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
