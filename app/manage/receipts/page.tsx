@@ -19,7 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Search, Eye, FileText, TrendingUp, Package, CheckCircle2, XCircle, Trash2 } from "lucide-react"
+import { Plus, Search, Eye, FileText, TrendingUp, Package, CheckCircle2, XCircle, Trash2, Loader2 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { getReceipts, createReceipt, getVendors, getProducts, receiveReceipt, cancelReceipt } from "@/app/actions/receipts"
 import { formatCurrency } from "@/lib/currency"
@@ -66,6 +66,7 @@ export default function ReceiptsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [viewingReceipt, setViewingReceipt] = useState<Receipt | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const [formData, setFormData] = useState({
     vendor_id: "",
@@ -79,9 +80,9 @@ export default function ReceiptsPage() {
   const loadData = async () => {
     try {
       const [receiptsData, vendorsData, productsData] = await Promise.all([getReceipts(), getVendors(), getProducts()])
-      setReceipts(receiptsData)
-      setVendors(vendorsData)
-      setProducts(productsData)
+      setReceipts(receiptsData || [])
+      setVendors(vendorsData || [])
+      setProducts(productsData || [])
     } catch (error) {
       toast({
         title: "Error",
@@ -95,15 +96,50 @@ export default function ReceiptsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    try {
-      await createReceipt({
-        vendor_id: Number.parseInt(formData.vendor_id),
-        items: formData.items.map((item) => ({
-          product_id: Number.parseInt(item.product_id),
-          quantity: Number.parseInt(item.quantity),
-          unit_cost: Number.parseFloat(item.unit_cost),
-        })),
+
+    if (!formData.vendor_id) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a vendor.",
+        variant: "destructive",
       })
+      return
+    }
+
+    const validItems = formData.items.filter(
+      (item) => item.product_id && Number(item.quantity) > 0
+    )
+
+    if (validItems.length === 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please select at least one product with quantity greater than 0.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const itemsPayload = validItems.map((item) => {
+        const matchedProduct = products.find((p) => p.id.toString() === item.product_id)
+        return {
+          product_id: Number.parseInt(item.product_id),
+          product_name: matchedProduct?.name || "",
+          quantity: Number.parseFloat(item.quantity) || 1,
+          unit_cost: Number.parseFloat(item.unit_cost) || 0,
+        }
+      })
+
+      const res = await createReceipt({
+        vendor_id: Number.parseInt(formData.vendor_id),
+        items: itemsPayload,
+      })
+
+      if (res && res.success === false) {
+        throw new Error(res.error || "Failed to create receipt")
+      }
+
       toast({
         title: "Success",
         description: "Receipt created successfully",
@@ -111,18 +147,23 @@ export default function ReceiptsPage() {
       setIsDialogOpen(false)
       resetForm()
       loadData()
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to create receipt",
+        description: error?.message || "Failed to create receipt",
         variant: "destructive",
       })
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   const handleReceiveReceipt = async (receiptId: number) => {
     try {
       const res = await receiveReceipt(receiptId)
+      if (res && res.success === false) {
+        throw new Error(res.message || "Failed to receive receipt")
+      }
       toast({
         title: "Receipt Received",
         description: res.message || "Stock has been incremented.",
@@ -140,7 +181,10 @@ export default function ReceiptsPage() {
   const handleCancelReceipt = async (receiptId: number) => {
     if (confirm("Are you sure you want to cancel this receipt?")) {
       try {
-        await cancelReceipt(receiptId)
+        const res = await cancelReceipt(receiptId)
+        if (res && res.success === false) {
+          throw new Error(res.message || "Failed to cancel receipt")
+        }
         toast({
           title: "Receipt Cancelled",
           description: "Receipt status updated to cancelled.",
@@ -391,12 +435,16 @@ export default function ReceiptsPage() {
               </div>
 
               <DialogFooter className="gap-2 sm:gap-0 pt-2">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting}>
                   Cancel
                 </Button>
-                <Button type="submit" className="gap-1.5">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Create Receipt
+                <Button type="submit" className="gap-1.5" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )}
+                  {isSubmitting ? "Creating..." : "Create Receipt"}
                 </Button>
               </DialogFooter>
             </form>
