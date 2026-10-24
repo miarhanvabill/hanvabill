@@ -159,15 +159,39 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
     }
   }
 
+  const handleSearchChange = (val: string) => {
+    // If input contains no alphabetic letters and has content,
+    // treat as phone/number input and restrict strictly to max 10 digits
+    const hasLetters = /[a-zA-Z]/.test(val)
+    if (!hasLetters && val.trim().length > 0) {
+      let digits = val.replace(/\D/g, "")
+      // Strip country code if pasted (e.g. 91xxxxxxxxxx or 0xxxxxxxxxx)
+      if (digits.startsWith("91") && digits.length > 10) {
+        digits = digits.slice(2)
+      } else if (digits.startsWith("0") && digits.length > 10) {
+        digits = digits.slice(1)
+      }
+      // Strictly enforce max 10 digits for mobile number search
+      if (digits.length > 10) {
+        digits = digits.slice(0, 10)
+      }
+      setSearchTerm(digits)
+      return
+    }
+    setSearchTerm(val)
+  }
+
   const handleOpenCreateForm = () => {
     const cleanDigits = searchTerm.replace(/\D/g, "")
     let phoneToFill = ""
     if (cleanDigits.length === 10) {
       phoneToFill = cleanDigits
     } else if (cleanDigits.length === 12 && cleanDigits.startsWith("91")) {
-      phoneToFill = cleanDigits.slice(2)
+      phoneToFill = cleanDigits.slice(2, 12)
     } else if (cleanDigits.length === 11 && cleanDigits.startsWith("0")) {
-      phoneToFill = cleanDigits.slice(1)
+      phoneToFill = cleanDigits.slice(1, 11)
+    } else if (cleanDigits.length > 10) {
+      phoneToFill = cleanDigits.slice(0, 10)
     } else if (cleanDigits.length >= 7) {
       phoneToFill = cleanDigits
     }
@@ -188,8 +212,9 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
       toast.error("Please enter the customer's full name")
       return
     }
-    if (!newCustomer.phone_number.trim()) {
-      toast.error("Please enter a phone number")
+    const cleanPhone = newCustomer.phone_number.replace(/\D/g, "")
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      toast.error("Please enter a valid 10-digit mobile number")
       return
     }
 
@@ -274,7 +299,7 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
                 <Input
                   placeholder="Search customers by name, phone, or email..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => handleSearchChange(e.target.value)}
                   className="pl-10"
                   autoFocus
                 />
@@ -375,9 +400,14 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
                   <Input
                     id="phone_number"
                     value={newCustomer.phone_number}
-                    onChange={(e) => setNewCustomer({ ...newCustomer, phone_number: e.target.value })}
+                    onChange={(e) => {
+                      const clean = e.target.value.replace(/\D/g, "").slice(0, 10)
+                      setNewCustomer((prev) => ({ ...prev, phone_number: clean }))
+                    }}
                     placeholder="10-digit mobile number"
                     className="text-xs font-mono"
+                    maxLength={10}
+                    inputMode="numeric"
                     required
                   />
                 </div>

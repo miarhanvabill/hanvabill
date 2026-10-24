@@ -60,6 +60,16 @@ export default function CreateCustomer() {
       return
     }
 
+    const cleanPhone = formData.phoneNumber.replace(/\D/g, "")
+    if (cleanPhone.length !== 10) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid 10-digit mobile number",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
       setLoading(true)
       const submitData = new FormData()
@@ -152,9 +162,11 @@ export default function CreateCustomer() {
                         <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                         <Input
                           value={formData.phoneNumber}
-                          onChange={(e) => handleInputChange("phoneNumber", e.target.value)}
-                          className="pl-10 border-gray-300 focus:ring-slate-500"
+                          onChange={(e) => handleInputChange("phoneNumber", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                          className="pl-10 border-gray-300 focus:ring-slate-500 font-mono"
                           placeholder="9876543210"
+                          maxLength={10}
+                          inputMode="numeric"
                           required
                         />
                       </div>
@@ -216,9 +228,11 @@ export default function CreateCustomer() {
                         </div>
                         <Input
                           value={formData.smsNumber}
-                          onChange={(e) => handleInputChange("smsNumber", e.target.value)}
-                          className="rounded-l-none border-gray-300 focus:ring-slate-500"
+                          onChange={(e) => handleInputChange("smsNumber", e.target.value.replace(/\D/g, "").slice(0, 10))}
+                          className="rounded-l-none border-gray-300 focus:ring-slate-500 font-mono"
                           placeholder="Optional alternate"
+                          maxLength={10}
+                          inputMode="numeric"
                         />
                       </div>
                     </div>
