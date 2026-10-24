@@ -1501,8 +1501,8 @@ export default function BookingCalendarPage() {
                   </Button>
                 )}
 
-                <Link href={`/new-sale`} className="w-full">
-                  <Button variant="outline" className="w-full gap-2">
+                <Link href={`/new-sale?booking_id=${selectedBooking.id}&step=checkout`} className="w-full">
+                  <Button className="w-full gap-2 bg-slate-900 hover:bg-slate-800 text-white font-medium shadow-xs">
                     Proceed to POS Checkout <ArrowRight className="w-3.5 h-3.5" />
                   </Button>
                 </Link>

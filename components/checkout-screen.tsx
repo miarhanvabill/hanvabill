@@ -92,6 +92,7 @@ interface CheckoutScreenProps {
   onComplete: (invoice: Invoice) => void
   onBack: () => void
   bookingId?: number | null
+  initialNotes?: string
   onChangeCustomer?: () => void
   onResetToWalkIn?: () => void
 }
@@ -105,11 +106,17 @@ interface LoyaltySettingsUI {
   minimum_order_amount: number
 }
 
-function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId = null, onChangeCustomer, onResetToWalkIn }: CheckoutScreenProps) {
+function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId = null, initialNotes = "", onChangeCustomer, onResetToWalkIn }: CheckoutScreenProps) {
   const [paymentMethod, setPaymentMethod] = useState<string>("cash")
   const [discountPercent, setDiscountPercent] = useState<number>(0)
   const [activeMembership, setActiveMembership] = useState<any>(null)
-  const [notes, setNotes] = useState<string>("")
+  const [notes, setNotes] = useState<string>(initialNotes || "")
+
+  useEffect(() => {
+    if (initialNotes && !notes) {
+      setNotes(initialNotes)
+    }
+  }, [initialNotes])
   const [isProcessing, setIsProcessing] = useState(false)
   const [appliedCoupon, setAppliedCoupon] = useState<UICoupon | null>(null)
   

@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
+import { useSearchParams } from "next/navigation"
 import { CustomerSelectionModal } from "@/components/customer-selection-modal"
 import { ServiceSelectionScreen } from "@/components/service-selection-screen"
 import { CheckoutScreen } from "@/components/checkout-screen"
@@ -8,9 +9,11 @@ import { InvoiceScreen, type Invoice, type Customer } from "@/components/invoice
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ArrowLeft, User, ShoppingCart, CreditCard, FileText } from "lucide-react"
+import { toast } from "sonner"
 
 import type { Customer as DbCustomer } from "@/app/actions/customers"
 import { getOrCreateWalkInCustomer } from "@/app/actions/customers"
+import { getBookingCheckoutDetails } from "@/app/actions/bookings"
 
 interface CartItem {
   id: number
@@ -25,12 +28,64 @@ interface CartItem {
 
 type SaleStep = "customer" | "services" | "checkout" | "invoice"
 
-export default function NewSalePage() {
+function NewSaleContent() {
+  const searchParams = useSearchParams()
+  const bookingIdParam = searchParams.get("booking_id")
+  const stepParam = searchParams.get("step")
+
   const [currentStep, setCurrentStep] = useState<SaleStep>("customer")
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [invoice, setInvoice] = useState<Invoice | null>(null)
+  const [bookingId, setBookingId] = useState<number | null>(null)
+  const [initialNotes, setInitialNotes] = useState<string>("")
   const [showCustomerModal, setShowCustomerModal] = useState(false)
+  const [isLoadingBooking, setIsLoadingBooking] = useState<boolean>(false)
+
+  // Handle incoming booking link from calendar or appointments
+  useEffect(() => {
+    if (!bookingIdParam) return
+    const bId = Number(bookingIdParam)
+    if (!bId || isNaN(bId)) return
+
+    let isMounted = true
+    setIsLoadingBooking(true)
+    setShowCustomerModal(false)
+
+    getBookingCheckoutDetails(bId)
+      .then((res) => {
+        if (!isMounted) return
+        if (res.success && res.customer && res.cartItems?.length) {
+          setSelectedCustomer(res.customer)
+          setCartItems(res.cartItems)
+          setBookingId(res.bookingId)
+          if (res.notes) setInitialNotes(res.notes)
+          setShowCustomerModal(false)
+          if (stepParam === "services") {
+            setCurrentStep("services")
+          } else {
+            setCurrentStep("checkout")
+          }
+        } else {
+          toast.error(res.message || "Failed to load booking for checkout")
+          setShowCustomerModal(true)
+        }
+      })
+      .catch((err) => {
+        console.error("Error loading booking for checkout:", err)
+        if (isMounted) {
+          toast.error("Failed to load booking details")
+          setShowCustomerModal(true)
+        }
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingBooking(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [bookingIdParam, stepParam])
 
   // Reset everything when starting new sale
   const handleStartNewSale = () => {
@@ -38,6 +93,8 @@ export default function NewSalePage() {
     setSelectedCustomer(null)
     setCartItems([])
     setInvoice(null)
+    setBookingId(null)
+    setInitialNotes("")
     setShowCustomerModal(true)
   }
 
@@ -104,12 +161,12 @@ export default function NewSalePage() {
     }
   }
 
-  // Auto-open customer modal on mount
+  // Auto-open customer modal on mount ONLY IF not loading an external booking
   useEffect(() => {
-    if (currentStep === "customer" && !selectedCustomer) {
+    if (currentStep === "customer" && !selectedCustomer && !bookingIdParam && !isLoadingBooking) {
       setShowCustomerModal(true)
     }
-  }, [currentStep, selectedCustomer])
+  }, [currentStep, selectedCustomer, bookingIdParam, isLoadingBooking])
 
   const steps = [
     { key: "customer", label: "Customer", icon: User },
@@ -217,7 +274,17 @@ export default function NewSalePage() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 print:p-0 print:max-w-none">
-        {currentStep === "customer" && (
+        {isLoadingBooking && (
+          <Card className="max-w-xl mx-auto shadow-sm mb-6">
+            <CardContent className="p-8 text-center space-y-3">
+              <div className="w-10 h-10 rounded-full border-4 border-slate-900 border-t-transparent animate-spin mx-auto" />
+              <h2 className="text-lg font-semibold text-slate-800">Preparing POS Checkout...</h2>
+              <p className="text-slate-500 text-sm">Loading appointment details, client profile, and booked services.</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {!isLoadingBooking && currentStep === "customer" && (
           <Card className="max-w-xl mx-auto shadow-sm">
             <CardContent className="p-8 text-center">
               <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -253,6 +320,8 @@ export default function NewSalePage() {
           <CheckoutScreen
             customer={selectedCustomer}
             cartItems={cartItems}
+            bookingId={bookingId}
+            initialNotes={initialNotes}
             onComplete={handleCheckoutComplete}
             onBack={() => setCurrentStep("services")}
             onChangeCustomer={() => setShowCustomerModal(true)}
@@ -274,5 +343,19 @@ export default function NewSalePage() {
   )
 }
 
-// Named export for deployment
+function NewSalePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900" />
+        </div>
+      }
+    >
+      <NewSaleContent />
+    </Suspense>
+  )
+}
+
+export default NewSalePage
 export { NewSalePage }

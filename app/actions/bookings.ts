@@ -169,6 +169,111 @@ export async function getBookingServices(bookingId: string) {
   })
 }
 
+export async function getBookingCheckoutDetails(bookingId: string | number) {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const bId = String(bookingId).trim()
+      if (!bId || isNaN(Number(bId))) {
+        return { success: false, message: "Invalid booking ID" }
+      }
+
+      const bookingRows = await sql`
+        SELECT 
+          b.id, b.booking_number, b.customer_id, b.staff_id, b.booking_date, b.booking_time,
+          b.total_amount, b.status, b.notes,
+          c.full_name as customer_name,
+          c.phone_number as customer_phone,
+          c.email as customer_email,
+          c.address as customer_address,
+          st.name as staff_name
+        FROM bookings b
+        LEFT JOIN customers c ON b.customer_id = c.id AND c.tenant_id = ${tenantId}
+        LEFT JOIN staff st ON b.staff_id = st.id AND st.tenant_id = ${tenantId}
+        WHERE b.id = ${Number(bId)} AND b.tenant_id = ${tenantId}
+        LIMIT 1
+      `
+      if (!bookingRows || bookingRows.length === 0) {
+        return { success: false, message: "Booking not found" }
+      }
+
+      const booking = bookingRows[0]
+
+      // Fetch booked services
+      const services = await sql`
+        SELECT 
+          bs.service_id,
+          s.name as service_name,
+          bs.price,
+          bs.quantity
+        FROM booking_services bs
+        JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id IS NULL)
+        WHERE bs.booking_id = ${Number(bId)} AND (bs.tenant_id = ${tenantId} OR bs.tenant_id IS NULL)
+      `.catch(() => [])
+
+      let cartItems: Array<{
+        id: number
+        name: string
+        price: number
+        quantity: number
+        type: "service"
+        staff_id?: number
+        staff_name?: string
+      }> = []
+
+      if (services && services.length > 0) {
+        cartItems = services.map((s: any) => ({
+          id: Number(s.service_id),
+          name: s.service_name || "Salon Service",
+          price: Number(s.price) || 0,
+          quantity: Number(s.quantity) || 1,
+          type: "service" as const,
+          staff_id: booking.staff_id ? Number(booking.staff_id) : undefined,
+          staff_name: booking.staff_name || undefined,
+        }))
+      } else {
+        // Fallback: Check if services table has a service, or create a single item matching the booking
+        const fallbackServices = await sql`
+          SELECT s.id, s.name, s.price
+          FROM services s
+          WHERE s.tenant_id = ${tenantId}
+          ORDER BY s.id ASC
+          LIMIT 1
+        `.catch(() => [])
+
+        cartItems = [{
+          id: fallbackServices[0]?.id ? Number(fallbackServices[0].id) : 1,
+          name: fallbackServices[0]?.name || "Salon Service",
+          price: Number(booking.total_amount) || Number(fallbackServices[0]?.price) || 0,
+          quantity: 1,
+          type: "service" as const,
+          staff_id: booking.staff_id ? Number(booking.staff_id) : undefined,
+          staff_name: booking.staff_name || undefined,
+        }]
+      }
+
+      const customer = {
+        id: Number(booking.customer_id) || 0,
+        name: booking.customer_name || "Guest Customer",
+        email: booking.customer_email || "",
+        phone: booking.customer_phone || "",
+        address: booking.customer_address || "",
+      }
+
+      return {
+        success: true,
+        bookingId: Number(booking.id),
+        bookingNumber: booking.booking_number,
+        customer,
+        cartItems,
+        notes: booking.notes || "",
+      }
+    } catch (error: any) {
+      console.error("Error fetching booking checkout details:", error)
+      return { success: false, message: error?.message || "Failed to fetch booking details" }
+    }
+  })
+}
+
 export async function getBookingStats(startDate?: string, endDate?: string): Promise<BookingStats> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
     try {
