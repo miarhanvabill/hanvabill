@@ -99,7 +99,7 @@ export function ConsentBanner() {
     setShowBanner(false)
   }
 
-  if (!mounted) return null
+  if (!mounted || (!showBanner && !showPreferences)) return null
 
   return (
     <>
@@ -191,19 +191,7 @@ export function ConsentBanner() {
         </div>
       )}
 
-      {/* Persistent Tiny Re-open Trigger (When banner is closed) */}
-      {!showBanner && (
-        <button
-          type="button"
-          onClick={() => setShowPreferences(true)}
-          title="Cookie & Privacy Preferences"
-          aria-label="Cookie & Privacy Preferences"
-          className="fixed bottom-4 left-4 z-40 p-2.5 rounded-full bg-background/90 dark:bg-card/90 backdrop-blur-md border border-border/80 shadow-md text-muted-foreground hover:text-foreground hover:scale-105 transition-all group"
-        >
-          <Cookie className="w-4 h-4 text-amber-500 group-hover:rotate-12 transition-transform" />
-          <span className="sr-only">Open Cookie Preferences</span>
-        </button>
-      )}
+
 
       {/* Granular Preferences Dialog */}
       <Dialog open={showPreferences} onOpenChange={setShowPreferences}>
