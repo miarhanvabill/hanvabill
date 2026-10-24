@@ -759,11 +759,3 @@ export async function toggleStaffPortal(staffId: number, enabled: boolean) {
   })
 }
 
-// Re-export leave request actions so they can be imported from either @/app/actions/staff or @/app/actions/attendance
-export {
-  getTenantLeaveRequests,
-  reviewStaffLeave,
-  createStaffLeaveRequest,
-  type StaffLeaveRequest,
-} from "./attendance"
-

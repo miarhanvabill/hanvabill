@@ -1070,4 +1070,6 @@ export async function bulkUploadCustomers(
   })
 }
 
-export { getCustomer as getCustomerById }
+export async function getCustomerById(id: string): Promise<Customer | null> {
+  return await getCustomer(id)
+}

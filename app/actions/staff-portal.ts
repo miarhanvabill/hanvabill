@@ -1174,7 +1174,9 @@ export async function getStaffAppointments(date?: string) {
 /**
  * Alias for getStaffAppointments to maintain backwards compatibility with existing UI.
  */
-export const getStaffSchedule = getStaffAppointments
+export async function getStaffSchedule(date?: string) {
+  return await getStaffAppointments(date)
+}
 
 /**
  * Updates the status of an appointment assigned to the authenticated staff member.
