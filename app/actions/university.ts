@@ -14,16 +14,6 @@ import {
   type UniversityData,
 } from "@/lib/university-data"
 
-export type {
-  Lesson,
-  CourseModule,
-  QuizQuestion,
-  Course,
-  Certificate,
-  Achievement,
-  UniversityData,
-}
-
 async function ensureUniversityTables(sql: any) {
   try {
     await sql`

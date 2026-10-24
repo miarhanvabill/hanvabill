@@ -109,25 +109,25 @@ export default function UniversityPage() {
         }
       }
 
-      // 2. Query live data with resilient fallback
+      // 2. Fetch live data from /api/university
       let res: { success: boolean; data?: UniversityData } | null = null
       try {
-        res = await getUniversityData()
-      } catch {
-        res = null
-      }
+        const apiRes = await fetch("/api/university", { cache: "no-store" })
+        if (apiRes.ok) {
+          const json = await apiRes.json()
+          if (json?.success && json?.data) {
+            res = json
+          }
+        }
+      } catch {}
 
-      // 3. If server action failed, try direct REST API endpoint
+      // 3. Fallback to server action if API was unreachable
       if (!res?.success || !res?.data) {
         try {
-          const apiRes = await fetch("/api/university", { cache: "no-store" })
-          if (apiRes.ok) {
-            const json = await apiRes.json()
-            if (json?.success && json?.data) {
-              res = json
-            }
-          }
-        } catch {}
+          res = await getUniversityData()
+        } catch {
+          res = null
+        }
       }
 
       // 4. Update state if live data is available
@@ -225,19 +225,18 @@ export default function UniversityPage() {
 
     setSavingLesson(true)
     try {
-      // Background sync: Server action with API route fallback
-      const actionPromise = saveLessonProgress(activeCourse.id, lessonId, nextCompleted)
-      actionPromise.catch(() => {
-        return fetch("/api/university", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "saveLessonProgress",
-            courseId: activeCourse.id,
-            lessonId,
-            isCompleted: nextCompleted,
-          }),
-        })
+      // Sync to API with server action fallback
+      fetch("/api/university", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "saveLessonProgress",
+          courseId: activeCourse.id,
+          lessonId,
+          isCompleted: nextCompleted,
+        }),
+      }).catch(() => {
+        return saveLessonProgress(activeCourse.id, lessonId, nextCompleted)
       })
     } catch (err) {
       console.warn("[saveLessonProgress] Saved locally:", err)
@@ -340,19 +339,18 @@ export default function UniversityPage() {
         })
       }
 
-      // Background sync: Server action with API route fallback
-      const actionPromise = submitQuiz(activeCourse.id, calculatedScore, studentName)
-      actionPromise.catch(() => {
-        return fetch("/api/university", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "submitQuiz",
-            courseId: activeCourse.id,
-            score: calculatedScore,
-            studentName,
-          }),
-        })
+      // Background sync: API route with server action fallback
+      fetch("/api/university", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "submitQuiz",
+          courseId: activeCourse.id,
+          score: calculatedScore,
+          studentName,
+        }),
+      }).catch(() => {
+        return submitQuiz(activeCourse.id, calculatedScore, studentName)
       })
     } catch (err) {
       console.warn("[submitQuiz] Saved locally:", err)
@@ -404,13 +402,12 @@ export default function UniversityPage() {
     toast({ title: "Course Reset", description: "You can start fresh from lesson one." })
 
     try {
-      const actionPromise = resetCourseProgress(courseId)
-      actionPromise.catch(() => {
-        return fetch("/api/university", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "resetCourseProgress", courseId }),
-        })
+      fetch("/api/university", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resetCourseProgress", courseId }),
+      }).catch(() => {
+        return resetCourseProgress(courseId)
       })
     } catch (err) {
       console.warn("[resetCourseProgress] Reset locally:", err)
