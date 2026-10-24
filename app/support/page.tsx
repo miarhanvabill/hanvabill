@@ -43,6 +43,7 @@ import {
   ChevronRight,
   Filter,
   Check,
+  Copy,
   Loader2,
   ShieldCheck,
   Layers,
@@ -67,15 +68,25 @@ import {
 } from "@/app/actions/support"
 import { getBusinessSettings } from "@/app/actions/settings"
 
+interface FAQItem {
+  id: string
+  category: string
+  question: string
+  answer: string
+  actionLink?: string
+  actionTab?: string
+  actionLabel?: string
+}
+
 // FAQ Knowledge Base data tailored for Hanva Salon POS
-const FAQS = [
+const FAQS: FAQItem[] = [
   {
     id: "faq-pos-billing",
     category: "Billing & POS",
     question: "How do I create a quick walk-in sale or billing receipt?",
     answer:
       "Navigate to 'New Sale' from the sidebar or click 'POS Checkout'. Enter or look up the customer by their 10-digit phone number. Add the required services or products, assign staff members for commission tracking, choose payment methods (Cash, UPI, Card, Split, or Customer Wallet/Membership), and click 'Complete Sale' to generate the GST invoice instantly.",
-    actionLink: "/billing/new",
+    actionLink: "/new-sale",
     actionLabel: "Open POS Invoicing",
   },
   {
@@ -111,7 +122,7 @@ const FAQS = [
     question: "How do customer memberships and package discounts apply?",
     answer:
       "When you enter a customer's phone number during POS checkout, Hanva checks if they have an active Membership Plan or prepaid Wallet balance. If active, eligible discount percentages or package redemptions are highlighted automatically, letting you apply them with a single click.",
-    actionLink: "/marketing/memberships",
+    actionLink: "/manage/memberships",
     actionLabel: "Manage Memberships",
   },
   {
@@ -138,7 +149,7 @@ const FAQS = [
     question: "What happens if my salon internet connection drops temporarily?",
     answer:
       "Hanva maintains cached application state in modern browsers. If you experience intermittent Wi-Fi, keep the tab open. Once connectivity resumes, actions synchronize with the cloud database. We also recommend running the System Diagnostics tab to verify your real-time Neon PostgreSQL latency.",
-    actionLink: "#diagnostics",
+    actionTab: "diagnostics",
     actionLabel: "Run Diagnostics",
   },
 ]
@@ -197,6 +208,13 @@ export default function SupportPage() {
     loadSalonDetails()
     loadTickets()
   }, [])
+
+  // Auto-run diagnostics when switching to the diagnostics tab if not yet loaded
+  useEffect(() => {
+    if (activeTab === "diagnostics" && !diagResult && !isRunningDiag) {
+      handleRunDiagnostics()
+    }
+  }, [activeTab, diagResult, isRunningDiag])
 
   async function loadSalonDetails() {
     try {
@@ -646,35 +664,63 @@ export default function SupportPage() {
               </p>
             </a>
 
-            <a
-              href="tel:+919321501389"
-              className="group block p-4 rounded-xl border bg-white hover:border-primary hover:shadow-md transition-all"
-            >
-              <div className="flex items-start justify-between">
-                <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-primary group-hover:scale-105 transition-transform">
-                  <Phone className="w-5 h-5" />
+            <div className="group p-4 rounded-xl border bg-white hover:border-primary hover:shadow-md transition-all flex flex-col justify-between">
+              <a href="tel:+919321501389" className="block">
+                <div className="flex items-start justify-between">
+                  <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-primary group-hover:scale-105 transition-transform">
+                    <Phone className="w-5 h-5" />
+                  </div>
+                  <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-primary transition-colors" />
                 </div>
-                <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-primary transition-colors" />
+                <h3 className="font-semibold text-slate-900 mt-3 text-sm">Phone Hotline</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Mon–Sat, 9:00 AM – 9:00 PM IST</p>
+              </a>
+              <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-100">
+                <a href="tel:+919321501389" className="text-xs font-semibold text-blue-600 hover:underline">
+                  +91 93215 01389
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText("+919321501389")
+                    toast.success("Phone number copied to clipboard")
+                  }}
+                  className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  title="Copy phone number"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <h3 className="font-semibold text-slate-900 mt-3 text-sm">Phone Hotline</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Mon–Sat, 9:00 AM – 9:00 PM IST</p>
-              <p className="text-xs font-medium text-blue-600 mt-2">+91 93215 01389</p>
-            </a>
+            </div>
 
-            <a
-              href={emailSupportUrl}
-              className="group block p-4 rounded-xl border bg-white hover:border-indigo-400 hover:shadow-md transition-all"
-            >
-              <div className="flex items-start justify-between">
-                <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-105 transition-transform">
-                  <Mail className="w-5 h-5" />
+            <div className="group p-4 rounded-xl border bg-white hover:border-indigo-400 hover:shadow-md transition-all flex flex-col justify-between">
+              <a href={emailSupportUrl} className="block">
+                <div className="flex items-start justify-between">
+                  <div className="w-10 h-10 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:scale-105 transition-transform">
+                    <Mail className="w-5 h-5" />
+                  </div>
+                  <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
                 </div>
-                <ArrowUpRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+                <h3 className="font-semibold text-slate-900 mt-3 text-sm">Official Email Desk</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Detailed queries & invoice exports</p>
+              </a>
+              <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-100">
+                <a href={emailSupportUrl} className="text-xs font-semibold text-indigo-600 hover:underline">
+                  support@hanva.com
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText("support@hanva.com")
+                    toast.success("support@hanva.com copied to clipboard")
+                  }}
+                  className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                  title="Copy email address"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <h3 className="font-semibold text-slate-900 mt-3 text-sm">Official Email Desk</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Detailed queries & invoice exports</p>
-              <p className="text-xs font-medium text-indigo-600 mt-2">support@hanva.com</p>
-            </a>
+            </div>
 
             <div
               onClick={() => {
@@ -800,13 +846,26 @@ export default function SupportPage() {
                           <Badge variant="secondary" className="text-[11px] font-normal">
                             {faq.category}
                           </Badge>
-                          {faq.actionLink && (
+                          {faq.actionTab ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveTab(faq.actionTab!)
+                                if (faq.actionTab === "diagnostics") {
+                                  handleRunDiagnostics()
+                                }
+                              }}
+                              className="text-xs text-primary font-medium hover:underline inline-flex items-center gap-0.5 cursor-pointer"
+                            >
+                              {faq.actionLabel || "Open"} <ChevronRight className="w-3 h-3" />
+                            </button>
+                          ) : faq.actionLink ? (
                             <Link href={faq.actionLink}>
                               <span className="text-xs text-primary font-medium hover:underline inline-flex items-center gap-0.5">
                                 {faq.actionLabel || "Open"} <ChevronRight className="w-3 h-3" />
                               </span>
                             </Link>
-                          )}
+                          ) : null}
                         </div>
                         <CardTitle className="text-base font-semibold text-slate-900 leading-snug">
                           {faq.question}
@@ -1379,7 +1438,7 @@ export default function SupportPage() {
                   </div>
                 </CardContent>
                 <CardFooter className="pt-2">
-                  <Link href="/billing/new" className="w-full">
+                  <Link href="/new-sale" className="w-full">
                     <Button variant="outline" className="w-full gap-2 text-xs">
                       Try New Sale <ArrowUpRight className="w-3.5 h-3.5" />
                     </Button>
