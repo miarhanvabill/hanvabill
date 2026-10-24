@@ -115,6 +115,15 @@ function NewSaleContent() {
 
   // Handle Quick Walk-in Selection
   const handleSelectWalkIn = async () => {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      handleCustomerSelect({
+        id: 0,
+        full_name: "Walk In",
+        phone_number: "0000000000",
+        created_at: new Date().toISOString(),
+      } as DbCustomer)
+      return
+    }
     try {
       const walkIn = await getOrCreateWalkInCustomer()
       handleCustomerSelect(walkIn)

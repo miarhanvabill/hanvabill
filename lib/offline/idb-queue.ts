@@ -15,7 +15,7 @@ let _db: IDBPDatabase | null = null
 
 export async function getDB() {
   if (_db) return _db
-  _db = await openDB("offline-sync-db", 1, {
+  _db = await openDB("offline-sync-db", 2, {
     upgrade(db) {
       if (!db.objectStoreNames.contains("offlineQueue")) {
         const store = db.createObjectStore("offlineQueue", { keyPath: "id" })
@@ -23,9 +23,68 @@ export async function getDB() {
         store.createIndex("bySynced", "synced", { unique: false })
         store.createIndex("byTime", "timestamp", { unique: false })
       }
+      if (!db.objectStoreNames.contains("cachedData")) {
+        db.createObjectStore("cachedData", { keyPath: "key" })
+      }
     },
   })
   return _db
+}
+
+export async function saveCachedData(key: string, data: any) {
+  try {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(`hanva_cache_${key}`, JSON.stringify(data))
+      } catch {}
+    }
+    const db = await getDB()
+    await db.put("cachedData", { key, data, updatedAt: Date.now() })
+  } catch (err) {
+    console.warn(`[idb-queue] Error saving cached data for ${key}:`, err)
+  }
+}
+
+export async function getCachedData<T>(key: string): Promise<T | null> {
+  // Try localStorage first for instant synchronous return
+  if (typeof window !== "undefined") {
+    try {
+      const local = localStorage.getItem(`hanva_cache_${key}`)
+      if (local) {
+        const parsed = JSON.parse(local)
+        if (parsed) return parsed as T
+      }
+    } catch {}
+  }
+  try {
+    const db = await getDB()
+    const rec = await db.get("cachedData", key)
+    return rec ? (rec.data as T) : null
+  } catch (err) {
+    console.warn(`[idb-queue] Error getting cached data for ${key}:`, err)
+    return null
+  }
+}
+
+export async function saveCachedCustomers(customers: any[]) {
+  if (!Array.isArray(customers) || customers.length === 0) return
+  return await saveCachedData("customers", customers)
+}
+
+export async function getCachedCustomers(): Promise<any[]> {
+  const data = await getCachedData<any[]>("customers")
+  return Array.isArray(data) ? data : []
+}
+
+export async function addCachedCustomer(customer: any) {
+  const current = await getCachedCustomers()
+  const exists = current.some(
+    (c) => c.id === customer.id || (c.phone_number && c.phone_number === customer.phone_number)
+  )
+  const updated = exists
+    ? current.map((c) => (c.id === customer.id ? { ...c, ...customer } : c))
+    : [customer, ...current]
+  await saveCachedCustomers(updated)
 }
 
 export async function addToQueue(rec: QueueRecord) {

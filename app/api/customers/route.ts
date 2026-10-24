@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getCustomers, getCustomerStats, searchCustomers, getCustomerByPhone } from "@/app/actions/customers"
+import { getCustomers, getCustomerStats, searchCustomers, getCustomerByPhone, createCustomerData } from "@/app/actions/customers"
 import { withTenantAuth } from "@/lib/withTenantAuth"
 
 export const GET = withTenantAuth(async ({ sql, tenantId }, request: NextRequest) => {
@@ -55,3 +55,18 @@ export const GET = withTenantAuth(async ({ sql, tenantId }, request: NextRequest
     )
   }
 })
+
+export const POST = withTenantAuth(async ({ sql, tenantId }, request: NextRequest) => {
+  try {
+    const body = await request.json()
+    const customer = await createCustomerData(body)
+    return NextResponse.json({ success: true, customer })
+  } catch (err: any) {
+    console.error("Error creating customer via API:", err)
+    return NextResponse.json(
+      { success: false, error: err?.message || "Failed to create customer" },
+      { status: 500 }
+    )
+  }
+})
+

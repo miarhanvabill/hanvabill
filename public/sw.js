@@ -1,6 +1,6 @@
 const DB_NAME = "offline-sync-db"
 const STORE = "offlineQueue"
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 function idbOpen() {
   return new Promise((resolve, reject) => {
@@ -12,6 +12,9 @@ function idbOpen() {
         store.createIndex("byTenant", "tenant_id", { unique: false })
         store.createIndex("bySynced", "synced", { unique: false })
         store.createIndex("byTime", "timestamp", { unique: false })
+      }
+      if (!db.objectStoreNames.contains("cachedData")) {
+        db.createObjectStore("cachedData", { keyPath: "key" })
       }
     }
     req.onsuccess = () => resolve(req.result)

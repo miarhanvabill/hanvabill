@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import { Search, Plus, User, Phone, Mail, ArrowLeft, Sparkles } from "lucide-react"
 import { getCustomers, createCustomerData, getOrCreateWalkInCustomer, type Customer } from "@/app/actions/customers"
+import { getCachedCustomers, saveCachedCustomers, addCachedCustomer, addToQueue } from "@/lib/offline/idb-queue"
 import { toast } from "sonner"
 
 interface CustomerSelectionModalProps {
@@ -113,21 +114,23 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
         }
 
         // 2. Query database to verify customer really doesn't exist (in case not in initial 100)
-        try {
-          isSearchingServerRef.current = true
-          const serverCustomers = await getCustomers(tenDigitPhone)
-          if (serverCustomers && serverCustomers.length > 0) {
-            setCustomers((prev) => {
-              const existingIds = new Set(prev.map((c) => c.id))
-              const newMatches = serverCustomers.filter((c) => !existingIds.has(c.id))
-              return [...newMatches, ...prev]
-            })
-            return
+        if (typeof navigator === "undefined" || navigator.onLine) {
+          try {
+            isSearchingServerRef.current = true
+            const serverCustomers = await getCustomers(tenDigitPhone)
+            if (serverCustomers && serverCustomers.length > 0) {
+              setCustomers((prev) => {
+                const existingIds = new Set(prev.map((c) => c.id))
+                const newMatches = serverCustomers.filter((c) => !existingIds.has(c.id))
+                return [...newMatches, ...prev]
+              })
+              return
+            }
+          } catch (err) {
+            console.warn("[CustomerModal] Server search warning:", err)
+          } finally {
+            isSearchingServerRef.current = false
           }
-        } catch (err) {
-          console.warn("[CustomerModal] Server search warning:", err)
-        } finally {
-          isSearchingServerRef.current = false
         }
 
         // 3. Customer truly not found -> Auto-open create customer form with pre-filled phone number
@@ -147,13 +150,32 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
   }, [searchTerm, customers, showCreateForm, isOpen])
 
   const loadCustomers = async () => {
+    // 1. Immediately populate from local cache (IndexedDB + localStorage) for instant offline availability
+    try {
+      const cached = await getCachedCustomers()
+      if (Array.isArray(cached) && cached.length > 0) {
+        setCustomers(cached)
+        setFilteredCustomers(cached)
+      }
+    } catch {}
+
+    // 2. If offline, keep cached customers and avoid network fetch error
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     try {
       const data = await getCustomers()
-      setCustomers(data)
+      if (Array.isArray(data) && data.length > 0) {
+        setCustomers(data)
+        setFilteredCustomers(data)
+        await saveCachedCustomers(data)
+      }
     } catch (error) {
-      console.error("Error loading customers:", error)
-      setCustomers([])
+      console.warn("Error fetching online customers, retaining cached list:", error)
+      // Keep cached customers intact on network failure
     } finally {
       setLoading(false)
     }
@@ -220,8 +242,58 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
 
     setCreateLoading(true)
     try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        // Offline-first customer creation
+        const offlineId = -Date.now()
+        const offlineCustomer: Customer = {
+          id: offlineId,
+          full_name: newCustomer.full_name.trim(),
+          phone_number: cleanPhone,
+          email: newCustomer.email?.trim() || "",
+          address: newCustomer.address?.trim() || "",
+          gender: newCustomer.gender || "",
+          date_of_birth: newCustomer.date_of_birth || "",
+          created_at: new Date().toISOString(),
+          total_spend: 0,
+          total_bookings: 0,
+        } as any
+
+        await addCachedCustomer(offlineCustomer)
+        await addToQueue({
+          id: `cust_${Date.now()}`,
+          tenant_id: "default",
+          endpoint: "/api/customers",
+          method: "POST",
+          payload: {
+            full_name: newCustomer.full_name.trim(),
+            phone_number: cleanPhone,
+            email: newCustomer.email?.trim() || "",
+            address: newCustomer.address?.trim() || "",
+            gender: newCustomer.gender || "",
+            date_of_birth: newCustomer.date_of_birth || "",
+          },
+          synced: false,
+          timestamp: Date.now(),
+        })
+
+        setCustomers((prev) => [offlineCustomer, ...prev])
+        setNewCustomer({
+          full_name: "",
+          phone_number: "",
+          email: "",
+          address: "",
+          gender: "",
+          date_of_birth: "",
+        })
+        setShowCreateForm(false)
+        toast.success(`Customer "${offlineCustomer.full_name}" created (Offline) & selected!`)
+        onSelect(offlineCustomer)
+        return
+      }
+
       const customer = await createCustomerData(newCustomer)
-      setCustomers([customer, ...customers])
+      await addCachedCustomer(customer)
+      setCustomers((prev) => [customer, ...prev])
       setNewCustomer({
         full_name: "",
         phone_number: "",
@@ -247,6 +319,16 @@ export function CustomerSelectionModal({ isOpen, onClose, onSelect }: CustomerSe
 
   const handleSelectWalkIn = async () => {
     try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        onSelect({
+          id: 0,
+          full_name: "Walk In",
+          phone_number: "0000000000",
+          created_at: new Date().toISOString(),
+        } as Customer)
+        onClose()
+        return
+      }
       const walkIn = await getOrCreateWalkInCustomer()
       onSelect(walkIn)
       onClose()

@@ -20,6 +20,7 @@ import { calculateTier, type CustomerLoyalty as UiCustomerLoyalty } from "@/lib/
 import { formatCurrency } from "@/lib/currency"
 import { getBusinessSettings } from "@/app/actions/settings"
 import { getActiveCustomerMembership } from "@/app/actions/memberships"
+import { addToQueue } from "@/lib/offline/idb-queue"
 
 export interface ProductConsumptionItem {
   id: string
@@ -533,6 +534,9 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
 
       const payload = {
         customer_id: customer.id,
+        customer_phone: customer.phone,
+        customer_name: customer.name,
+        customer_email: customer.email,
         items: cartItems,
         payment_method: finalPaymentMethod,
         split_cash_amount: paymentMethod === "split" ? splitCashAmount : undefined,
@@ -564,13 +568,89 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
             notes: c.notes,
           })),
       }
-      const res = await fetch("/api/checkout/finalize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKeyRef.current! },
-        body: JSON.stringify(payload),
-      })
-      const data = await res.json()
-      if (!data.success || !data.invoice) throw new Error(data.message || "Failed to finalize checkout")
+
+      let isOfflineSale = false
+      let data: any = null
+
+      try {
+        const res = await fetch("/api/checkout/finalize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKeyRef.current! },
+          body: JSON.stringify(payload),
+        })
+        if (res.status === 202) {
+          isOfflineSale = true
+          try {
+            data = await res.json()
+          } catch {}
+        } else if (res.ok) {
+          data = await res.json()
+        } else {
+          if (typeof navigator !== "undefined" && !navigator.onLine) {
+            isOfflineSale = true
+          } else {
+            const errData = await res.json().catch(() => ({}))
+            throw new Error(errData.message || `Checkout failed (${res.status})`)
+          }
+        }
+      } catch (fetchErr: any) {
+        if (
+          (typeof navigator !== "undefined" && !navigator.onLine) ||
+          fetchErr?.message?.toLowerCase().includes("offline") ||
+          fetchErr?.message?.toLowerCase().includes("failed to fetch") ||
+          fetchErr?.message?.toLowerCase().includes("networkerror")
+        ) {
+          isOfflineSale = true
+        } else {
+          throw fetchErr
+        }
+      }
+
+      if (isOfflineSale) {
+        // Queue in IndexedDB if Service Worker hasn't queued it
+        if (!data?.queued) {
+          try {
+            await addToQueue({
+              id: `sale_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+              tenant_id: "default",
+              endpoint: "/api/checkout/finalize",
+              method: "POST",
+              payload,
+              headers: { "Idempotency-Key": idempotencyKeyRef.current! },
+              synced: false,
+              timestamp: Date.now(),
+            })
+          } catch (qErr) {
+            console.warn("[Checkout] Failed to queue sale offline:", qErr)
+          }
+        }
+
+        const offlineInvoice: Invoice = {
+          id: Math.floor(100000 + Math.random() * 900000),
+          customer,
+          items: cartItems,
+          subtotal,
+          discount: Math.max(manualDiscount, referralDiscount),
+          couponCode: appliedCoupon ? appliedCoupon.code : undefined,
+          couponDiscount: appliedCoupon ? couponDiscount : 0,
+          loyaltyDiscount,
+          giftCardDiscount,
+          gst: gstAmount,
+          total,
+          taxInclusive,
+          taxRate,
+          share_token: `offline_${Date.now()}`,
+          loyaltyPointsAvailable: (customerLoyalty?.points || 0) - (redeemEnabled ? loyaltyRedeemPoints : 0),
+          loyaltyPointsEarned: pointsEarned,
+          payment_method: paymentMethod,
+          notes: (notes ? notes + " • " : "") + "[Offline Sale - Saved Locally & Pending Sync]",
+          created_at: new Date().toISOString(),
+        }
+        onComplete(offlineInvoice)
+        return
+      }
+
+      if (!data?.success || !data?.invoice) throw new Error(data?.message || "Failed to finalize checkout")
 
       // Refresh wallet balance if wallet was used
       if (paymentMethod === "wallet" || (paymentMethod === "split" && splitSecondMethod === "wallet")) {

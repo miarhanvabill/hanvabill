@@ -49,6 +49,7 @@ import {
   Pencil,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { getCachedData, saveCachedData } from "@/lib/offline/idb-queue"
 
 type ItemKind = "service" | "product" | "package" | "membership"
 
@@ -400,10 +401,32 @@ export function ServiceSelectionScreen({
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0 }).format(amount)
 
   const load = async () => {
+    // 1. Immediately hydrate from local offline cache
+    try {
+      const [cachedSvcs, cachedProds, cachedPkgs, cachedMems, cachedStaff] = await Promise.all([
+        getCachedData<any[]>("services"),
+        getCachedData<any[]>("products"),
+        getCachedData<any[]>("packages"),
+        getCachedData<any[]>("memberships"),
+        getCachedData<any[]>("staff"),
+      ])
+      if (Array.isArray(cachedSvcs) && cachedSvcs.length > 0) setServices(cachedSvcs)
+      if (Array.isArray(cachedProds) && cachedProds.length > 0) setProducts(cachedProds)
+      if (Array.isArray(cachedPkgs) && cachedPkgs.length > 0) setPackages(cachedPkgs)
+      if (Array.isArray(cachedMems) && cachedMems.length > 0) setMemberships(cachedMems)
+      if (Array.isArray(cachedStaff) && cachedStaff.length > 0) setStaff(cachedStaff)
+    } catch {}
+
+    // 2. If offline, don't execute network calls that will fail
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
     try {
       const fetchJSON = (url: string) =>
-        fetch(url, { cache: "no-store" })
+        fetch(url)
           .then((r) => (r.ok ? r.json() : []))
           .catch(() => [])
 
@@ -452,6 +475,12 @@ export function ServiceSelectionScreen({
       setPackages(pkgs)
       setMemberships(mems)
 
+      // Persist to local offline cache
+      if (svcs?.length) saveCachedData("services", svcs)
+      if (prds?.length) saveCachedData("products", prds)
+      if (pkgs?.length) saveCachedData("packages", pkgs)
+      if (mems?.length) saveCachedData("memberships", mems)
+
       console.log("[v0] Raw staff API response:", stf)
 
       // Handle both direct array and wrapped response formats
@@ -476,6 +505,7 @@ export function ServiceSelectionScreen({
 
       console.log("[v0] Normalized staff data:", normalizedStaff)
       setStaff(normalizedStaff)
+      if (normalizedStaff?.length) saveCachedData("staff", normalizedStaff)
 
       console.log("[ServiceSelection] loaded counts:", {
         services: svcs.length,

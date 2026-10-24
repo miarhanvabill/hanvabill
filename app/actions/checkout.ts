@@ -5,6 +5,9 @@ import { withTenantAuth } from "@/lib/withTenantAuth"
 
 export interface FinalizeCheckoutInput {
   customer_id: number
+  customer_phone?: string | null
+  customer_name?: string | null
+  customer_email?: string | null
   items: Array<{
     id: number
     name: string
@@ -71,10 +74,8 @@ export async function finalizeCheckout(
   authContext?: { sql: any; tenantId: string }
 ): Promise<FinalizeCheckoutResult> {
   const runner = async ({ sql, tenantId }: { sql: any; tenantId: string }) => {
-    const customerId = Number(input.customer_id)
-    if (!Number.isFinite(customerId) || customerId <= 0) {
-      return { success: false, message: "Invalid customer id" }
-    }
+    let customerId = Number(input.customer_id)
+    let customer: any = null
 
     try {
       // 1. Idempotency Check: prevent double charges or duplicate invoices on retry
@@ -110,10 +111,80 @@ export async function finalizeCheckout(
       }
 
       // Verify customer exists and belongs to tenant
-      const [customer] = await sql`
-        SELECT id, full_name, phone_number, email FROM customers WHERE id = ${customerId} AND tenant_id = ${tenantId}
-      `
-      
+      if (Number.isFinite(customerId) && customerId > 0) {
+        const rows = await sql`
+          SELECT id, full_name, phone_number, email FROM customers WHERE id = ${customerId} AND tenant_id = ${tenantId}
+        `.catch(() => [])
+        if (rows.length > 0) {
+          customer = rows[0]
+        }
+      }
+
+      // Fallback 1: Lookup by phone (crucial for offline-created customers or offline sync)
+      if (!customer && input.customer_phone) {
+        const cleanPhone = String(input.customer_phone).trim()
+        if (cleanPhone) {
+          const rows = await sql`
+            SELECT id, full_name, phone_number, email FROM customers 
+            WHERE phone_number = ${cleanPhone} AND tenant_id = ${tenantId} 
+            LIMIT 1
+          `.catch(() => [])
+          if (rows.length > 0) {
+            customer = rows[0]
+            customerId = Number(customer.id)
+          }
+        }
+      }
+
+      // Fallback 2: Auto-create customer if offline-created or name/phone provided
+      if (!customer && (input.customer_phone || input.customer_name)) {
+        try {
+          const rows = await sql`
+            INSERT INTO customers (tenant_id, full_name, phone_number, email, customer_type)
+            VALUES (
+              ${tenantId}, 
+              ${input.customer_name || 'Walk-in Customer'}, 
+              ${input.customer_phone || null}, 
+              ${input.customer_email || null}, 
+              'retail'
+            )
+            ON CONFLICT (tenant_id, phone_number) DO UPDATE SET full_name = EXCLUDED.full_name
+            RETURNING id, full_name, phone_number, email
+          `.catch(() => [])
+          if (rows && rows.length > 0) {
+            customer = rows[0]
+            customerId = Number(customer.id)
+          }
+        } catch (custErr) {
+          console.warn("[POS Checkout] Could not auto-create customer:", custErr)
+        }
+      }
+
+      // Fallback 3: Walk-in customer for tenant
+      if (!customer) {
+        const walkInRows = await sql`
+          SELECT id, full_name, phone_number, email FROM customers 
+          WHERE tenant_id = ${tenantId} AND (full_name ILIKE '%walk%in%' OR phone_number = '0000000000')
+          LIMIT 1
+        `.catch(() => [])
+        if (walkInRows && walkInRows.length > 0) {
+          customer = walkInRows[0]
+          customerId = Number(customer.id)
+        } else {
+          try {
+            const createdWalkIn = await sql`
+              INSERT INTO customers (tenant_id, full_name, phone_number, customer_type)
+              VALUES (${tenantId}, 'Walk-in Customer', '0000000000', 'retail')
+              RETURNING id, full_name, phone_number, email
+            `.catch(() => [])
+            if (createdWalkIn && createdWalkIn.length > 0) {
+              customer = createdWalkIn[0]
+              customerId = Number(customer.id)
+            }
+          } catch {}
+        }
+      }
+
       if (!customer) {
         return { success: false, message: "Customer not found or unauthorized" }
       }
