@@ -43,7 +43,7 @@ export function HeaderFullscreenToggle() {
             variant="ghost"
             size="icon"
             onClick={toggleFullscreen}
-            className="hidden xl:inline-flex h-9 w-9 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg"
+            className="hidden xl:inline-flex h-9 w-9 text-slate-600 hover:text-slate-900 bg-white/50 hover:bg-white/85 border border-black/[0.07] hover:border-black/[0.12] rounded-xl shadow-2xs backdrop-blur-md transition-all cursor-pointer"
             aria-label="Toggle Fullscreen"
           >
             {isFullscreen ? (

@@ -122,7 +122,6 @@ export function Header({ onMenuToggle }: HeaderProps) {
         is_read: item.is_read || localReadIds.has(item.id),
       }))
 
-      // If new unread notifications arrived after initial load, play the notification sound
       if (!isInitialLoad.current && newItems.length > 0) {
         const hasFreshUnread = newItems.some(
           (n) => !n.is_read && !prevNotificationIds.current.has(n.id)
@@ -231,13 +230,13 @@ export function Header({ onMenuToggle }: HeaderProps) {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-2.5 sm:gap-4 border-b border-slate-200/80 bg-white/95 backdrop-blur-md px-3 sm:px-4 md:px-6 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-2.5 sm:gap-4 border-b border-black/[0.06] bg-white/70 dark:bg-slate-900/70 backdrop-blur-2xl backdrop-saturate-200 px-3 sm:px-4 md:px-6 shadow-[0_1px_3px_rgba(0,0,0,0.02),inset_0_1px_0_rgba(255,255,255,0.7)]">
       {/* Left side: Mobile menu toggle + Universal Command Palette Search */}
       <div className="flex items-center gap-2 sm:gap-3 flex-1 max-w-xs sm:max-w-md lg:max-w-lg">
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden h-9 w-9 text-slate-600 hover:text-slate-900"
+          className="md:hidden h-9 w-9 text-slate-600 hover:text-slate-900 rounded-xl"
           onClick={onMenuToggle}
           aria-label="Toggle menu"
         >
@@ -248,19 +247,19 @@ export function Header({ onMenuToggle }: HeaderProps) {
         <HeaderCommandPalette />
       </div>
 
-      {/* Middle: Store / Branch Location Switcher */}
+      {/* Middle: Store / Branch Location Switcher - macOS Glass Segment */}
       {isLoaded && isSignedIn && (
         <div className="hidden lg:flex items-center">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200/90 bg-slate-50/70 text-slate-700 hover:border-slate-300 transition-colors">
-            <Store className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-black/[0.07] dark:border-white/10 bg-white/60 dark:bg-slate-900/40 backdrop-blur-xl shadow-2xs hover:bg-white/85 hover:border-amber-300/60 transition-all">
+            <Store className="h-3.5 w-3.5 text-amber-600 shrink-0" />
             <OrganizationSwitcher
               afterSelectOrganizationUrl="/"
               appearance={{
                 elements: {
                   organizationSwitcherTrigger:
-                    "flex items-center gap-1.5 text-xs font-semibold text-slate-800 p-0 hover:text-slate-900 border-0 bg-transparent shadow-none focus:outline-none focus:ring-0",
-                  organizationPreviewTextContainer: "text-xs font-semibold text-slate-800",
-                  organizationSwitcherTriggerIcon: "text-slate-500 h-3 w-3",
+                    "flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200 p-0 hover:text-slate-950 border-0 bg-transparent shadow-none focus:outline-none focus:ring-0",
+                  organizationPreviewTextContainer: "text-xs font-semibold text-slate-800 dark:text-slate-200",
+                  organizationSwitcherTriggerIcon: "text-slate-400 h-3 w-3",
                 },
               }}
             />
@@ -269,11 +268,11 @@ export function Header({ onMenuToggle }: HeaderProps) {
       )}
 
       {/* Right side items & tools */}
-      <div className="flex items-center gap-2 sm:gap-3 ml-auto">
-        {/* + Quick Action Fast POS Button */}
+      <div className="flex items-center gap-2 sm:gap-2.5 ml-auto">
+        {/* + Quick Action Fast POS Button (macOS Golden Gate Glass) */}
         <HeaderQuickAction />
 
-        {/* Consolidated Live Status & Salon Local Clock */}
+        {/* Consolidated Live Status & Salon Local Clock (macOS Frosted Capsule) */}
         <HeaderLivePulse />
 
         {/* Fullscreen Touchscreen / Kiosk Toggle */}
@@ -285,7 +284,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
             <TooltipTrigger asChild>
               <Link
                 href="/university"
-                className="hidden xl:inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                className="hidden xl:inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white/50 hover:bg-white/85 border border-black/[0.07] hover:border-amber-300/60 text-slate-600 hover:text-amber-700 backdrop-blur-md shadow-2xs transition-all"
                 aria-label="Hanva University"
               >
                 <GraduationCap className="h-4 w-4" />
@@ -303,27 +302,31 @@ export function Header({ onMenuToggle }: HeaderProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="relative h-9 w-9 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg"
+              className="relative h-9 w-9 rounded-xl bg-white/50 hover:bg-white/85 border border-black/[0.07] text-slate-600 hover:text-slate-900 backdrop-blur-md shadow-2xs transition-all cursor-pointer"
               aria-label="Notifications"
             >
               <Bell className="h-4 w-4" />
               {unreadCount > 0 && (
                 <Badge
                   variant="destructive"
-                  className="absolute -top-1 -right-1 h-4 w-4 min-w-[16px] rounded-full p-0 flex items-center justify-center text-[10px] font-bold border-2 border-white shadow-xs"
+                  className="absolute -top-1 -right-1 h-4 w-4 min-w-[16px] rounded-full p-0 flex items-center justify-center text-[10px] font-bold bg-gradient-to-r from-amber-600 to-orange-600 text-white border-2 border-white shadow-xs"
                 >
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </Badge>
               )}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80 sm:w-88 p-0 shadow-lg border-slate-200">
+
+          <DropdownMenuContent
+            align="end"
+            className="w-80 sm:w-88 p-0 rounded-2xl border border-white/60 dark:border-slate-800/80 bg-white/85 dark:bg-slate-900/85 backdrop-blur-2xl shadow-[0_14px_36px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.04)]"
+          >
             {/* Notification Header */}
-            <div className="flex items-center justify-between px-3 py-2.5 border-b border-slate-100 bg-slate-50/70">
+            <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-black/[0.06] bg-black/[0.02]">
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-xs text-slate-900">Notifications</span>
                 {unreadCount > 0 && (
-                  <span className="rounded-full bg-blue-100 px-1.5 py-0.2 text-[10px] font-bold text-blue-700">
+                  <span className="rounded-md bg-amber-500/15 px-1.5 py-0.2 text-[10px] font-bold text-amber-800">
                     {unreadCount} new
                   </span>
                 )}
@@ -335,9 +338,13 @@ export function Header({ onMenuToggle }: HeaderProps) {
                   type="button"
                   onClick={toggleSound}
                   title={soundEnabled ? "Mute alert chimes" : "Unmute alert chimes"}
-                  className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-black/[0.05] transition-colors cursor-pointer"
                 >
-                  {soundEnabled ? <Volume2 className="h-3.5 w-3.5 text-blue-600" /> : <VolumeX className="h-3.5 w-3.5 text-slate-400" />}
+                  {soundEnabled ? (
+                    <Volume2 className="h-3.5 w-3.5 text-amber-700" />
+                  ) : (
+                    <VolumeX className="h-3.5 w-3.5 text-slate-400" />
+                  )}
                 </button>
 
                 {/* Mark all as read */}
@@ -346,7 +353,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
                     type="button"
                     onClick={handleMarkAllAsRead}
                     title="Mark all as read"
-                    className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                    className="p-1 rounded-lg text-slate-400 hover:text-amber-700 hover:bg-amber-50/70 transition-colors cursor-pointer"
                   >
                     <CheckCheck className="h-3.5 w-3.5" />
                   </button>
@@ -355,13 +362,13 @@ export function Header({ onMenuToggle }: HeaderProps) {
             </div>
 
             {/* Quick Filter: All vs Unread */}
-            <div className="flex border-b border-slate-100 px-2 pt-1 gap-1 bg-white">
+            <div className="flex border-b border-black/[0.06] px-2.5 pt-1 gap-1">
               <button
                 type="button"
                 onClick={() => setNotifFilter("all")}
-                className={`px-2.5 py-1 text-[11px] font-medium border-b-2 transition-colors ${
+                className={`px-2.5 py-1 text-[11px] font-medium border-b-2 transition-colors cursor-pointer ${
                   notifFilter === "all"
-                    ? "border-blue-600 text-blue-600"
+                    ? "border-amber-600 text-amber-800 font-semibold"
                     : "border-transparent text-slate-500 hover:text-slate-800"
                 }`}
               >
@@ -370,9 +377,9 @@ export function Header({ onMenuToggle }: HeaderProps) {
               <button
                 type="button"
                 onClick={() => setNotifFilter("unread")}
-                className={`px-2.5 py-1 text-[11px] font-medium border-b-2 transition-colors ${
+                className={`px-2.5 py-1 text-[11px] font-medium border-b-2 transition-colors cursor-pointer ${
                   notifFilter === "unread"
-                    ? "border-blue-600 text-blue-600"
+                    ? "border-amber-600 text-amber-800 font-semibold"
                     : "border-transparent text-slate-500 hover:text-slate-800"
                 }`}
               >
@@ -381,7 +388,7 @@ export function Header({ onMenuToggle }: HeaderProps) {
             </div>
 
             {/* Notification Items List */}
-            <div className="max-h-72 overflow-y-auto divide-y divide-slate-100">
+            <div className="max-h-72 overflow-y-auto divide-y divide-black/[0.04]">
               {loading ? (
                 <div className="py-6 text-center text-xs text-slate-400">Loading notifications...</div>
               ) : error ? (
@@ -394,28 +401,34 @@ export function Header({ onMenuToggle }: HeaderProps) {
                 displayedNotifications.map((notification) => (
                   <div
                     key={notification.id}
-                    className={`flex items-start gap-2.5 p-3 hover:bg-slate-50 transition-colors cursor-pointer group ${
-                      !notification.is_read ? "bg-blue-50/30" : ""
+                    className={`flex items-start gap-2.5 p-3 hover:bg-black/[0.03] transition-colors cursor-pointer group ${
+                      !notification.is_read ? "bg-amber-500/5" : ""
                     }`}
                     onClick={() => markAsRead(notification.id)}
                   >
                     <div className="mt-1">
                       {!notification.is_read ? (
-                        <div className="h-2 w-2 rounded-full bg-blue-600 shadow-xs" />
+                        <div className="h-2 w-2 rounded-full bg-amber-600 shadow-2xs" />
                       ) : (
                         <div className="h-2 w-2 rounded-full bg-transparent" />
                       )}
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <p className={`text-xs leading-snug ${!notification.is_read ? "font-semibold text-slate-900" : "text-slate-700"}`}>
+                      <p
+                        className={`text-xs leading-snug ${
+                          !notification.is_read
+                            ? "font-semibold text-slate-900"
+                            : "text-slate-700"
+                        }`}
+                      >
                         {notification.message}
                       </p>
                       <div className="flex items-center justify-between mt-1 text-[10px] text-slate-400">
                         <span>{formatRelativeTime(notification.created_at)}</span>
                         <Link
                           href={getNotificationLink(notification.message)}
-                          className="opacity-0 group-hover:opacity-100 text-blue-600 hover:underline flex items-center gap-0.5"
+                          className="opacity-0 group-hover:opacity-100 text-amber-700 hover:underline flex items-center gap-0.5"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <span>Open</span>
@@ -429,11 +442,11 @@ export function Header({ onMenuToggle }: HeaderProps) {
             </div>
 
             {/* Bottom Footer */}
-            <DropdownMenuSeparator className="m-0" />
+            <DropdownMenuSeparator className="m-0 bg-black/[0.06]" />
             <DropdownMenuItem asChild>
               <Link
                 href="/notifications"
-                className="flex items-center justify-center py-2.5 text-center w-full text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-slate-50 transition-colors"
+                className="flex items-center justify-center py-2.5 text-center w-full text-xs font-semibold text-amber-700 hover:text-amber-800 hover:bg-black/[0.03] transition-colors"
               >
                 View all notifications in Activity Center
               </Link>
@@ -446,7 +459,10 @@ export function Header({ onMenuToggle }: HeaderProps) {
           <div className="flex items-center gap-2">
             <SignInButton />
             <SignUpButton>
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-8 px-3" size="sm">
+              <Button
+                className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white text-xs h-8 px-3 rounded-lg shadow-2xs"
+                size="sm"
+              >
                 Sign Up
               </Button>
             </SignUpButton>
