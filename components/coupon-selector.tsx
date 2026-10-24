@@ -23,6 +23,7 @@ interface Coupon {
   usage_limit?: number
   used_count: number
   is_active: boolean
+  only_for_new_customers?: boolean
 }
 
 interface CouponSelectorProps {
@@ -30,6 +31,7 @@ interface CouponSelectorProps {
   onCouponApplied: (coupon: Coupon) => void
   onCouponRemoved: () => void
   appliedCoupon: Coupon | null
+  customer?: { id?: number | string; phone?: string; name?: string } | null
 }
 
 // Optional client-side fallback to avoid breaking UI if API fails
@@ -44,10 +46,11 @@ const clientFallbackCoupons: Coupon[] = [
     min_order_amount: 500,
     max_discount: 200,
     valid_from: "2025-01-01",
-    valid_until: "2025-12-31",
+    valid_until: "2027-12-31",
     usage_limit: 100,
     used_count: 25,
     is_active: true,
+    only_for_new_customers: true,
   },
   {
     id: 2,
@@ -58,14 +61,14 @@ const clientFallbackCoupons: Coupon[] = [
     discount_value: 50,
     min_order_amount: 300,
     valid_from: "2025-01-01",
-    valid_until: "2025-12-31",
+    valid_until: "2027-12-31",
     usage_limit: 200,
     used_count: 45,
     is_active: true,
   },
 ]
 
-export function CouponSelector({ orderAmount, onCouponApplied, onCouponRemoved, appliedCoupon }: CouponSelectorProps) {
+export function CouponSelector({ orderAmount, onCouponApplied, onCouponRemoved, appliedCoupon, customer }: CouponSelectorProps) {
   const [availableCoupons, setAvailableCoupons] = useState<Coupon[]>([])
   const [couponCode, setCouponCode] = useState("")
   const [loading, setLoading] = useState(false)
@@ -104,7 +107,12 @@ export function CouponSelector({ orderAmount, onCouponApplied, onCouponRemoved, 
       const res = await fetch("/api/coupons/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, orderAmount }),
+        body: JSON.stringify({
+          code,
+          orderAmount,
+          customerId: customer?.id,
+          customerPhone: customer?.phone,
+        }),
       })
       const ct = res.headers.get("content-type") || ""
       if (!res.ok) {
@@ -226,13 +234,25 @@ export function CouponSelector({ orderAmount, onCouponApplied, onCouponRemoved, 
                         )}
                       </div>
                       <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <p className="font-semibold text-orange-800">{coupon.code}</p>
                           <Badge variant="outline" className="text-xs">
                             {coupon.discount_type === "percentage"
                               ? `${coupon.discount_value}% OFF`
                               : `${formatCurrency(coupon.discount_value)} OFF`}
                           </Badge>
+                          {(coupon.only_for_new_customers ||
+                            /^(WELCOME|NEWCLIENT|FIRST)/i.test(coupon.code) ||
+                            /(new customer|new client|first visit)/i.test(
+                              `${coupon.name || ""} ${coupon.description || ""}`
+                            )) && (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] bg-amber-50 text-amber-800 border-amber-200"
+                            >
+                              New Customers Only
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-sm text-gray-600 mb-1">{coupon.name}</p>
                         <p className="text-xs text-gray-500">{coupon.description}</p>

@@ -995,6 +995,7 @@ function CheckoutScreenComp({ customer, cartItems, onComplete, onBack, bookingId
                 setDiscountPercent(0)
               }}
               onCouponRemoved={() => setAppliedCoupon(null)}
+              customer={customer}
             />
           </div>
 

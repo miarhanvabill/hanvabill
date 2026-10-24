@@ -3,12 +3,12 @@ import { validateCoupon } from "@/app/actions/coupons"
 
 export async function POST(req: NextRequest) {
   try {
-    const { code, orderAmount } = await req.json()
+    const { code, orderAmount, customerId, customerPhone } = await req.json()
     if (!code || typeof orderAmount !== "number") {
       return NextResponse.json({ success: false, message: "code and orderAmount are required" }, { status: 400 })
     }
     
-    const result = await validateCoupon(code, orderAmount)
+    const result = await validateCoupon(code, orderAmount, customerId, customerPhone)
     return NextResponse.json(result)
   } catch (e: any) {
     console.error("validate coupon route error:", e)

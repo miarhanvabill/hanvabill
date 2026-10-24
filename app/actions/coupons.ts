@@ -17,8 +17,31 @@ export interface Coupon {
   usage_limit?: number
   used_count: number
   is_active: boolean
+  only_for_new_customers?: boolean
   created_at: string
   updated_at?: string
+}
+
+function toYyyyMmDd(val: any): string {
+  if (!val) return ""
+  if (val instanceof Date) {
+    const y = val.getFullYear()
+    const m = String(val.getMonth() + 1).padStart(2, "0")
+    const d = String(val.getDate()).padStart(2, "0")
+    return `${y}-${m}-${d}`
+  }
+  const s = String(val).trim()
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    return s.slice(0, 10)
+  }
+  const parsed = new Date(s)
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear()
+    const m = String(parsed.getMonth() + 1).padStart(2, "0")
+    const d = String(parsed.getDate()).padStart(2, "0")
+    return `${y}-${m}-${d}`
+  }
+  return s
 }
 
 function mapRow(row: any): Coupon {
@@ -31,11 +54,12 @@ function mapRow(row: any): Coupon {
     discount_value: Number.parseFloat(row.discount_value),
     min_order_amount: Number.parseFloat(row.min_order_amount),
     max_discount: row.max_discount != null ? Number.parseFloat(row.max_discount) : undefined,
-    valid_from: row.valid_from,
-    valid_until: row.valid_until,
+    valid_from: toYyyyMmDd(row.valid_from),
+    valid_until: toYyyyMmDd(row.valid_until),
     usage_limit: row.usage_limit == null ? undefined : Number(row.usage_limit),
     used_count: row.used_count || 0,
     is_active: !!row.is_active,
+    only_for_new_customers: Boolean(row.only_for_new_customers),
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
@@ -43,10 +67,11 @@ function mapRow(row: any): Coupon {
 
 export async function getAvailableCoupons(): Promise<Coupon[]> {
   return await withTenantAuth(async ({ sql, tenantId }) => {
+    await ensureCouponsSchema(sql);
     const rows = await sql`
       SELECT id, code, name, description, discount_type, discount_value, min_order_amount,
              max_discount, valid_from, valid_until, usage_limit, used_count, is_active,
-             created_at, updated_at
+             only_for_new_customers, created_at, updated_at
       FROM coupons
       WHERE tenant_id = ${tenantId}
         AND is_active = true
@@ -59,12 +84,19 @@ export async function getAvailableCoupons(): Promise<Coupon[]> {
   })
 }
 
-export async function validateCoupon(code: string, orderAmount: number) {
+export async function validateCoupon(
+  code: string,
+  orderAmount: number,
+  customerId?: number | string | null,
+  customerPhone?: string | null
+) {
   return await withTenantAuth(async ({ sql, tenantId }) => {
+    await ensureCouponsSchema(sql);
+
     const rows = await sql`
       SELECT id, code, name, description, discount_type, discount_value, min_order_amount,
              max_discount, valid_from, valid_until, usage_limit, used_count, is_active,
-             created_at, updated_at
+             only_for_new_customers, created_at, updated_at
       FROM coupons
       WHERE tenant_id = ${tenantId}
         AND UPPER(code) = UPPER(${code})
@@ -80,12 +112,16 @@ export async function validateCoupon(code: string, orderAmount: number) {
       return { success: false, message: "This coupon is currently inactive" }
     }
 
-    const todayStr = new Date().toISOString().split("T")[0]
-    if (coupon.valid_from && String(coupon.valid_from).split("T")[0] > todayStr) {
-      return { success: false, message: `This coupon is not valid until ${String(coupon.valid_from).split("T")[0]}` }
+    const today = new Date()
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
+    const validFromStr = toYyyyMmDd(coupon.valid_from)
+    const validUntilStr = toYyyyMmDd(coupon.valid_until)
+
+    if (validFromStr && validFromStr > todayStr) {
+      return { success: false, message: `This coupon is not valid until ${validFromStr}` }
     }
 
-    if (coupon.valid_until && String(coupon.valid_until).split("T")[0] < todayStr) {
+    if (validUntilStr && validUntilStr < todayStr) {
       return { success: false, message: "This coupon has expired" }
     }
 
@@ -97,6 +133,62 @@ export async function validateCoupon(code: string, orderAmount: number) {
       return {
         success: false,
         message: `Minimum order amount of ₹${coupon.min_order_amount} required to apply this coupon`,
+      }
+    }
+
+    // New customer / first-time visit check
+    const isNewCustomerCoupon =
+      coupon.only_for_new_customers === true ||
+      /^(WELCOME|NEWCLIENT|NEWUSER|FIRST|FIRSTVISIT)/i.test(coupon.code) ||
+      /(new customer|new client|first visit|first-time|first order|welcome offer)/i.test(
+        `${coupon.name || ""} ${coupon.description || ""}`
+      )
+
+    if (isNewCustomerCoupon) {
+      let resolvedCustomerId = customerId ? Number(customerId) : null
+
+      if (!resolvedCustomerId && customerPhone) {
+        const cleanPhone = String(customerPhone).replace(/\D/g, "")
+        const last10 = cleanPhone.slice(-10)
+        if (last10) {
+          const custRows = await sql`
+            SELECT id FROM customers
+            WHERE tenant_id = ${tenantId}
+              AND (phone_number = ${customerPhone} OR phone_number LIKE ${'%' + last10})
+            LIMIT 1
+          `.catch(() => [])
+          if (custRows.length > 0) {
+            resolvedCustomerId = Number(custRows[0].id)
+          }
+        }
+      }
+
+      if (resolvedCustomerId) {
+        // Check prior invoices for this customer
+        const invRows = await sql`
+          SELECT COUNT(*)::int as count
+          FROM invoices
+          WHERE tenant_id = ${tenantId}
+            AND customer_id = ${resolvedCustomerId}
+        `.catch(() => [{ count: 0 }])
+        const invoiceCount = Number(invRows[0]?.count || 0)
+
+        // Check prior completed/confirmed bookings
+        const bookRows = await sql`
+          SELECT COUNT(*)::int as count
+          FROM bookings
+          WHERE tenant_id = ${tenantId}
+            AND customer_id = ${resolvedCustomerId}
+            AND status IN ('completed', 'in_progress', 'confirmed')
+        `.catch(() => [{ count: 0 }])
+        const bookingCount = Number(bookRows[0]?.count || 0)
+
+        if (invoiceCount > 0 || bookingCount > 0) {
+          return {
+            success: false,
+            message: "This coupon is only valid for new customers on their first visit",
+          }
+        }
       }
     }
 
@@ -133,7 +225,23 @@ async function ensureCouponsSchema(sql: any) {
     // 2. Make sure tenant_id column exists
     await sql`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS tenant_id TEXT`.catch(() => {});
 
-    // 3. Add composite unique constraint on (tenant_id, code) if not exists
+    // 3. Make sure only_for_new_customers column exists
+    await sql`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS only_for_new_customers BOOLEAN DEFAULT false`.catch(() => {});
+
+    // 4. Update welcome/new client coupons to only_for_new_customers = true
+    await sql`
+      UPDATE coupons 
+      SET only_for_new_customers = true 
+      WHERE only_for_new_customers IS NOT TRUE
+        AND (
+          UPPER(code) LIKE 'WELCOME%' 
+          OR UPPER(code) LIKE 'NEWCLIENT%' 
+          OR LOWER(description) LIKE '%first visit%' 
+          OR LOWER(description) LIKE '%new customer%'
+        )
+    `.catch(() => {});
+
+    // 5. Add composite unique constraint on (tenant_id, code) if not exists
     await sql`
       DO $$
       BEGIN
@@ -161,7 +269,7 @@ export async function getCoupons(): Promise<Coupon[]> {
     const rows = await sql`
       SELECT id, code, name, description, discount_type, discount_value, min_order_amount,
              max_discount, valid_from, valid_until, usage_limit, used_count, is_active,
-             created_at, updated_at
+             only_for_new_customers, created_at, updated_at
       FROM coupons
       WHERE tenant_id = ${tenantId}
       ORDER BY created_at DESC
