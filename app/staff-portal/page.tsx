@@ -76,6 +76,18 @@ export default function StaffTodayDashboard() {
       setLoading(true)
       const res = await getStaffDashboardData()
       setData(res)
+      const currentlyCheckedIn = Boolean(
+        res?.attendance?.status === "present" &&
+        res?.attendance?.check_in_time &&
+        !res?.attendance?.check_out_time
+      )
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("staff-attendance-updated", {
+            detail: { isCheckedIn: currentlyCheckedIn },
+          })
+        )
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -141,7 +153,11 @@ export default function StaffTodayDashboard() {
   const attendance = data?.attendance || {}
   const metrics = data?.metrics || {}
   const nextClient = data?.next_appointment
-  const isCheckedIn = attendance.status === "present" && !attendance.check_out_time
+  const isCheckedIn = Boolean(
+    attendance?.status === "present" &&
+    attendance?.check_in_time &&
+    !attendance?.check_out_time
+  )
   const isOnBreak = Boolean(attendance.active_break)
 
   return (
@@ -159,9 +175,13 @@ export default function StaffTodayDashboard() {
         <div className="absolute -right-8 -top-8 w-36 h-36 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
 
         <div className="flex items-center justify-between mb-2">
-          <div className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-1 rounded-full">
-            <MapPin className="w-3 h-3 text-emerald-400 animate-pulse" />
-            <span>📍 Inside Salon</span>
+          <div className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full ${
+            isCheckedIn 
+              ? "text-emerald-400 bg-emerald-950/60 border border-emerald-800/60" 
+              : "text-slate-400 bg-slate-800/70 border border-slate-700/60"
+          }`}>
+            <span className={`w-2 h-2 rounded-full ${isCheckedIn ? "bg-emerald-400 animate-pulse" : "bg-slate-500"}`} />
+            <span>{isCheckedIn ? "On Duty" : "Off Duty"}</span>
           </div>
           <span className="text-[11px] font-medium text-slate-400">
             {new Date().toLocaleDateString("en-IN", {

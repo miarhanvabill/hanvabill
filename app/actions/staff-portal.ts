@@ -75,14 +75,14 @@ export async function ensureStaffPortalSchema(sql: any): Promise<void> {
       );
     `.catch(() => {})
 
-    // 5. Ensure attendance table exists with tenant_id
+    // 5. Ensure attendance table exists with tenant_id and required columns
     await sql`
       CREATE TABLE IF NOT EXISTS attendance (
         id SERIAL PRIMARY KEY,
-        tenant_id VARCHAR(100) NOT NULL,
+        tenant_id VARCHAR(100),
         staff_id INTEGER NOT NULL,
         date DATE NOT NULL,
-        status VARCHAR(50) NOT NULL,
+        status VARCHAR(50) NOT NULL DEFAULT 'present',
         check_in_time TIME,
         check_out_time TIME,
         notes TEXT,
@@ -90,6 +90,12 @@ export async function ensureStaffPortalSchema(sql: any): Promise<void> {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `.catch(() => {})
+    await sql`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS tenant_id VARCHAR(100);`.catch(() => {})
+    await sql`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS check_in_time TIME;`.catch(() => {})
+    await sql`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS check_out_time TIME;`.catch(() => {})
+    await sql`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'present';`.catch(() => {})
+    await sql`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS notes TEXT;`.catch(() => {})
+    await sql`ALTER TABLE attendance ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();`.catch(() => {})
 
     // 6. Performance indexes
     await sql`CREATE INDEX IF NOT EXISTS idx_staff_leaves_tenant_staff ON staff_leaves(tenant_id, staff_id);`.catch(() => {})
@@ -261,16 +267,32 @@ export async function getStaffSession() {
 
   try {
     const { sql, tenantId } = await getAuthenticatedSql(session.tenantId)
-    const [staffRow, tenantRow] = await Promise.all([
+    const [staffRow, tenantRow, attendanceRow] = await Promise.all([
       sql`SELECT name, avatar_url, role FROM staff WHERE id = ${session.staffId} LIMIT 1`.catch(() => []),
       sql`SELECT name FROM tenants WHERE id = ${Number(tenantId)} OR tenant_key = ${session.tenantId} LIMIT 1`.catch(() => []),
+      sql`
+        SELECT check_in_time, check_out_time, status 
+        FROM attendance 
+        WHERE staff_id = ${session.staffId} 
+          AND date = CURRENT_DATE 
+        LIMIT 1
+      `.catch(() => []),
     ])
+
+    const todayAtt = attendanceRow[0] || null
+    const isCheckedIn = Boolean(
+      todayAtt &&
+      todayAtt.status === "present" &&
+      todayAtt.check_in_time &&
+      !todayAtt.check_out_time
+    )
 
     return {
       ...session,
       staffName: staffRow[0]?.name || session.name,
       avatarUrl: staffRow[0]?.avatar_url || null,
       tenantName: tenantRow[0]?.name || "Hanva Salon",
+      isCheckedIn,
     }
   } catch {
     return {
@@ -278,6 +300,7 @@ export async function getStaffSession() {
       staffName: session.name,
       avatarUrl: null,
       tenantName: "Hanva Salon",
+      isCheckedIn: false,
     }
   }
 }
@@ -328,7 +351,6 @@ export async function getStaffDashboardData() {
         END as working_hours
       FROM attendance
       WHERE staff_id = ${staff.id} 
-        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text)
         AND date = CURRENT_DATE
       LIMIT 1
     `.catch(() => [])
@@ -624,16 +646,14 @@ export async function markStaffAttendance(
       if (k.includes("enabled")) geofenceEnabled = v === "true" || v === "1"
     }
 
-    // If coordinates are set and either explicitly enabled or implicit
+    // Only enforce geofence distance check if explicitly enabled by admin AND salon coordinates are configured
     const hasSalonCoords = salonLat !== null && !isNaN(salonLat) && salonLng !== null && !isNaN(salonLng)
 
-    if (hasSalonCoords && (geofenceEnabled || coords)) {
+    if (geofenceEnabled && hasSalonCoords) {
       if (!coords || typeof coords.lat !== "number" || typeof coords.lng !== "number") {
-        if (geofenceEnabled) {
-          return {
-            success: false,
-            message: "Location access is required to mark attendance at the salon.",
-          }
+        return {
+          success: false,
+          message: "Location access is required to mark attendance at the salon.",
         }
       } else {
         const distance = calculateDistanceMeters(coords.lat, coords.lng, salonLat!, salonLng!)
@@ -653,15 +673,14 @@ export async function markStaffAttendance(
       hour12: true,
     })
 
-    // Find today's attendance record
+    // Find today's attendance record by staff.id and date
     const existingRows = await sql`
       SELECT id, check_in_time, check_out_time, status, notes
       FROM attendance
       WHERE staff_id = ${staff.id} 
         AND date = CURRENT_DATE 
-        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text)
       LIMIT 1
-    `
+    `.catch(() => [])
 
     const geoNote = coords ? `Geo: [${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}]` : null
 
@@ -672,6 +691,7 @@ export async function markStaffAttendance(
           SET 
             status = 'present',
             check_in_time = COALESCE(check_in_time, CURRENT_TIME),
+            check_out_time = NULL,
             notes = CASE 
               WHEN ${geoNote}::text IS NOT NULL THEN COALESCE(notes || ' | ' || ${geoNote}, ${geoNote})
               ELSE notes 
@@ -680,13 +700,29 @@ export async function markStaffAttendance(
           WHERE id = ${existingRows[0].id}
         `
       } else {
-        await sql`
-          INSERT INTO attendance (
-            tenant_id, staff_id, date, status, check_in_time, notes, created_at, updated_at
-          ) VALUES (
-            ${tenantId}, ${staff.id}, CURRENT_DATE, 'present', CURRENT_TIME, ${geoNote}, NOW(), NOW()
-          )
-        `
+        try {
+          await sql`
+            INSERT INTO attendance (
+              tenant_id, staff_id, date, status, check_in_time, notes, created_at, updated_at
+            ) VALUES (
+              ${tenantId}, ${staff.id}, CURRENT_DATE, 'present', CURRENT_TIME, ${geoNote}, NOW(), NOW()
+            )
+          `
+        } catch {
+          await sql`
+            UPDATE attendance 
+            SET 
+              status = 'present',
+              check_in_time = COALESCE(check_in_time, CURRENT_TIME),
+              check_out_time = NULL,
+              notes = CASE 
+                WHEN ${geoNote}::text IS NOT NULL THEN COALESCE(notes || ' | ' || ${geoNote}, ${geoNote})
+                ELSE notes 
+              END,
+              updated_at = NOW()
+            WHERE staff_id = ${staff.id} AND date = CURRENT_DATE
+          `
+        }
       }
 
       revalidatePath("/attendance")
@@ -707,13 +743,27 @@ export async function markStaffAttendance(
           WHERE id = ${existingRows[0].id}
         `
       } else {
-        await sql`
-          INSERT INTO attendance (
-            tenant_id, staff_id, date, status, check_in_time, check_out_time, notes, created_at, updated_at
-          ) VALUES (
-            ${tenantId}, ${staff.id}, CURRENT_DATE, 'present', CURRENT_TIME, CURRENT_TIME, ${geoNote}, NOW(), NOW()
-          )
-        `
+        try {
+          await sql`
+            INSERT INTO attendance (
+              tenant_id, staff_id, date, status, check_in_time, check_out_time, notes, created_at, updated_at
+            ) VALUES (
+              ${tenantId}, ${staff.id}, CURRENT_DATE, 'present', CURRENT_TIME, CURRENT_TIME, ${geoNote}, NOW(), NOW()
+            )
+          `
+        } catch {
+          await sql`
+            UPDATE attendance 
+            SET 
+              check_out_time = CURRENT_TIME,
+              notes = CASE 
+                WHEN ${geoNote}::text IS NOT NULL THEN COALESCE(notes || ' | ' || ${geoNote}, ${geoNote})
+                ELSE notes 
+              END,
+              updated_at = NOW()
+            WHERE staff_id = ${staff.id} AND date = CURRENT_DATE
+          `
+        }
       }
 
       revalidatePath("/attendance")

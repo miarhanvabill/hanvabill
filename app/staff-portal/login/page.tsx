@@ -3,7 +3,7 @@
 import React, { useState } from "react"
 import { useRouter } from "next/navigation"
 import { staffLogin } from "@/app/actions/staff-portal"
-import { Lock, Smartphone, ShieldCheck, Sparkles, Delete, ArrowRight, AlertCircle, Loader2 } from "lucide-react"
+import { Lock, Smartphone, ShieldCheck, Delete, ArrowRight, AlertCircle, Loader2 } from "lucide-react"
 
 export default function StaffLoginPage() {
   const router = useRouter()
@@ -98,8 +98,12 @@ export default function StaffLoginPage() {
     <div className="w-full max-w-sm mx-auto flex flex-col justify-center min-h-[90vh] py-6 select-none">
       {/* Top Branding */}
       <div className="text-center mb-6">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-slate-800 to-slate-700 border border-slate-600/50 shadow-xl mb-3">
-          <Sparkles className="w-8 h-8 text-amber-400" />
+        <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white p-2.5 shadow-2xl shadow-blue-500/10 border border-slate-700/80 mb-3.5 ring-4 ring-slate-800/80 transition-transform duration-200 hover:scale-105">
+          <img
+            src="/logo-icon.png"
+            alt="Hanva Logo"
+            className="w-full h-full object-contain"
+          />
         </div>
         <h1 className="text-2xl font-black tracking-tight text-white">Hanva Staff</h1>
         <p className="text-xs text-slate-400 mt-1">Salon & Spa Mobile Companion</p>

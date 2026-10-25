@@ -25,11 +25,11 @@ export default function StaffShell({ children }: StaffShellProps) {
   const [salonName, setSalonName] = useState("Hanva Salon")
   const [staffName, setStaffName] = useState("Staff Portal")
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [isCheckedIn, setIsCheckedIn] = useState(true)
+  const [isCheckedIn, setIsCheckedIn] = useState(false)
 
   useEffect(() => {
     setMounted(true)
-    // Fetch minimal session details from client or action
+    // Fetch minimal session details and today's attendance status
     import("@/app/actions/staff-portal")
       .then((mod) => mod.getStaffSession())
       .then((sess: any) => {
@@ -37,9 +37,24 @@ export default function StaffShell({ children }: StaffShellProps) {
           setSalonName(sess.tenantName || "Hanva Luxury Salon")
           setStaffName(sess.name || sess.staffName || "Staff Member")
           if (sess.avatarUrl || sess.avatar_url) setAvatarUrl(sess.avatarUrl || sess.avatar_url)
+          if (typeof sess.isCheckedIn === "boolean") {
+            setIsCheckedIn(sess.isCheckedIn)
+          }
         }
       })
       .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const handleAttendanceChange = (e: any) => {
+      if (e?.detail && typeof e.detail.isCheckedIn === "boolean") {
+        setIsCheckedIn(e.detail.isCheckedIn)
+      }
+    }
+    window.addEventListener("staff-attendance-updated", handleAttendanceChange)
+    return () => {
+      window.removeEventListener("staff-attendance-updated", handleAttendanceChange)
+    }
   }, [])
 
   const isLoginPage =
@@ -132,10 +147,18 @@ export default function StaffShell({ children }: StaffShellProps) {
           <div className="flex items-center space-x-2">
             <Link
               href={`${prefix}/attendance`}
-              className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/70 px-2.5 py-1 rounded-full active:scale-95 transition"
+              className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full active:scale-95 transition ${
+                isCheckedIn
+                  ? "text-emerald-700 bg-emerald-50 border border-emerald-200/70"
+                  : "text-slate-600 bg-slate-100 border border-slate-200"
+              }`}
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Checked In</span>
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  isCheckedIn ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                }`}
+              />
+              <span>{isCheckedIn ? "Checked In" : "Not Clocked In"}</span>
             </Link>
           </div>
         </div>
