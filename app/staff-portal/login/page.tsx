@@ -3,7 +3,7 @@
 import React, { useState } from "react"
 import { useRouter } from "next/navigation"
 import { staffLogin } from "@/app/actions/staff-portal"
-import { Lock, Smartphone, ShieldCheck, Delete, ArrowRight, AlertCircle, Loader2 } from "lucide-react"
+import { Lock, Smartphone, ShieldCheck, Delete, ArrowRight, AlertCircle, Loader2, Sparkles, Download } from "lucide-react"
 
 export default function StaffLoginPage() {
   const router = useRouter()
@@ -261,6 +261,23 @@ export default function StaffLoginPage() {
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400/90 hover:text-amber-300 bg-amber-400/10 border border-amber-400/20 px-3 py-1.5 rounded-full transition active:scale-95"
         >
           <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Auto-fill Demo (9876543210 / 1234)
+        </button>
+      </div>
+
+      {/* PWA Install Button */}
+      <div className="mt-5 text-center border-t border-slate-800/80 pt-4">
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("trigger-pwa-install"))
+            }
+          }}
+          className="inline-flex items-center gap-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-xl transition active:scale-95 shadow-md"
+        >
+          <img src="/logo-icon.png" alt="Hanva" className="w-4 h-4 object-contain" />
+          <span>Install Hanva Staff App</span>
+          <Download className="w-3.5 h-3.5 text-amber-400 ml-0.5" />
         </button>
       </div>
     </div>

@@ -194,21 +194,23 @@ export default function StaffProfilePage() {
 
       {/* PWA Install to Home Screen Banner */}
       {!isInstalled && (
-        <div className="bg-gradient-to-r from-amber-500 to-amber-600 rounded-2xl p-4 text-slate-950 shadow-md">
+        <div className="bg-gradient-to-r from-amber-500 via-amber-500 to-amber-600 rounded-2xl p-4 text-slate-950 shadow-md">
           <div className="flex items-start justify-between">
-            <div>
-              <span className="inline-block text-[10px] font-black uppercase tracking-wider bg-slate-950 text-white px-2 py-0.5 rounded mb-1">
-                Fast Access
-              </span>
-              <h3 className="text-sm font-black leading-tight">
-                Install Staff Portal App
-              </h3>
-              <p className="text-xs font-medium text-slate-900 mt-0.5">
-                Add to your phone&apos;s home screen for 1-tap shift check-in.
-              </p>
-            </div>
-            <div className="w-9 h-9 rounded-xl bg-slate-950/10 flex items-center justify-center shrink-0">
-              <Smartphone className="w-5 h-5 text-slate-950" />
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white p-1 border shadow-sm shrink-0">
+                <img src="/logo-icon.png" alt="Hanva Logo" className="w-full h-full object-contain" />
+              </div>
+              <div>
+                <span className="inline-block text-[10px] font-black uppercase tracking-wider bg-slate-950 text-white px-2 py-0.5 rounded mb-1">
+                  Fast Access
+                </span>
+                <h3 className="text-sm font-black leading-tight">
+                  Install Hanva Staff App
+                </h3>
+                <p className="text-xs font-medium text-slate-900 mt-0.5">
+                  Add to your phone&apos;s home screen for 1-tap shift check-in.
+                </p>
+              </div>
             </div>
           </div>
 

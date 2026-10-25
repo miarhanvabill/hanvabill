@@ -1,0 +1,58 @@
+{
+  "name": "Hanva Billing - Salon & Spa Management",
+  "short_name": "Hanva Billing",
+  "description": "Complete cloud-native Salon POS, appointment booking, inventory, and automated billing software.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#0f172a",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-icon.png",
+      "sizes": "285x286",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "categories": ["business", "finance", "productivity"],
+  "shortcuts": [
+    {
+      "name": "New Sale",
+      "url": "/new-sale",
+      "description": "Open POS checkout terminal"
+    },
+    {
+      "name": "Calendar",
+      "url": "/bookings/calendar",
+      "description": "View appointment scheduling timeline"
+    },
+    {
+      "name": "Customers",
+      "url": "/customers",
+      "description": "Customer CRM"
+    }
+  ]
+}

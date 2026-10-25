@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import StaffInstallBanner from "@/components/staff-portal/StaffInstallBanner"
 import {
   CalendarDays,
   CalendarCheck2,
@@ -63,6 +64,7 @@ export default function StaffShell({ children }: StaffShellProps) {
   if (isLoginPage) {
     return (
       <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col justify-center px-4 py-8">
+        <StaffInstallBanner />
         {children}
       </div>
     )
@@ -135,9 +137,12 @@ export default function StaffShell({ children }: StaffShellProps) {
             </div>
 
             <div className="flex flex-col">
-              <span className="text-xs font-semibold tracking-wider uppercase text-slate-500">
-                {salonName}
-              </span>
+              <div className="flex items-center gap-1">
+                <img src="/logo-icon.png" alt="Hanva Logo" className="w-3.5 h-3.5 object-contain" />
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate max-w-[140px]">
+                  {salonName}
+                </span>
+              </div>
               <h1 className="text-sm font-bold text-slate-900 leading-tight flex items-center gap-1.5">
                 {staffName}
               </h1>
@@ -163,6 +168,9 @@ export default function StaffShell({ children }: StaffShellProps) {
           </div>
         </div>
       </header>
+
+      {/* PWA Install Banner */}
+      <StaffInstallBanner />
 
       {/* Main Content Area */}
       <main className="flex-1 pb-24 overflow-x-hidden">{children}</main>
