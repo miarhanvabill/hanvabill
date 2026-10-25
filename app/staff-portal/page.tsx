@@ -8,6 +8,7 @@ import {
   markStaffAttendance,
   logStaffBreak,
   updateAppointmentStatus,
+  enrollStaffFace,
 } from "@/app/actions/staff-portal"
 import FaceScanModal from "@/components/staff-portal/FaceScanModal"
 import {
@@ -137,6 +138,19 @@ export default function StaffTodayDashboard() {
     }
   }
 
+  const handleEnrolled = async (enrollData: {
+    faceSnapshot: string
+    faceDescriptor: string
+  }) => {
+    try {
+      const res = await enrollStaffFace(enrollData)
+      showToast(res.message || "Face ID enrolled successfully ✓")
+      await loadDashboard()
+    } catch (e: any) {
+      showToast(e?.message || "Failed to register face template")
+    }
+  }
+
   const handlePunch = async (action: "check_in" | "check_out" | "break_start" | "break_end") => {
     try {
       setActionLoading(true)
@@ -246,7 +260,7 @@ export default function StaffTodayDashboard() {
           </p>
 
           {/* Biometric verification status badge */}
-          {attendance?.biometric_verified && (
+          {attendance?.biometric_verified ? (
             <div className="mt-2.5 flex items-center justify-center gap-2">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
                 <Sparkles className="w-3 h-3 text-amber-400" />
@@ -263,7 +277,14 @@ export default function StaffTodayDashboard() {
                 </div>
               )}
             </div>
-          )}
+          ) : !data?.staff?.face_enrolled ? (
+            <div className="mt-2.5 flex items-center justify-center">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-semibold">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                First-time: Face registration required on punch
+              </span>
+            </div>
+          ) : null}
         </div>
 
         {/* Punch In / Out and Break Buttons */}
@@ -487,13 +508,16 @@ export default function StaffTodayDashboard() {
         </Link>
       </div>
 
-      {/* Face ID Biometric Verification Modal */}
+      {/* Face ID Biometric Verification / Registration Modal */}
       <FaceScanModal
         isOpen={isFaceScanOpen}
         onClose={() => setIsFaceScanOpen(false)}
         actionType={pendingPunchAction}
         staffName={data?.staff?.name || "Staff"}
         staffAvatarUrl={data?.staff?.avatar_url || null}
+        enrolledDescriptor={data?.staff?.face_descriptor || null}
+        isFaceEnrolled={Boolean(data?.staff?.face_enrolled)}
+        onEnrolled={handleEnrolled}
         onVerified={(bioData) => handlePunchWithBio(pendingPunchAction, bioData)}
         onManualOverride={() => handlePunch(pendingPunchAction)}
       />

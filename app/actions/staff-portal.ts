@@ -112,6 +112,7 @@ export async function ensureStaffPortalSchema(sql: any): Promise<void> {
     // Staff face enrollment columns
     await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS face_enrolled BOOLEAN DEFAULT FALSE;`.catch(() => {})
     await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS face_descriptor TEXT;`.catch(() => {})
+    await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS face_enrolled_at TIMESTAMPTZ;`.catch(() => {})
 
     // 6. Performance indexes
     await sql`CREATE INDEX IF NOT EXISTS idx_staff_leaves_tenant_staff ON staff_leaves(tenant_id, staff_id);`.catch(() => {})
@@ -517,6 +518,9 @@ export async function getStaffDashboardData() {
         avatar_url: staff.avatar_url || null,
         commission_rate: staff.commission_rate || null,
         upi_id: staff.upi_id || null,
+        face_enrolled: Boolean(staff.face_enrolled),
+        face_descriptor: staff.face_descriptor || null,
+        face_enrolled_at: staff.face_enrolled_at || null,
       },
       attendance: {
         marked: Boolean(todayAttendance),
@@ -1574,6 +1578,9 @@ export async function getStaffProfile(): Promise<{
         avatar_url, 
         upi_id, 
         portal_enabled, 
+        face_enrolled,
+        face_descriptor,
+        TO_CHAR(face_enrolled_at, 'YYYY-MM-DD HH12:MI AM') as face_enrolled_at,
         TO_CHAR(last_login_at, 'YYYY-MM-DD HH12:MI AM') as last_login_at
       FROM staff
       WHERE id = ${staff.id} 
@@ -1605,6 +1612,9 @@ export async function getStaffProfile(): Promise<{
       upi_id: s.upi_id,
       upiId: s.upi_id,
       portal_enabled: s.portal_enabled !== false,
+      face_enrolled: Boolean(s.face_enrolled),
+      face_descriptor: s.face_descriptor || null,
+      face_enrolled_at: s.face_enrolled_at || null,
       last_login_at: s.last_login_at,
     }
 
@@ -1680,6 +1690,46 @@ export async function updateStaffProfile(data: {
       success: true,
       message: "Profile updated successfully",
       profile: rows[0] || null,
+    }
+  })
+}
+
+/**
+ * Enrolls a staff member's official Face ID biometric template.
+ * Stores the 64-dimensional descriptor, enrolled selfie photo, and timestamp.
+ */
+export async function enrollStaffFace(data: {
+  faceSnapshot: string
+  faceDescriptor: string
+}): Promise<{ success: boolean; message: string; staff?: any }> {
+  return await withStaffAuth(async ({ staff, sql, tenantId }) => {
+    await ensureStaffPortalSchema(sql)
+
+    if (!data.faceSnapshot || data.faceSnapshot.length < 50) {
+      return { success: false, message: "Valid biometric face capture is required for enrollment." }
+    }
+
+    const rows = await sql`
+      UPDATE staff
+      SET 
+        face_enrolled = true,
+        face_descriptor = ${data.faceDescriptor},
+        avatar_url = COALESCE(avatar_url, ${data.faceSnapshot}),
+        face_enrolled_at = NOW(),
+        updated_at = NOW()
+      WHERE id = ${staff.id}
+        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text)
+      RETURNING id, name, phone, avatar_url, face_enrolled, face_descriptor, face_enrolled_at
+    `
+
+    revalidatePath("/staff-portal")
+    revalidatePath("/staff-portal/profile")
+    revalidatePath("/manage/staff")
+
+    return {
+      success: true,
+      message: "Face ID successfully enrolled and linked to your staff profile ✓",
+      staff: rows[0] || null,
     }
   })
 }

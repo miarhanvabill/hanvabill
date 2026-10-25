@@ -6,7 +6,9 @@ import {
   getStaffProfile,
   updateStaffProfile,
   staffLogout,
+  enrollStaffFace,
 } from "@/app/actions/staff-portal"
+import FaceScanModal from "@/components/staff-portal/FaceScanModal"
 import {
   User,
   Phone,
@@ -17,6 +19,7 @@ import {
   LogOut,
   CreditCard,
   ShieldAlert,
+  ShieldCheck,
   CheckCircle2,
   Share2,
   Smartphone,
@@ -33,6 +36,7 @@ import {
   SlidersHorizontal,
   Save,
   Upload,
+  ScanFace,
 } from "lucide-react"
 
 const POPULAR_SPECIALTIES = [
@@ -71,6 +75,7 @@ export default function StaffProfilePage() {
 
   // Edit Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isFaceEnrollModalOpen, setIsFaceEnrollModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
@@ -461,6 +466,63 @@ export default function StaffProfilePage() {
           <span className="font-semibold text-slate-900 font-mono">
             {profile?.emergencyContact || "Not set"}
           </span>
+        </div>
+      </div>
+
+      {/* Biometric Face ID Card */}
+      <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+            <ScanFace className="w-4 h-4 text-amber-500" />
+            Biometric Face ID
+          </h3>
+          <button
+            type="button"
+            onClick={() => setIsFaceEnrollModalOpen(true)}
+            className="text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1"
+          >
+            <Camera className="w-3.5 h-3.5" />
+            <span>{profile?.face_enrolled ? "Update Face ID" : "Register Face ID"}</span>
+          </button>
+        </div>
+
+        <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/60 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+              profile?.face_enrolled ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+            }`}>
+              {profile?.face_enrolled ? <ShieldCheck className="w-5 h-5" /> : <ShieldAlert className="w-5 h-5" />}
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-slate-900">
+                  {profile?.face_enrolled ? "Face ID Registered" : "Not Registered"}
+                </span>
+                {profile?.face_enrolled && (
+                  <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded-full">
+                    Active
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {profile?.face_enrolled
+                  ? `Registered on ${profile.face_enrolled_at || "Recent"}`
+                  : "Register your face to enable secure biometric shift check-in."}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsFaceEnrollModalOpen(true)}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition active:scale-95 shrink-0 ${
+              profile?.face_enrolled
+                ? "bg-slate-200 hover:bg-slate-300 text-slate-800"
+                : "bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-sm"
+            }`}
+          >
+            {profile?.face_enrolled ? "Re-scan" : "Enroll"}
+          </button>
         </div>
       </div>
 
@@ -866,6 +928,29 @@ export default function StaffProfilePage() {
           </div>
         </div>
       )}
+
+      {/* Face ID Biometric Registration / Update Modal */}
+      <FaceScanModal
+        isOpen={isFaceEnrollModalOpen}
+        onClose={() => setIsFaceEnrollModalOpen(false)}
+        mode="enroll"
+        staffName={profile?.name || "Staff"}
+        staffAvatarUrl={profile?.avatarUrl || null}
+        onEnrolled={async (enrollData) => {
+          try {
+            const res = await enrollStaffFace(enrollData)
+            showToast(res.message || "Face ID successfully enrolled ✓")
+            setIsFaceEnrollModalOpen(false)
+            await loadProfile()
+          } catch (e: any) {
+            showToast(e?.message || "Failed to enroll Face ID")
+          }
+        }}
+        onVerified={() => {
+          setIsFaceEnrollModalOpen(false)
+          loadProfile()
+        }}
+      />
     </div>
   )
 }

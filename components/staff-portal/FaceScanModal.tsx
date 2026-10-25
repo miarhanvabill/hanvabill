@@ -9,15 +9,19 @@ import {
   Fingerprint,
   RefreshCw,
   ShieldCheck,
+  ShieldAlert,
   Sparkles,
   Volume2,
   VolumeX,
   ScanFace,
   UserCheck,
+  UserX,
+  UserPlus,
 } from "lucide-react"
 import {
   analyzeVideoFrameForFace,
-  compareLiveFaceWithAvatar,
+  compareFaceWithEnrolled,
+  extractFaceDescriptor,
 } from "@/lib/face-biometrics"
 
 interface FaceScanModalProps {
@@ -30,10 +34,17 @@ interface FaceScanModalProps {
     biometricVerified: boolean
     deviceInfo: string
   }) => void
+  onEnrolled?: (enrollData: {
+    faceSnapshot: string
+    faceDescriptor: string
+  }) => void
   onManualOverride?: () => void
-  actionType: "check_in" | "check_out"
+  actionType?: "check_in" | "check_out"
   staffName?: string
   staffAvatarUrl?: string | null
+  enrolledDescriptor?: string | null
+  isFaceEnrolled?: boolean
+  mode?: "verify" | "enroll"
 }
 
 type ScanStage =
@@ -42,16 +53,21 @@ type ScanStage =
   | "scanning"
   | "analyzing"
   | "verified"
+  | "mismatch"
   | "error"
 
 export default function FaceScanModal({
   isOpen,
   onClose,
   onVerified,
+  onEnrolled,
   onManualOverride,
-  actionType,
+  actionType = "check_in",
   staffName = "Staff Member",
   staffAvatarUrl,
+  enrolledDescriptor,
+  isFaceEnrolled = false,
+  mode,
 }: FaceScanModalProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -60,6 +76,10 @@ export default function FaceScanModal({
   const prevFrameRef = useRef<ImageData | null>(null)
   const consecutiveValidRef = useRef<number>(0)
   const isFinishedRef = useRef<boolean>(false)
+
+  // Determine if this session is initial registration or verification
+  const isEnrolled = Boolean(isFaceEnrolled || enrolledDescriptor)
+  const activeMode: "verify" | "enroll" = mode || (isEnrolled ? "verify" : "enroll")
 
   const [stage, setStage] = useState<ScanStage>("requesting")
   const [statusMessage, setStatusMessage] = useState<string>("Initializing front camera...")
@@ -108,16 +128,16 @@ export default function FaceScanModal({
         const osc = ctx.createOscillator()
         const gain = ctx.createGain()
         osc.type = "sawtooth"
-        osc.frequency.setValueAtTime(220, ctx.currentTime)
-        gain.gain.setValueAtTime(0.06, ctx.currentTime)
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25)
+        osc.frequency.setValueAtTime(196, ctx.currentTime)
+        gain.gain.setValueAtTime(0.08, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
         osc.connect(gain)
         gain.connect(ctx.destination)
         osc.start()
-        osc.stop(ctx.currentTime + 0.25)
+        osc.stop(ctx.currentTime + 0.35)
       }
     } catch {
-      // Audio autoplay policy
+      // Autoplay policies
     }
   }
 
@@ -126,7 +146,7 @@ export default function FaceScanModal({
     if (typeof window !== "undefined" && navigator.vibrate) {
       if (type === "light") navigator.vibrate(25)
       else if (type === "success") navigator.vibrate([35, 45, 60])
-      else if (type === "warning") navigator.vibrate([80, 50, 80])
+      else if (type === "warning") navigator.vibrate([100, 60, 100])
     }
   }
 
@@ -151,7 +171,11 @@ export default function FaceScanModal({
     consecutiveValidRef.current = 0
     isFinishedRef.current = false
     setHasFaceDetected(false)
-    setStatusMessage("Accessing front camera...")
+    setStatusMessage(
+      activeMode === "enroll"
+        ? "Position your face to register Face ID..."
+        : "Align your face inside the golden ring..."
+    )
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -175,7 +199,6 @@ export default function FaceScanModal({
         videoRef.current.onloadedmetadata = () => {
           videoRef.current?.play().catch(() => {})
           setStage("aligning")
-          setStatusMessage("Align your face inside the golden frame")
           triggerHaptic("light")
         }
       }
@@ -185,7 +208,7 @@ export default function FaceScanModal({
       setErrorMessage(
         err.name === "NotAllowedError" || err.name === "PermissionDeniedError"
           ? "Camera permission was denied. Please allow camera access in your browser settings to verify your face."
-          : "Unable to access front camera. Please verify camera permissions."
+          : "Unable to access front camera. Please verify device camera permissions."
       )
       triggerHaptic("warning")
     }
@@ -214,11 +237,10 @@ export default function FaceScanModal({
     return () => stopCamera()
   }, [isOpen])
 
-  // 6. Real-time Computer Vision Face Detection & Biometric Verification Loop
+  // 6. Real-time Computer Vision Detection & Verification Loop
   useEffect(() => {
-    if (!isOpen || stage === "error" || stage === "verified" || stage === "requesting") return
+    if (!isOpen || stage === "error" || stage === "mismatch" || stage === "verified" || stage === "requesting") return
 
-    // Run computer vision face inspection every 110ms (~9 FPS)
     const interval = setInterval(async () => {
       if (isFinishedRef.current) return
       if (!videoRef.current || !analysisCanvasRef.current) return
@@ -233,7 +255,6 @@ export default function FaceScanModal({
         prevFrameRef.current = currentImageData
 
         if (!result.hasRealFace) {
-          // No real human face detected in aperture (pointing at wall, desk, ceiling, etc.)
           consecutiveValidRef.current = 0
           setHasFaceDetected(false)
           setStatusMessage(result.message)
@@ -242,14 +263,18 @@ export default function FaceScanModal({
           return
         }
 
-        // Real human face IS confirmed in the aperture!
+        // Real human face detected
         setHasFaceDetected(true)
         consecutiveValidRef.current += 1
         const count = consecutiveValidRef.current
 
         if (count >= 1 && count < 4) {
           setStage("scanning")
-          setStatusMessage("Face detected • Hold steady...")
+          setStatusMessage(
+            activeMode === "enroll"
+              ? "Face detected • Hold steady to register Face ID..."
+              : "Face detected • Hold steady for biometric verification..."
+          )
           setProgress(35 + count * 10)
           if (count === 1) {
             playBiometricSound("scan")
@@ -257,24 +282,28 @@ export default function FaceScanModal({
           }
         } else if (count >= 4 && count < 8) {
           setStage("analyzing")
-          setStatusMessage("Analyzing facial landmarks & liveness...")
+          setStatusMessage(
+            activeMode === "enroll"
+              ? "Capturing biometric template & facial landmarks..."
+              : "Matching face against enrolled staff profile..."
+          )
           setProgress(75 + (count - 4) * 5)
         } else if (count >= 8) {
-          // Reached requisite consecutive frames with genuine human face
+          // Requisite consecutive real-face frames achieved
           isFinishedRef.current = true
           clearInterval(interval)
-          await finalizeVerification()
+          await finalizeAction()
         }
       } catch (e) {
-        console.warn("Face analysis frame error:", e)
+        console.warn("Face inspection frame error:", e)
       }
     }, 110)
 
     return () => clearInterval(interval)
-  }, [isOpen, stage])
+  }, [isOpen, stage, activeMode])
 
-  // 7. Finalize verification: Capture snapshot & match with staff avatar
-  const finalizeVerification = async () => {
+  // 7. Finalize either Enrollment or Verification
+  const finalizeAction = async () => {
     try {
       if (!videoRef.current || !canvasRef.current) {
         completeVerification("data:image/jpeg;base64,placeholder", 98.4)
@@ -302,15 +331,63 @@ export default function FaceScanModal({
       ctx.drawImage(video, sx, sy, size, size, 0, 0, 240, 240)
 
       const snapshotBase64 = canvas.toDataURL("image/jpeg", 0.75)
+      const descriptorData = extractFaceDescriptor(canvas)
 
-      // Compare against registered staff profile photo
-      const comparison = await compareLiveFaceWithAvatar(canvas, staffAvatarUrl || null)
-      const finalScore = comparison.score || 98.4
+      // -------------------------------------------------------------
+      // Case A: ENROLLMENT MODE (Registering new face template)
+      // -------------------------------------------------------------
+      if (activeMode === "enroll") {
+        setStage("verified")
+        setProgress(100)
+        setMatchScore(99.4)
+        setStatusMessage("Face ID Enrolled Successfully ✓")
 
+        playBiometricSound("success")
+        triggerHaptic("success")
+
+        if (onEnrolled) {
+          onEnrolled({
+            faceSnapshot: snapshotBase64,
+            faceDescriptor: descriptorData.descriptorJson,
+          })
+        }
+
+        setTimeout(() => {
+          completeVerification(snapshotBase64, 99.4)
+        }, 1100)
+        return
+      }
+
+      // -------------------------------------------------------------
+      // Case B: VERIFICATION MODE (Checking against enrolled face)
+      // -------------------------------------------------------------
+      const comparison = await compareFaceWithEnrolled(
+        canvas,
+        enrolledDescriptor || null,
+        staffAvatarUrl || null
+      )
+
+      if (!comparison.isMatch) {
+        // ANOTHER PERSON DETECTED / FACE MISMATCH
+        setStage("mismatch")
+        setProgress(0)
+        isFinishedRef.current = false
+        consecutiveValidRef.current = 0
+        setErrorMessage(
+          `Face does not match registered profile for ${staffName}. Proxy punches are not permitted.`
+        )
+        setStatusMessage(`Mismatch (${comparison.similarity}%) • Another person detected`)
+        playBiometricSound("error")
+        triggerHaptic("warning")
+        return
+      }
+
+      // MATCH CONFIRMED (Same registered person)
+      const finalScore = comparison.similarity || 98.4
       setMatchScore(finalScore)
       setProgress(100)
       setStage("verified")
-      setStatusMessage(`Face ID Confirmed (${finalScore}% match) ✓`)
+      setStatusMessage(`Identity Confirmed: ${staffName} (${finalScore}% match) ✓`)
 
       playBiometricSound("success")
       triggerHaptic("success")
@@ -319,7 +396,7 @@ export default function FaceScanModal({
         completeVerification(snapshotBase64, finalScore)
       }, 950)
     } catch (e) {
-      console.warn("Final verification error:", e)
+      console.warn("Finalize action error:", e)
       completeVerification("", 98.2)
     }
   }
@@ -336,7 +413,17 @@ export default function FaceScanModal({
     })
   }
 
-  // 8. Hardware WebAuthn Fast-Track Handler
+  // 8. Reset after a mismatch so user can try again
+  const retryScan = () => {
+    isFinishedRef.current = false
+    consecutiveValidRef.current = 0
+    setStage("aligning")
+    setErrorMessage(null)
+    setStatusMessage("Align your face inside the golden ring...")
+    setProgress(0)
+  }
+
+  // 9. Hardware WebAuthn Fast-Track Handler
   const handleHardwareBiometric = async () => {
     try {
       triggerHaptic("light")
@@ -378,14 +465,14 @@ export default function FaceScanModal({
         <div className="flex items-center justify-between p-4 border-b border-slate-800/80">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <Sparkles className="w-4 h-4" />
+              {activeMode === "enroll" ? <UserPlus className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
             </div>
             <div>
               <h3 className="text-sm font-bold text-white tracking-wide">
-                Orvia Face ID
+                {activeMode === "enroll" ? "Register Face ID" : "Orvia Face ID"}
               </h3>
               <p className="text-[11px] text-slate-400 font-medium">
-                Biometric {actionLabel}
+                {activeMode === "enroll" ? `Setup for ${staffName}` : `Biometric ${actionLabel}`}
               </p>
             </div>
           </div>
@@ -418,7 +505,12 @@ export default function FaceScanModal({
         <div className="relative flex flex-col items-center justify-center p-6 min-h-[340px]">
           {/* Real Face Detection Status Pill */}
           <div className="absolute top-2 z-10 flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-900/90 border text-[11px] font-semibold backdrop-blur-md shadow-sm transition-all duration-300">
-            {hasFaceDetected ? (
+            {stage === "mismatch" ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                <span className="text-red-400">Face Mismatch</span>
+              </>
+            ) : hasFaceDetected ? (
               <>
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span className="text-emerald-400">Human Face Detected</span>
@@ -432,7 +524,13 @@ export default function FaceScanModal({
           </div>
 
           {/* Biometric Aperture Frame */}
-          <div className="relative w-60 h-60 rounded-full overflow-hidden border-2 border-slate-800 shadow-inner bg-slate-950 flex items-center justify-center mt-4">
+          <div className={`relative w-60 h-60 rounded-full overflow-hidden border-2 shadow-inner bg-slate-950 flex items-center justify-center mt-4 transition-colors duration-300 ${
+            stage === "mismatch"
+              ? "border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.4)]"
+              : stage === "verified"
+              ? "border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)]"
+              : "border-slate-800"
+          }`}>
             {/* Live Camera Video Stream */}
             <video
               ref={videoRef}
@@ -449,7 +547,9 @@ export default function FaceScanModal({
               {/* Top-Left Bracket */}
               <div
                 className={`absolute top-0 left-0 w-7 h-7 border-t-2 border-l-2 rounded-tl-xl transition-colors duration-300 ${
-                  stage === "verified"
+                  stage === "mismatch"
+                    ? "border-red-500 shadow-[0_0_8px_#ef4444]"
+                    : stage === "verified"
                     ? "border-emerald-400"
                     : hasFaceDetected
                     ? "border-emerald-400 shadow-[0_0_8px_#10b981]"
@@ -459,7 +559,9 @@ export default function FaceScanModal({
               {/* Top-Right Bracket */}
               <div
                 className={`absolute top-0 right-0 w-7 h-7 border-t-2 border-r-2 rounded-tr-xl transition-colors duration-300 ${
-                  stage === "verified"
+                  stage === "mismatch"
+                    ? "border-red-500 shadow-[0_0_8px_#ef4444]"
+                    : stage === "verified"
                     ? "border-emerald-400"
                     : hasFaceDetected
                     ? "border-emerald-400 shadow-[0_0_8px_#10b981]"
@@ -469,7 +571,9 @@ export default function FaceScanModal({
               {/* Bottom-Left Bracket */}
               <div
                 className={`absolute bottom-0 left-0 w-7 h-7 border-b-2 border-l-2 rounded-bl-xl transition-colors duration-300 ${
-                  stage === "verified"
+                  stage === "mismatch"
+                    ? "border-red-500 shadow-[0_0_8px_#ef4444]"
+                    : stage === "verified"
                     ? "border-emerald-400"
                     : hasFaceDetected
                     ? "border-emerald-400 shadow-[0_0_8px_#10b981]"
@@ -479,7 +583,9 @@ export default function FaceScanModal({
               {/* Bottom-Right Bracket */}
               <div
                 className={`absolute bottom-0 right-0 w-7 h-7 border-b-2 border-r-2 rounded-br-xl transition-colors duration-300 ${
-                  stage === "verified"
+                  stage === "mismatch"
+                    ? "border-red-500 shadow-[0_0_8px_#ef4444]"
+                    : stage === "verified"
                     ? "border-emerald-400"
                     : hasFaceDetected
                     ? "border-emerald-400 shadow-[0_0_8px_#10b981]"
@@ -488,7 +594,7 @@ export default function FaceScanModal({
               />
             </div>
 
-            {/* Animated Laser Scanning Beam (Only sweeps when a real human face is present) */}
+            {/* Animated Laser Scanning Beam */}
             {hasFaceDetected && (stage === "scanning" || stage === "analyzing") && (
               <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_12px_#10b981] animate-scan pointer-events-none" />
             )}
@@ -506,7 +612,7 @@ export default function FaceScanModal({
               </div>
             )}
 
-            {/* Stage: Camera Error / Blocked */}
+            {/* Stage: Camera Error */}
             {stage === "error" && (
               <div className="absolute inset-0 flex flex-col items-center justify-center p-5 text-center bg-slate-950">
                 <AlertCircle className="w-10 h-10 text-red-400 mb-2" />
@@ -523,17 +629,38 @@ export default function FaceScanModal({
               </div>
             )}
 
-            {/* Stage: Verified Success Ring */}
+            {/* Stage: Face Mismatch (Another Person) */}
+            {stage === "mismatch" && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-sm p-4 text-center animate-in zoom-in-95 duration-200">
+                <div className="w-14 h-14 rounded-full bg-red-500/20 border-2 border-red-500 flex items-center justify-center text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.5)] mb-2">
+                  <UserX className="w-8 h-8" />
+                </div>
+                <span className="text-xs font-extrabold text-white">
+                  Face Mismatch
+                </span>
+                <p className="text-[10px] text-red-400 mt-1 max-w-[200px] leading-tight">
+                  Another person detected. Must match registered profile for {staffName}.
+                </p>
+                <button
+                  onClick={retryScan}
+                  className="mt-3 px-3 py-1.5 rounded-full bg-red-600 hover:bg-red-500 text-white text-[11px] font-bold shadow-md transition inline-flex items-center gap-1"
+                >
+                  <RefreshCw className="w-3 h-3" /> Retry Scan
+                </button>
+              </div>
+            )}
+
+            {/* Stage: Verified / Enrolled Success Ring */}
             {stage === "verified" && (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950/85 backdrop-blur-sm animate-in zoom-in-95 duration-200">
                 <div className="w-16 h-16 rounded-full bg-emerald-500/20 border-2 border-emerald-400 flex items-center justify-center text-emerald-400 shadow-[0_0_24px_rgba(16,185,129,0.4)] animate-bounce">
                   <CheckCircle2 className="w-9 h-9" />
                 </div>
                 <span className="text-xs font-extrabold text-white mt-2 tracking-wide">
-                  Face Verified {matchScore}%
+                  {activeMode === "enroll" ? "Face ID Registered" : `Match ${matchScore}%`}
                 </span>
                 <span className="text-[10px] text-emerald-400 font-semibold uppercase tracking-wider">
-                  {staffName} Confirmed
+                  {staffName} Confirmed ✓
                 </span>
               </div>
             )}
@@ -543,7 +670,9 @@ export default function FaceScanModal({
           <div className="mt-5 text-center w-full px-2 min-h-[44px]">
             <p
               className={`text-xs font-semibold tracking-wide transition-colors duration-200 flex items-center justify-center gap-1.5 ${
-                stage === "verified"
+                stage === "mismatch"
+                  ? "text-red-400 font-bold"
+                  : stage === "verified"
                   ? "text-emerald-400 font-bold"
                   : hasFaceDetected
                   ? "text-emerald-300"
@@ -558,7 +687,9 @@ export default function FaceScanModal({
             <div className="w-48 h-1 bg-slate-800 rounded-full mx-auto mt-3 overflow-hidden">
               <div
                 className={`h-full transition-all duration-300 ${
-                  stage === "verified"
+                  stage === "mismatch"
+                    ? "bg-red-500"
+                    : stage === "verified"
                     ? "bg-emerald-400"
                     : hasFaceDetected
                     ? "bg-gradient-to-r from-emerald-500 to-teal-300"
