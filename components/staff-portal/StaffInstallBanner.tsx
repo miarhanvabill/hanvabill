@@ -98,7 +98,7 @@ export default function StaffInstallBanner() {
           <div className="w-12 h-12 rounded-xl bg-white p-1.5 shadow-md flex-shrink-0 border border-slate-600/50">
             <img
               src="/logo-icon.png"
-              alt="Hanva Staff Logo"
+              alt="Orvia Logo"
               className="w-full h-full object-contain"
             />
           </div>
@@ -106,7 +106,7 @@ export default function StaffInstallBanner() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <h3 className="text-xs font-extrabold text-white tracking-tight">
-                Install Hanva Staff App
+                Install Orvia
               </h3>
               <span className="text-[9px] font-bold uppercase bg-amber-400/20 text-amber-300 border border-amber-400/30 px-1.5 py-0.2 rounded-full">
                 PWA
@@ -143,7 +143,7 @@ export default function StaffInstallBanner() {
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-slate-900">Install on iPhone / iPad</h4>
-                  <p className="text-[11px] text-slate-500">Hanva Staff Portal</p>
+                  <p className="text-[11px] text-slate-500">Orvia - Staff Portal</p>
                 </div>
               </div>
               <button

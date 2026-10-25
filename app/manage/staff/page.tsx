@@ -199,7 +199,7 @@ export default function StaffManagePage() {
   const sharePortalOnWhatsApp = (member: StaffDisplayMember) => {
     const cleanPhone = (member.phone || "").replace(/\D/g, "")
     const text = encodeURIComponent(
-      `Hi ${member.name}! Here is your Hanva Staff Portal link to view your schedule, mark attendance, and track commissions:\n🔗 https://staff.biz.hanva.in`
+      `Hi ${member.name}! Here is your Orvia link to view your schedule, mark attendance, and track commissions:\n🔗 https://staff.biz.hanva.in`
     )
     const url = cleanPhone
       ? `https://wa.me/${cleanPhone.length === 10 ? "91" + cleanPhone : cleanPhone}?text=${text}`

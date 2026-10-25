@@ -105,7 +105,7 @@ export default function StaffLoginPage() {
             className="w-full h-full object-contain"
           />
         </div>
-        <h1 className="text-2xl font-black tracking-tight text-white">Hanva Staff</h1>
+        <h1 className="text-2xl font-black tracking-tight text-white">Orvia</h1>
         <p className="text-xs text-slate-400 mt-1">Salon & Spa Mobile Companion</p>
       </div>
 
@@ -247,7 +247,7 @@ export default function StaffLoginPage() {
             </>
           ) : (
             <>
-              Sign In to Staff Portal <ArrowRight className="w-4 h-4" />
+              Sign In to Orvia <ArrowRight className="w-4 h-4" />
             </>
           )}
         </button>
@@ -276,7 +276,7 @@ export default function StaffLoginPage() {
           className="inline-flex items-center gap-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-xl transition active:scale-95 shadow-md"
         >
           <img src="/logo-icon.png" alt="Hanva" className="w-4 h-4 object-contain" />
-          <span>Install Hanva Staff App</span>
+          <span>Install Orvia</span>
           <Download className="w-3.5 h-3.5 text-amber-400 ml-0.5" />
         </button>
       </div>

@@ -1,7 +1,7 @@
 {
-  "name": "Hanva Staff Portal",
-  "short_name": "Hanva Staff",
-  "description": "Mobile Staff Portal for Hanva Salon & Spa - Appointments, Clock-in, and Commissions",
+  "name": "Orvia - Staff Portal",
+  "short_name": "Orvia",
+  "description": "Orvia Staff App - Appointments, Clock-in, and Commissions",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

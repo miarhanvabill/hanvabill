@@ -205,7 +205,7 @@ export default function StaffProfilePage() {
                   Fast Access
                 </span>
                 <h3 className="text-sm font-black leading-tight">
-                  Install Hanva Staff App
+                  Install Orvia
                 </h3>
                 <p className="text-xs font-medium text-slate-900 mt-0.5">
                   Add to your phone&apos;s home screen for 1-tap shift check-in.
