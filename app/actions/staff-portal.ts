@@ -23,6 +23,11 @@ export async function ensureStaffPortalSchema(sql: any): Promise<void> {
     await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS portal_pin VARCHAR(20);`.catch(() => {})
     await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS portal_enabled BOOLEAN DEFAULT true;`.catch(() => {})
     await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS upi_id VARCHAR(100);`.catch(() => {})
+    await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS emergency_contact VARCHAR(100);`.catch(() => {})
+    await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS address TEXT;`.catch(() => {})
+    await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS skills TEXT;`.catch(() => {})
+    await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS avatar_url TEXT;`.catch(() => {})
+    await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS email VARCHAR(255);`.catch(() => {})
     await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;`.catch(() => {})
 
     // 2. Staff leaves table
@@ -1512,14 +1517,21 @@ export async function getStaffProfile(): Promise<{
 }
 
 /**
- * Updates editable staff profile fields (e.g. UPI ID, emergency contact).
+ * Updates editable staff profile fields (e.g. name, phone, email, UPI ID, emergency contact, address, skills, avatar).
  * Accepts both snake_case and camelCase parameters.
  */
 export async function updateStaffProfile(data: {
+  name?: string
+  phone?: string
+  email?: string
   upi_id?: string
   upiId?: string
   emergency_contact?: string
   emergencyContact?: string
+  address?: string
+  skills?: string
+  avatar_url?: string
+  avatarUrl?: string
 }): Promise<{ success: boolean; message: string; profile?: any }> {
   return await withStaffAuth(async ({ staff, sql, tenantId }) => {
     await ensureStaffPortalSchema(sql)
@@ -1527,19 +1539,43 @@ export async function updateStaffProfile(data: {
     const targetUpi = data.upi_id !== undefined ? data.upi_id : data.upiId
     const targetEmergency =
       data.emergency_contact !== undefined ? data.emergency_contact : data.emergencyContact
+    const targetAvatar =
+      data.avatar_url !== undefined ? data.avatar_url : data.avatarUrl
 
     const rows = await sql`
       UPDATE staff
       SET 
-        upi_id = CASE WHEN ${targetUpi !== undefined} THEN ${targetUpi || null} ELSE upi_id END,
-        emergency_contact = CASE WHEN ${targetEmergency !== undefined} THEN ${targetEmergency || null} ELSE emergency_contact END,
+        name = CASE WHEN ${data.name !== undefined} THEN ${data.name ? data.name.trim() : null} ELSE name END,
+        phone = CASE WHEN ${data.phone !== undefined} THEN ${data.phone ? data.phone.trim() : null} ELSE phone END,
+        email = CASE WHEN ${data.email !== undefined} THEN ${data.email ? data.email.trim() : null} ELSE email END,
+        upi_id = CASE WHEN ${targetUpi !== undefined} THEN ${targetUpi ? targetUpi.trim() : null} ELSE upi_id END,
+        emergency_contact = CASE WHEN ${targetEmergency !== undefined} THEN ${targetEmergency ? targetEmergency.trim() : null} ELSE emergency_contact END,
+        address = CASE WHEN ${data.address !== undefined} THEN ${data.address ? data.address.trim() : null} ELSE address END,
+        skills = CASE WHEN ${data.skills !== undefined} THEN ${data.skills ? data.skills.trim() : null} ELSE skills END,
+        avatar_url = CASE WHEN ${targetAvatar !== undefined} THEN ${targetAvatar || null} ELSE avatar_url END,
         updated_at = NOW()
       WHERE id = ${staff.id}
         AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text)
-      RETURNING id, name, phone, email, upi_id, emergency_contact
+      RETURNING id, name, phone, email, role, salary, hire_date, address, emergency_contact, skills, commission_rate, avatar_url, upi_id
     `
 
+    // If name or phone changed, re-issue the staff session token so header and session sync immediately
+    if (data.name || data.phone) {
+      const updatedRow = rows[0]
+      if (updatedRow) {
+        const token = signStaffToken({
+          staffId: Number(updatedRow.id),
+          tenantId: String(staff.tenant_id),
+          name: updatedRow.name,
+          role: staff.role || "Staff",
+          phone: updatedRow.phone,
+        })
+        await setStaffSessionCookie(token)
+      }
+    }
+
     revalidatePath("/staff-portal")
+    revalidatePath("/manage/staff")
     return {
       success: true,
       message: "Profile updated successfully",
