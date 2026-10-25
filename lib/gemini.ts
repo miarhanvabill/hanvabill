@@ -348,3 +348,111 @@ Return plain text message only.`;
 
   return result.success && result.text ? result.text.trim() : null;
 }
+
+/**
+ * Real-time AI Biometric Face Comparison using Google Gemini Multimodal Vision.
+ * Compares enrolled face photo with live check-in selfie to prevent proxy punches and fake faces.
+ */
+export async function verifyFaceBiometricsWithAi({
+  enrolledImageBase64,
+  liveImageBase64,
+  staffName = "Staff Member",
+  apiKey,
+}: {
+  enrolledImageBase64: string;
+  liveImageBase64: string;
+  staffName?: string;
+  apiKey?: string;
+}): Promise<{
+  success: boolean;
+  isMatch: boolean;
+  confidence: number;
+  isRealLiveHuman: boolean;
+  isDifferentPerson: boolean;
+  reason: string;
+}> {
+  const cleanEnrolled = enrolledImageBase64.replace(/^data:image\/[a-zA-Z]+;base64,/, "");
+  const cleanLive = liveImageBase64.replace(/^data:image\/[a-zA-Z]+;base64,/, "");
+
+  const resolvedKey = getEffectiveGeminiKey(apiKey);
+  const models = ["gemini-3.5-flash", "gemini-flash-latest"];
+
+  for (const model of models) {
+    try {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${resolvedKey}`;
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: `You are an enterprise biometric facial verification system for salon staff shift attendance.
+Compare Image 1 (Enrolled registered photo for staff member: "${staffName}") with Image 2 (Live check-in camera capture taken right now at the salon).
+
+Carefully analyze:
+1. Is Image 2 a REAL live human face? (Reject blank walls, floors, phone screens, photos of photos, inanimate objects).
+2. Are Image 1 and Image 2 the EXACT SAME person? (Compare eye shape, inter-pupillary distance, nose bridge, jawline, lips, ear structure, facial bone geometry).
+3. If Image 2 is a DIFFERENT colleague, another person, or a stranger trying to proxy-punch for ${staffName}, set isMatch = false and isDifferentPerson = true.
+
+Respond strictly with JSON matching this structure:
+{
+  "isMatch": boolean,
+  "confidence": number,
+  "isRealLiveHuman": boolean,
+  "isDifferentPerson": boolean,
+  "reason": "Clear explanation of biometric match or mismatch"
+}`
+                },
+                {
+                  inlineData: {
+                    mimeType: "image/jpeg",
+                    data: cleanEnrolled,
+                  },
+                },
+                {
+                  inlineData: {
+                    mimeType: "image/jpeg",
+                    data: cleanLive,
+                  },
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: "application/json",
+          },
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const parsed = extractJsonFromText(rawText);
+        if (parsed && typeof parsed.isMatch === "boolean") {
+          return {
+            success: true,
+            isMatch: parsed.isMatch,
+            confidence: Number(parsed.confidence) || (parsed.isMatch ? 98.4 : 20),
+            isRealLiveHuman: parsed.isRealLiveHuman ?? true,
+            isDifferentPerson: parsed.isDifferentPerson ?? !parsed.isMatch,
+            reason: parsed.reason || (parsed.isMatch ? "Biometrics confirmed" : "Face mismatch"),
+          };
+        }
+      }
+    } catch (e: any) {
+      console.warn(`[verifyFaceBiometricsWithAi] Model ${model} failed:`, e?.message);
+    }
+  }
+
+  return {
+    success: false,
+    isMatch: false,
+    confidence: 0,
+    isRealLiveHuman: false,
+    isDifferentPerson: false,
+    reason: "AI vision service temporarily unavailable, fallback to on-device biometrics",
+  };
+}

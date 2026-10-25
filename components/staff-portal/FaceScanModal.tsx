@@ -382,6 +382,27 @@ export default function FaceScanModal({
         return
       }
 
+      // Layer 2: Cloud AI Vision Verification (Google Gemini Multimodal API)
+      try {
+        const { verifyFaceWithAi } = await import("@/app/actions/staff-portal")
+        const aiCheck = await verifyFaceWithAi({ liveSnapshot: snapshotBase64 })
+        if (aiCheck && aiCheck.success && (!aiCheck.isMatch || aiCheck.isDifferentPerson)) {
+          setStage("mismatch")
+          setProgress(0)
+          isFinishedRef.current = false
+          consecutiveValidRef.current = 0
+          setErrorMessage(
+            aiCheck.reason || `AI Vision: Face does not match registered profile for ${staffName}.`
+          )
+          setStatusMessage("AI Mismatch • Another person detected")
+          playBiometricSound("error")
+          triggerHaptic("warning")
+          return
+        }
+      } catch (e) {
+        console.warn("AI vision pass-through check bypassed:", e)
+      }
+
       // MATCH CONFIRMED (Same registered person)
       const finalScore = comparison.similarity || 98.4
       setMatchScore(finalScore)
