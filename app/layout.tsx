@@ -5,6 +5,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { ClerkProvider } from "@clerk/nextjs"
 import { Geist, Geist_Mono } from "next/font/google"
+import { headers } from "next/headers"
 import ClientLayoutWrapper from "@/components/ClientLayoutWrapper"
 import AppShell from "@/components/AppShell"
 import { ErrorBoundary } from "@/components/error-boundary"
@@ -35,7 +36,29 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  let isStaff = false
+  try {
+    const headersList = await headers()
+    const host = headersList.get("host") || ""
+    isStaff = 
+      host.startsWith("staff.") || 
+      host.includes("staff.biz.hanva.in") ||
+      headersList.get("x-is-staff-portal") === "1"
+  } catch {}
+
+  if (isStaff) {
+    return (
+      <html lang="en">
+        <body className={`${inter.className} ${geistSans.variable} ${geistMono.variable}`}>
+          <ClientLayoutWrapper isStaffPortal={true}>
+            {children}
+          </ClientLayoutWrapper>
+        </body>
+      </html>
+    )
+  }
+
   return (
     <ClerkProvider
       publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!}
@@ -47,7 +70,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <html lang="en">
         <body className={`${inter.className} ${geistSans.variable} ${geistMono.variable}`}>
           <ClientLayoutWrapper>
-
             <AppShell>{children}</AppShell>
           </ClientLayoutWrapper>
         </body>

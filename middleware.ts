@@ -140,20 +140,25 @@ export default async function middleware(req: NextRequest, event: any) {
 
     // 1. Staff Subdomain Handling (e.g. staff.biz.hanva.in or staff.localhost:3000)
     if (isStaffSubdomain) {
-      // Allow Next.js assets, static files, and staff portal API
+      const requestHeaders = new Headers(req.headers);
+      requestHeaders.set("x-is-staff-portal", "1");
+
+      // Allow Next.js assets, static files, and all API endpoints directly
       if (
         pathname.startsWith("/_next") ||
         pathname.startsWith("/favicon.ico") ||
         pathname === "/sw.js" ||
-        pathname.startsWith("/api/staff-portal") ||
+        pathname.startsWith("/api/") ||
         pathname.match(/\.(png|jpg|jpeg|svg|webp|ico|css|js|json|mp3|woff|woff2)$/)
       ) {
-        return NextResponse.next();
+        return NextResponse.next({ request: { headers: requestHeaders } });
       }
 
       // Login page on subdomain
       if (pathname === "/login" || pathname === "/staff-portal/login") {
-        return NextResponse.rewrite(new URL("/staff-portal/login", req.url));
+        return NextResponse.rewrite(new URL("/staff-portal/login", req.url), {
+          request: { headers: requestHeaders },
+        });
       }
 
       // Check staff session
@@ -164,22 +169,27 @@ export default async function middleware(req: NextRequest, event: any) {
 
       // Rewrite internally so staff stays on staff.domain.com in browser URL
       if (pathname.startsWith("/staff-portal")) {
-        return NextResponse.next();
+        return NextResponse.next({ request: { headers: requestHeaders } });
       }
       const targetPath = pathname === "/" ? "/staff-portal" : `/staff-portal${pathname}`;
-      return NextResponse.rewrite(new URL(targetPath, req.url));
+      return NextResponse.rewrite(new URL(targetPath, req.url), {
+        request: { headers: requestHeaders },
+      });
     }
 
     // 2. Direct Staff Portal Path Handling (e.g. localhost:3000/staff-portal or biz.hanva.in/staff-portal)
     if (pathname.startsWith("/staff-portal")) {
+      const requestHeaders = new Headers(req.headers);
+      requestHeaders.set("x-is-staff-portal", "1");
+
       if (pathname === "/staff-portal/login") {
-        return NextResponse.next();
+        return NextResponse.next({ request: { headers: requestHeaders } });
       }
       const hasStaffSession = req.cookies.has("staff_session");
       if (!hasStaffSession) {
         return NextResponse.redirect(new URL("/staff-portal/login", req.url));
       }
-      return NextResponse.next();
+      return NextResponse.next({ request: { headers: requestHeaders } });
     }
 
     return await clerkMw(req, event);

@@ -47,25 +47,33 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     async function fetchAppearanceSettings() {
+      // Skip fetching on staff portal or public routes
+      if (
+        typeof window !== "undefined" &&
+        (window.location.hostname.startsWith("staff.") ||
+          window.location.hostname.includes("staff.biz.hanva.in") ||
+          window.location.pathname.startsWith("/staff-portal") ||
+          window.location.pathname.startsWith("/inv/") ||
+          window.location.pathname.startsWith("/book/"))
+      ) {
+        setIsLoading(false)
+        return
+      }
+
       try {
-        console.log("[v0] Fetching appearance settings...")
         const response = await fetch("/api/settings")
 
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
+          setIsLoading(false)
+          return
         }
 
         const data = await response.json()
-        console.log("[v0] Settings API response:", data)
-
         if (data.success && data.settings?.appearance) {
-          console.log("[v0] Applying appearance settings:", data.settings.appearance)
           setAppearance((prev) => ({ ...prev, ...data.settings.appearance }))
-        } else {
-          console.log("[v0] No appearance settings found, using defaults")
         }
       } catch (error) {
-        console.error("[v0] Error fetching appearance settings:", error)
+        // Silently use defaults
       } finally {
         setIsLoading(false)
       }
