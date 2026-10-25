@@ -123,35 +123,35 @@ export default function StaffLeavesPage() {
       </div>
 
       {/* Leave Balances Grid */}
-      <div className="grid grid-cols-3 gap-2.5">
-        <div className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-sm text-center">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-white rounded-2xl p-2.5 border border-slate-200/80 shadow-sm text-center">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">
             Casual
           </span>
-          <div className="text-xl font-black text-slate-900 mt-1">
-            {balances.casual?.remaining || 8}
+          <div className="text-lg font-black text-slate-900 mt-1 flex items-baseline justify-center">
+            <span>{balances.casual?.remaining || 8}</span>
             <span className="text-xs font-medium text-slate-400">/{balances.casual?.total || 12}</span>
           </div>
           <span className="text-[10px] text-emerald-600 font-semibold block mt-0.5">Available</span>
         </div>
 
-        <div className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-sm text-center">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+        <div className="bg-white rounded-2xl p-2.5 border border-slate-200/80 shadow-sm text-center">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">
             Sick
           </span>
-          <div className="text-xl font-black text-slate-900 mt-1">
-            {balances.sick?.remaining || 5}
+          <div className="text-lg font-black text-slate-900 mt-1 flex items-baseline justify-center">
+            <span>{balances.sick?.remaining || 5}</span>
             <span className="text-xs font-medium text-slate-400">/{balances.sick?.total || 7}</span>
           </div>
           <span className="text-[10px] text-amber-600 font-semibold block mt-0.5">Available</span>
         </div>
 
-        <div className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-sm text-center">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+        <div className="bg-white rounded-2xl p-2.5 border border-slate-200/80 shadow-sm text-center">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">
             Earned
           </span>
-          <div className="text-xl font-black text-slate-900 mt-1">
-            {balances.earned?.remaining || 4}
+          <div className="text-lg font-black text-slate-900 mt-1 flex items-baseline justify-center">
+            <span>{balances.earned?.remaining || 4}</span>
             <span className="text-xs font-medium text-slate-400">/{balances.earned?.total || 6}</span>
           </div>
           <span className="text-[10px] text-blue-600 font-semibold block mt-0.5">Available</span>

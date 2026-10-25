@@ -110,7 +110,7 @@ export default function StaffSchedulePage() {
       </div>
 
       {/* Quick Status Filter Pills */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs">
+      <div className="grid grid-cols-4 gap-1.5 text-xs">
         {[
           { key: "all", label: `All (${appointments.length})` },
           { key: "confirmed", label: "Confirmed" },
@@ -120,7 +120,7 @@ export default function StaffSchedulePage() {
           <button
             key={tab.key}
             onClick={() => setFilterStatus(tab.key as any)}
-            className={`px-3 py-1.5 rounded-full font-semibold whitespace-nowrap transition active:scale-95 ${
+            className={`py-2 px-1 rounded-xl text-center font-bold truncate transition active:scale-95 text-[11px] ${
               filterStatus === tab.key
                 ? "bg-slate-900 text-white shadow-sm"
                 : "bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50"
@@ -225,9 +225,10 @@ export default function StaffSchedulePage() {
                     <button
                       disabled={isLoading}
                       onClick={() => handleStatusUpdate(app.id, "arrived")}
-                      className="flex-1 h-9 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
+                      className="flex-1 min-w-0 h-9 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Client Arrived
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Client Arrived</span>
                     </button>
                   )}
 
@@ -235,9 +236,10 @@ export default function StaffSchedulePage() {
                     <button
                       disabled={isLoading}
                       onClick={() => handleStatusUpdate(app.id, "in_progress")}
-                      className="flex-1 h-9 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
+                      className="flex-1 min-w-0 h-9 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
                     >
-                      <Play className="w-3.5 h-3.5 fill-white" /> Start Service
+                      <Play className="w-3.5 h-3.5 fill-white shrink-0" />
+                      <span className="truncate">Start Service</span>
                     </button>
                   )}
 
@@ -245,22 +247,24 @@ export default function StaffSchedulePage() {
                     <button
                       disabled={isLoading}
                       onClick={() => handleStatusUpdate(app.id, "completed")}
-                      className="flex-1 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
+                      className="flex-1 min-w-0 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
                     >
-                      <Check className="w-3.5 h-3.5 stroke-[3]" /> Mark Completed
+                      <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />
+                      <span className="truncate">Mark Completed</span>
                     </button>
                   )}
 
                   {isCompleted && (
-                    <div className="flex-1 h-9 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold flex items-center justify-center gap-1.5 border border-emerald-200/50">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Service Finished
+                    <div className="flex-1 min-w-0 h-9 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold flex items-center justify-center gap-1.5 border border-emerald-200/50">
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">Service Finished</span>
                     </div>
                   )}
 
                   {(app.customerPhone || app.customer_phone) && (
                     <a
                       href={`tel:${app.customerPhone || app.customer_phone}`}
-                      className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center text-xs font-semibold gap-1 transition"
+                      className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 flex items-center justify-center text-xs font-semibold gap-1 transition shrink-0"
                     >
                       <Phone className="w-3.5 h-3.5 text-slate-600" />
                       <span>Call</span>

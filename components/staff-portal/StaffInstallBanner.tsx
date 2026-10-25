@@ -1,9 +1,11 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
+import { usePathname } from "next/navigation"
 import { Download, Share2, PlusSquare, X, Smartphone, CheckCircle2 } from "lucide-react"
 
 export default function StaffInstallBanner() {
+  const pathname = usePathname() || ""
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
   const [isInstalled, setIsInstalled] = useState(false)
   const [isDismissed, setIsDismissed] = useState(false)
@@ -78,7 +80,7 @@ export default function StaffInstallBanner() {
     } catch {}
   }
 
-  if (isInstalled || isDismissed) {
+  if (isInstalled || isDismissed || pathname.endsWith("/profile")) {
     return null
   }
 

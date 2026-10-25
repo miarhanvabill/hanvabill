@@ -60,14 +60,14 @@ export default function StaffAttendancePage() {
       <div className="flex items-center justify-between">
         <Link
           href={prefix || "/"}
-          className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white border border-slate-200 px-3 py-1.5 rounded-full shadow-sm active:scale-95 transition"
         >
           <ChevronLeft className="w-4 h-4" /> Today
         </Link>
         <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
           Attendance Ledger
         </span>
-        <div className="w-16" /> {/* Spacer */}
+        <div className="w-[72px]" /> {/* Balanced spacer matching the left button width */}
       </div>
 
       {/* Monthly Summary Stats Card */}

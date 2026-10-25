@@ -355,9 +355,10 @@ export default function StaffTodayDashboard() {
                 <button
                   disabled={actionLoading}
                   onClick={() => handleStatusChange(nextClient.id, "arrived")}
-                  className="flex-1 h-9 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
+                  className="flex-1 min-w-0 h-9 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
                 >
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Mark Arrived
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">Mark Arrived</span>
                 </button>
               )}
 
@@ -365,9 +366,10 @@ export default function StaffTodayDashboard() {
                 <button
                   disabled={actionLoading}
                   onClick={() => handleStatusChange(nextClient.id, "in_progress")}
-                  className="flex-1 h-9 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
+                  className="flex-1 min-w-0 h-9 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
                 >
-                  <Play className="w-3.5 h-3.5" /> Start Service
+                  <Play className="w-3.5 h-3.5 shrink-0 fill-white" />
+                  <span className="truncate">Start Service</span>
                 </button>
               )}
 
@@ -375,18 +377,20 @@ export default function StaffTodayDashboard() {
                 <button
                   disabled={actionLoading}
                   onClick={() => handleStatusChange(nextClient.id, "completed")}
-                  className="flex-1 h-9 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
+                  className="flex-1 min-w-0 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
                 >
-                  <Check className="w-3.5 h-3.5 stroke-[3]" /> Complete Service
+                  <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />
+                  <span className="truncate">Complete Service</span>
                 </button>
               )}
 
               {nextClient.customer_phone && (
                 <a
                   href={`tel:${nextClient.customer_phone}`}
-                  className="h-9 px-3 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center justify-center text-xs font-semibold gap-1"
+                  className="h-9 px-3 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95 flex items-center justify-center text-xs font-semibold gap-1 shrink-0 shadow-sm"
                 >
-                  <Phone className="w-3.5 h-3.5 text-slate-500" /> Call
+                  <Phone className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Call</span>
                 </a>
               )}
             </div>

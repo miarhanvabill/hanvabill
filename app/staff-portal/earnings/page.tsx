@@ -84,23 +84,23 @@ export default function StaffEarningsPage() {
 
         {/* 3-Column Breakdown */}
         <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-slate-800">
-          <div className="bg-slate-800/50 p-2.5 rounded-xl border border-slate-700/50">
-            <span className="block text-[10px] text-slate-400 font-medium">Services</span>
-            <span className="text-xs font-extrabold text-white mt-0.5 block">
+          <div className="bg-slate-800/50 p-2 rounded-xl border border-slate-700/50 text-center">
+            <span className="block text-[10px] text-slate-400 font-medium truncate">Services</span>
+            <span className="text-xs font-extrabold text-white mt-0.5 block font-mono truncate">
               ₹{summary.serviceCommission?.toLocaleString("en-IN") || "0"}
             </span>
           </div>
 
-          <div className="bg-slate-800/50 p-2.5 rounded-xl border border-slate-700/50">
-            <span className="block text-[10px] text-slate-400 font-medium">Retail Sales</span>
-            <span className="text-xs font-extrabold text-amber-300 mt-0.5 block">
+          <div className="bg-slate-800/50 p-2 rounded-xl border border-slate-700/50 text-center">
+            <span className="block text-[10px] text-slate-400 font-medium truncate">Retail Sales</span>
+            <span className="text-xs font-extrabold text-amber-300 mt-0.5 block font-mono truncate">
               ₹{summary.productCommission?.toLocaleString("en-IN") || "0"}
             </span>
           </div>
 
-          <div className="bg-slate-800/50 p-2.5 rounded-xl border border-slate-700/50">
-            <span className="block text-[10px] text-slate-400 font-medium">Direct Tips</span>
-            <span className="text-xs font-extrabold text-emerald-400 mt-0.5 block">
+          <div className="bg-slate-800/50 p-2 rounded-xl border border-slate-700/50 text-center">
+            <span className="block text-[10px] text-slate-400 font-medium truncate">Direct Tips</span>
+            <span className="text-xs font-extrabold text-emerald-400 mt-0.5 block font-mono truncate">
               ₹{summary.tips?.toLocaleString("en-IN") || "0"}
             </span>
           </div>

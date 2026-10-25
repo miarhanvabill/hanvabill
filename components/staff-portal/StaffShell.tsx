@@ -111,12 +111,12 @@ export default function StaffShell({ children }: StaffShellProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-between max-w-md mx-auto shadow-2xl relative border-x border-slate-200/60">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-between w-full max-w-md mx-auto shadow-2xl relative border-x border-slate-200/60">
       {/* Top Mobile Header */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="relative">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="relative shrink-0">
               {avatarUrl ? (
                 <img
                   src={avatarUrl}
@@ -136,20 +136,20 @@ export default function StaffShell({ children }: StaffShellProps) {
               )}
             </div>
 
-            <div className="flex flex-col">
-              <div className="flex items-center gap-1">
-                <img src="/orvia-logo.png" alt="Orvia Logo" className="w-4 h-4 rounded-full object-contain" />
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate max-w-[140px]">
+            <div className="flex flex-col min-w-0">
+              <div className="flex items-center gap-1.5">
+                <img src="/orvia-logo.png" alt="Orvia Logo" className="w-4 h-4 rounded-full object-contain shrink-0" />
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate max-w-[130px]">
                   {salonName}
                 </span>
               </div>
-              <h1 className="text-sm font-bold text-slate-900 leading-tight flex items-center gap-1.5">
+              <h1 className="text-sm font-bold text-slate-900 leading-tight truncate">
                 {staffName}
               </h1>
             </div>
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center shrink-0">
             <Link
               href={`${prefix}/attendance`}
               className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full active:scale-95 transition ${
@@ -159,11 +159,11 @@ export default function StaffShell({ children }: StaffShellProps) {
               }`}
             >
               <span
-                className={`w-1.5 h-1.5 rounded-full ${
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                   isCheckedIn ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
                 }`}
               />
-              <span>{isCheckedIn ? "Checked In" : "Not Clocked In"}</span>
+              <span className="whitespace-nowrap">{isCheckedIn ? "Checked In" : "Not Clocked In"}</span>
             </Link>
           </div>
         </div>
@@ -173,11 +173,11 @@ export default function StaffShell({ children }: StaffShellProps) {
       <StaffInstallBanner />
 
       {/* Main Content Area */}
-      <main className="flex-1 pb-24 overflow-x-hidden">{children}</main>
+      <main className="flex-1 pb-24 overflow-x-hidden w-full">{children}</main>
 
-      {/* Fixed Bottom Navigation Bar (Minimum 44px tap target) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-slate-200 max-w-md mx-auto shadow-lg">
-        <div className="grid grid-cols-5 h-16 items-center px-1">
+      {/* Fixed Bottom Navigation Bar (Strictly aligned grid with safe-area support) */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-lg border-t border-slate-200/90 w-full max-w-md mx-auto shadow-lg pb-[env(safe-area-inset-bottom,0px)]">
+        <div className="grid grid-cols-5 h-[62px] items-center px-1">
           {navItems.map((item) => {
             const active = isItemActive(item.href, item.exact)
             const Icon = item.icon
@@ -186,25 +186,24 @@ export default function StaffShell({ children }: StaffShellProps) {
               <Link
                 key={item.label}
                 href={item.href}
-                className={`relative flex flex-col items-center justify-center h-full min-h-[44px] min-w-[44px] transition-all duration-200 select-none ${
-                  active
-                    ? "text-slate-900 font-bold scale-105"
-                    : "text-slate-600 hover:text-slate-900 font-medium"
-                }`}
+                className="flex flex-col items-center justify-center h-full py-1 select-none transition-colors group"
               >
                 <div
-                  className={`relative p-1.5 rounded-xl transition ${
-                    active ? "bg-slate-100 text-slate-950 shadow-sm" : ""
+                  className={`w-12 h-7 rounded-full flex items-center justify-center transition-all duration-200 ${
+                    active
+                      ? "bg-slate-900 text-amber-400 shadow-sm"
+                      : "text-slate-500 group-hover:text-slate-900"
                   }`}
                 >
-                  <Icon className={`w-5 h-5 ${active ? "stroke-[2.5]" : "stroke-[1.8]"}`} />
+                  <Icon className={`w-[18px] h-[18px] ${active ? "stroke-[2.5]" : "stroke-[1.8]"}`} />
                 </div>
-                <span className="text-[10px] tracking-tight mt-0.5">
+                <span
+                  className={`text-[10px] tracking-tight mt-1 leading-none transition-colors ${
+                    active ? "font-bold text-slate-950" : "font-medium text-slate-500 group-hover:text-slate-800"
+                  }`}
+                >
                   {item.label}
                 </span>
-                {active && (
-                  <span className="absolute bottom-1 w-1 h-1 rounded-full bg-slate-900" />
-                )}
               </Link>
             )
           })}
