@@ -12,13 +12,13 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icon-512x512.png", sizes: "512x512", type: "image/png" },
-      { url: "/logo-icon.png", sizes: "285x286", type: "image/png" },
+      { url: "/orvia-icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/orvia-icon-512x512.png", sizes: "512x512", type: "image/png" },
+      { url: "/orvia-logo.png", sizes: "1024x1024", type: "image/png" },
     ],
     apple: [
-      { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
-      { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/orvia-icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/orvia-icon-512x512.png", sizes: "512x512", type: "image/png" },
     ],
   },
 }

@@ -95,11 +95,11 @@ export default function StaffInstallBanner() {
         </button>
 
         <div className="flex items-center gap-3 pr-6">
-          <div className="w-12 h-12 rounded-xl bg-white p-1.5 shadow-md flex-shrink-0 border border-slate-600/50">
+          <div className="w-12 h-12 rounded-full bg-white p-0.5 shadow-md flex-shrink-0 border border-slate-600/50 overflow-hidden">
             <img
-              src="/logo-icon.png"
+              src="/orvia-logo.png"
               alt="Orvia Logo"
-              className="w-full h-full object-contain"
+              className="w-full h-full object-contain rounded-full"
             />
           </div>
 
@@ -138,8 +138,8 @@ export default function StaffInstallBanner() {
           <div className="bg-white rounded-3xl p-5 w-full max-w-sm text-slate-900 shadow-2xl space-y-4 animate-in slide-in-from-bottom-4">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-white p-1 border shadow-sm">
-                  <img src="/logo-icon.png" alt="Hanva Logo" className="w-full h-full object-contain" />
+                <div className="w-9 h-9 rounded-full bg-white p-0.5 border shadow-sm overflow-hidden">
+                  <img src="/orvia-logo.png" alt="Orvia Logo" className="w-full h-full object-contain rounded-full" />
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-slate-900">Install on iPhone / iPad</h4>

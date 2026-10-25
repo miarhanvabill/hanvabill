@@ -98,11 +98,11 @@ export default function StaffLoginPage() {
     <div className="w-full max-w-sm mx-auto flex flex-col justify-center min-h-[90vh] py-6 select-none">
       {/* Top Branding */}
       <div className="text-center mb-6">
-        <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-white p-2.5 shadow-2xl shadow-blue-500/10 border border-slate-700/80 mb-3.5 ring-4 ring-slate-800/80 transition-transform duration-200 hover:scale-105">
+        <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-white p-1 shadow-2xl shadow-amber-500/10 border-2 border-amber-400/40 mb-3.5 ring-4 ring-slate-800/80 transition-transform duration-200 hover:scale-105 overflow-hidden">
           <img
-            src="/logo-icon.png"
-            alt="Hanva Logo"
-            className="w-full h-full object-contain"
+            src="/orvia-logo.png"
+            alt="Orvia Logo"
+            className="w-full h-full object-contain rounded-full"
           />
         </div>
         <h1 className="text-2xl font-black tracking-tight text-white">Orvia</h1>
@@ -275,7 +275,7 @@ export default function StaffLoginPage() {
           }}
           className="inline-flex items-center gap-2 text-xs font-semibold text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 border border-slate-700 px-4 py-2 rounded-xl transition active:scale-95 shadow-md"
         >
-          <img src="/logo-icon.png" alt="Hanva" className="w-4 h-4 object-contain" />
+          <img src="/orvia-logo.png" alt="Orvia" className="w-4 h-4 rounded-full object-contain" />
           <span>Install Orvia</span>
           <Download className="w-3.5 h-3.5 text-amber-400 ml-0.5" />
         </button>

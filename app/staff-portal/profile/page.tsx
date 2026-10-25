@@ -197,8 +197,8 @@ export default function StaffProfilePage() {
         <div className="bg-gradient-to-r from-amber-500 via-amber-500 to-amber-600 rounded-2xl p-4 text-slate-950 shadow-md">
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white p-1 border shadow-sm shrink-0">
-                <img src="/logo-icon.png" alt="Hanva Logo" className="w-full h-full object-contain" />
+              <div className="w-12 h-12 rounded-full bg-white p-0.5 border shadow-sm shrink-0 overflow-hidden">
+                <img src="/orvia-logo.png" alt="Orvia Logo" className="w-full h-full object-contain rounded-full" />
               </div>
               <div>
                 <span className="inline-block text-[10px] font-black uppercase tracking-wider bg-slate-950 text-white px-2 py-0.5 rounded mb-1">

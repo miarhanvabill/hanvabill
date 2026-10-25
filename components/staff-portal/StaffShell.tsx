@@ -138,7 +138,7 @@ export default function StaffShell({ children }: StaffShellProps) {
 
             <div className="flex flex-col">
               <div className="flex items-center gap-1">
-                <img src="/logo-icon.png" alt="Hanva Logo" className="w-3.5 h-3.5 object-contain" />
+                <img src="/orvia-logo.png" alt="Orvia Logo" className="w-4 h-4 rounded-full object-contain" />
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 truncate max-w-[140px]">
                   {salonName}
                 </span>
