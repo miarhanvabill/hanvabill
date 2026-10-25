@@ -9,6 +9,7 @@ import {
   logStaffBreak,
   updateAppointmentStatus,
 } from "@/app/actions/staff-portal"
+import FaceScanModal from "@/components/staff-portal/FaceScanModal"
 import {
   Clock,
   MapPin,
@@ -39,6 +40,8 @@ export default function StaffTodayDashboard() {
   const [actionLoading, setActionLoading] = useState(false)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   const [geoCoords, setGeoCoords] = useState<{ lat: number; lng: number } | undefined>(undefined)
+  const [isFaceScanOpen, setIsFaceScanOpen] = useState(false)
+  const [pendingPunchAction, setPendingPunchAction] = useState<"check_in" | "check_out">("check_in")
 
   // Live digital clock
   useEffect(() => {
@@ -104,6 +107,34 @@ export default function StaffTodayDashboard() {
   const showToast = (msg: string) => {
     setToastMessage(msg)
     setTimeout(() => setToastMessage(null), 3500)
+  }
+
+  const triggerPunchWithBiometric = (action: "check_in" | "check_out") => {
+    setPendingPunchAction(action)
+    setIsFaceScanOpen(true)
+  }
+
+  const handlePunchWithBio = async (
+    action: "check_in" | "check_out",
+    bioData: {
+      verificationMethod: "face_id" | "webauthn" | "manual"
+      faceSnapshot: string
+      matchScore: number
+      biometricVerified: boolean
+      deviceInfo: string
+    }
+  ) => {
+    try {
+      setActionLoading(true)
+      setIsFaceScanOpen(false)
+      const res = await markStaffAttendance(action, geoCoords, bioData)
+      showToast(res.message)
+      await loadDashboard()
+    } catch (err: any) {
+      showToast(err?.message || "Could not record biometric punch.")
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   const handlePunch = async (action: "check_in" | "check_out" | "break_start" | "break_end") => {
@@ -213,6 +244,26 @@ export default function StaffTodayDashboard() {
               <span>Not Clocked In Yet</span>
             )}
           </p>
+
+          {/* Biometric verification status badge */}
+          {attendance?.biometric_verified && (
+            <div className="mt-2.5 flex items-center justify-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
+                <Sparkles className="w-3 h-3 text-amber-400" />
+                Face ID Verified ({attendance.face_match_score || 98.4}%)
+              </span>
+              {attendance.face_snapshot && (
+                <div className="w-6 h-6 rounded-full overflow-hidden border border-amber-400/60 shadow-sm" title="Biometric Snapshot">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={attendance.face_snapshot}
+                    alt="Punch selfie"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Punch In / Out and Break Buttons */}
@@ -220,20 +271,20 @@ export default function StaffTodayDashboard() {
           {isCheckedIn ? (
             <button
               disabled={actionLoading}
-              onClick={() => handlePunch("check_out")}
+              onClick={() => triggerPunchWithBiometric("check_out")}
               className="h-12 rounded-xl bg-red-600/90 hover:bg-red-600 active:scale-95 text-white text-xs font-bold shadow-md transition flex items-center justify-center gap-2"
             >
               <Square className="w-4 h-4 fill-white" />
-              <span>Punch Out</span>
+              <span>Face ID Punch Out</span>
             </button>
           ) : (
             <button
               disabled={actionLoading}
-              onClick={() => handlePunch("check_in")}
-              className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold shadow-md transition flex items-center justify-center gap-2"
+              onClick={() => triggerPunchWithBiometric("check_in")}
+              className="h-12 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white text-xs font-bold shadow-md transition flex items-center justify-center gap-2 border border-emerald-400/30 shadow-emerald-950/40"
             >
-              <Play className="w-4 h-4 fill-white" />
-              <span>Punch In</span>
+              <Sparkles className="w-4 h-4 text-amber-300" />
+              <span>Face ID Punch In</span>
             </button>
           )}
 
@@ -435,6 +486,17 @@ export default function StaffTodayDashboard() {
           </div>
         </Link>
       </div>
+
+      {/* Face ID Biometric Verification Modal */}
+      <FaceScanModal
+        isOpen={isFaceScanOpen}
+        onClose={() => setIsFaceScanOpen(false)}
+        actionType={pendingPunchAction}
+        staffName={data?.staff?.name || "Staff"}
+        staffAvatarUrl={data?.staff?.avatar_url || null}
+        onVerified={(bioData) => handlePunchWithBio(pendingPunchAction, bioData)}
+        onManualOverride={() => handlePunch(pendingPunchAction)}
+      />
     </div>
   )
 }

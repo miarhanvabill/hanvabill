@@ -29,6 +29,7 @@ import {
   ArrowRight,
   Loader2,
   FileText,
+  Sparkles,
 } from "lucide-react"
 import { getStaff, type Staff } from "@/app/actions/staff"
 import {
@@ -635,7 +636,25 @@ export default function AttendancePage() {
                                 <span className="text-sm text-slate-700">{member.role || "Staff"}</span>
                               </td>
                               <td className="p-4">
-                                <span className="text-sm font-mono">{attendanceRecord?.check_in_time || "--:--"}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm font-mono">{attendanceRecord?.check_in_time || "--:--"}</span>
+                                  {attendanceRecord?.biometric_verified && (
+                                    <span
+                                      className="inline-flex items-center gap-0.5 text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200"
+                                      title={`Face ID Match: ${attendanceRecord.face_match_score || 98.4}%`}
+                                    >
+                                      <Sparkles className="w-2.5 h-2.5 text-amber-500" /> Face ID
+                                    </span>
+                                  )}
+                                  {attendanceRecord?.face_snapshot && (
+                                    <img
+                                      src={attendanceRecord.face_snapshot}
+                                      alt="Selfie"
+                                      className="w-6 h-6 rounded-full object-cover border border-amber-400 shadow-xs"
+                                      title="Verified Face ID snapshot"
+                                    />
+                                  )}
+                                </div>
                               </td>
                               <td className="p-4">
                                 <span className="text-sm font-mono">{attendanceRecord?.check_out_time || "--:--"}</span>

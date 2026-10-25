@@ -23,7 +23,7 @@ interface StaffShellProps {
 export default function StaffShell({ children }: StaffShellProps) {
   const pathname = usePathname() || ""
   const [mounted, setMounted] = useState(false)
-  const [salonName, setSalonName] = useState("Hanva Salon")
+  const [salonName, setSalonName] = useState("Orvia Salon")
   const [staffName, setStaffName] = useState("Staff Portal")
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [isCheckedIn, setIsCheckedIn] = useState(false)
@@ -35,7 +35,7 @@ export default function StaffShell({ children }: StaffShellProps) {
       .then((mod) => mod.getStaffSession())
       .then((sess: any) => {
         if (sess) {
-          setSalonName(sess.tenantName || "Hanva Luxury Salon")
+          setSalonName(sess.tenantName || "Orvia Luxury Salon")
           setStaffName(sess.name || sess.staffName || "Staff Member")
           if (sess.avatarUrl || sess.avatar_url) setAvatarUrl(sess.avatarUrl || sess.avatar_url)
           if (typeof sess.isCheckedIn === "boolean") {

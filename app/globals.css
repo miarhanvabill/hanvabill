@@ -393,3 +393,23 @@
     size: auto;
   }
 }
+
+/* Biometric Laser Scan Animation */
+@keyframes biometricScan {
+  0% {
+    top: 10%;
+    opacity: 0.3;
+  }
+  50% {
+    top: 85%;
+    opacity: 1;
+  }
+  100% {
+    top: 10%;
+    opacity: 0.3;
+  }
+}
+
+.animate-scan {
+  animation: biometricScan 2.2s ease-in-out infinite;
+}

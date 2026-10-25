@@ -13,6 +13,11 @@ export interface AttendanceRecord {
   working_hours?: string
   notes?: string
   staff_name?: string
+  verification_method?: string
+  biometric_verified?: boolean
+  face_match_score?: number
+  face_snapshot?: string
+  device_info?: string
 }
 
 export async function getAttendance(date: string) {
