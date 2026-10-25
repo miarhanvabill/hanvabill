@@ -75,11 +75,13 @@ export default function StaffTodayDashboard() {
     try {
       setLoading(true)
       const res = await getStaffDashboardData()
-      setData(res)
+      const d = (res as any)?.data || res || {}
+      setData(d)
+      const att = d?.attendance || {}
       const currentlyCheckedIn = Boolean(
-        res?.attendance?.status === "present" &&
-        res?.attendance?.check_in_time &&
-        !res?.attendance?.check_out_time
+        att?.status === "present" &&
+        att?.check_in_time &&
+        !att?.check_out_time
       )
       if (typeof window !== "undefined") {
         window.dispatchEvent(
@@ -150,15 +152,16 @@ export default function StaffTodayDashboard() {
     )
   }
 
-  const attendance = data?.attendance || {}
-  const metrics = data?.metrics || {}
-  const nextClient = data?.next_appointment
+  const d = (data as any)?.data || data || {}
+  const attendance = d?.attendance || {}
+  const metrics = d?.metrics || {}
+  const nextClient = d?.next_appointment
   const isCheckedIn = Boolean(
     attendance?.status === "present" &&
     attendance?.check_in_time &&
     !attendance?.check_out_time
   )
-  const isOnBreak = Boolean(attendance.active_break)
+  const isOnBreak = Boolean(attendance?.active_break)
 
   return (
     <div className="p-4 space-y-4">
@@ -201,7 +204,7 @@ export default function StaffTodayDashboard() {
             <Clock className="w-3.5 h-3.5 text-slate-400" />
             {isCheckedIn ? (
               <span>
-                Shift In: <strong className="text-white">{attendance.check_in_time || "09:30 AM"}</strong>
+                Shift In: <strong className="text-white">{attendance.check_in_time || "Now"}</strong>
                 {isOnBreak && <span className="text-amber-400 ml-1 font-bold">(On Break)</span>}
               </span>
             ) : attendance.check_out_time ? (

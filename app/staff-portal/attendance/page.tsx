@@ -116,7 +116,7 @@ export default function StaffAttendancePage() {
               </div>
             </div>
             <span className="text-sm font-extrabold text-slate-900 font-mono">
-              {current.checkInTime || current.check_in_time || "09:30 AM"}
+              {current.checkInTime || current.check_in_time || "--:--"}
             </span>
           </div>
 
@@ -126,12 +126,12 @@ export default function StaffAttendancePage() {
                 <Coffee className="w-4 h-4" />
               </div>
               <div>
-                <span className="text-xs font-bold text-slate-900">Break Recorded</span>
-                <p className="text-[11px] text-slate-500">Lunch & Tea Break</p>
+                <span className="text-xs font-bold text-slate-900">Shift Duration</span>
+                <p className="text-[11px] text-slate-500">Total Hours Today</p>
               </div>
             </div>
             <span className="text-sm font-extrabold text-slate-900 font-mono">
-              30 mins
+              {current.workingHours || current.working_hours || (current.checkInTime && !current.checkOutTime ? "On Shift" : "--:--")}
             </span>
           </div>
 

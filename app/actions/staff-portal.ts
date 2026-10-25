@@ -274,7 +274,8 @@ export async function getStaffSession() {
         SELECT check_in_time, check_out_time, status 
         FROM attendance 
         WHERE staff_id = ${session.staffId} 
-          AND date = CURRENT_DATE 
+          AND (date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR date = CURRENT_DATE)
+        ORDER BY id DESC
         LIMIT 1
       `.catch(() => []),
     ])
@@ -332,7 +333,7 @@ export async function getStaffDashboardData() {
   return await withStaffAuth(async ({ staff, sql, tenantId }) => {
     await ensureStaffPortalSchema(sql)
 
-    // 1. Today's attendance record
+    // 1. Today's attendance record (Asia/Kolkata timezone support)
     const attendanceRows = await sql`
       SELECT 
         id, 
@@ -351,7 +352,8 @@ export async function getStaffDashboardData() {
         END as working_hours
       FROM attendance
       WHERE staff_id = ${staff.id} 
-        AND date = CURRENT_DATE
+        AND (date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR date = CURRENT_DATE)
+      ORDER BY id DESC
       LIMIT 1
     `.catch(() => [])
 
@@ -368,7 +370,7 @@ export async function getStaffDashboardData() {
       FROM staff_breaks
       WHERE staff_id = ${staff.id}
         AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text)
-        AND attendance_date = CURRENT_DATE
+        AND (attendance_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR attendance_date = CURRENT_DATE)
         AND end_time IS NULL
       ORDER BY id DESC
       LIMIT 1
@@ -486,61 +488,64 @@ export async function getStaffDashboardData() {
 
     const nextAppointment = nextAppointments[0] || null
 
-    return {
-      success: true,
-      data: {
-        staff: {
-          id: Number(staff.id),
-          name: staff.name,
-          role: staff.role || "Staff",
-          phone: staff.phone,
-          avatar_url: staff.avatar_url || null,
-          commission_rate: staff.commission_rate || null,
-          upi_id: staff.upi_id || null,
-        },
-        attendance: {
-          marked: Boolean(todayAttendance),
-          status: todayAttendance?.status || "not_marked",
-          check_in_time: todayAttendance?.check_in_time || null,
-          check_out_time: todayAttendance?.check_out_time || null,
-          working_hours: todayAttendance?.working_hours || null,
-          notes: todayAttendance?.notes || null,
-          active_break: activeBreak
-            ? {
-                id: Number(activeBreak.id),
-                break_type: activeBreak.break_type,
-                start_time: activeBreak.start_time,
-              }
-            : null,
-          today_breaks: breaksToday.map((b: any) => ({
-            id: Number(b.id),
-            break_type: b.break_type,
-            start_time: b.start_time,
-            end_time: b.end_time,
-            duration_minutes: b.duration_minutes !== null ? Number(b.duration_minutes) : null,
-          })),
-        },
-        metrics: {
-          today_business_revenue: Math.round(todayBusinessRevenue * 100) / 100,
-          today_commission_earned: Math.round(todayCommissionEarned * 100) / 100,
-          services_completed_today: servicesCompletedToday,
-          tips_collected_today: Math.round(tipsToday * 100) / 100,
-        },
-        next_appointment: nextAppointment
+    const payload = {
+      staff: {
+        id: Number(staff.id),
+        name: staff.name,
+        role: staff.role || "Staff",
+        phone: staff.phone,
+        avatar_url: staff.avatar_url || null,
+        commission_rate: staff.commission_rate || null,
+        upi_id: staff.upi_id || null,
+      },
+      attendance: {
+        marked: Boolean(todayAttendance),
+        status: todayAttendance?.status || "not_marked",
+        check_in_time: todayAttendance?.check_in_time || null,
+        check_out_time: todayAttendance?.check_out_time || null,
+        working_hours: todayAttendance?.working_hours || null,
+        notes: todayAttendance?.notes || null,
+        active_break: activeBreak
           ? {
-              id: Number(nextAppointment.id),
-              booking_number: nextAppointment.booking_number,
-              booking_date: nextAppointment.booking_date,
-              booking_time: nextAppointment.booking_time,
-              status: nextAppointment.status,
-              total_amount: Number(nextAppointment.total_amount) || 0,
-              customer_name: nextAppointment.customer_name,
-              customer_phone: nextAppointment.customer_phone,
-              service_name: nextAppointment.service_name,
-              notes: nextAppointment.notes,
+              id: Number(activeBreak.id),
+              break_type: activeBreak.break_type,
+              start_time: activeBreak.start_time,
             }
           : null,
+        today_breaks: breaksToday.map((b: any) => ({
+          id: Number(b.id),
+          break_type: b.break_type,
+          start_time: b.start_time,
+          end_time: b.end_time,
+          duration_minutes: b.duration_minutes !== null ? Number(b.duration_minutes) : null,
+        })),
       },
+      metrics: {
+        today_business_revenue: Math.round(todayBusinessRevenue * 100) / 100,
+        today_commission_earned: Math.round(todayCommissionEarned * 100) / 100,
+        services_completed_today: servicesCompletedToday,
+        tips_collected_today: Math.round(tipsToday * 100) / 100,
+      },
+      next_appointment: nextAppointment
+        ? {
+            id: Number(nextAppointment.id),
+            booking_number: nextAppointment.booking_number,
+            booking_date: nextAppointment.booking_date,
+            booking_time: nextAppointment.booking_time,
+            status: nextAppointment.status,
+            total_amount: Number(nextAppointment.total_amount) || 0,
+            customer_name: nextAppointment.customer_name,
+            customer_phone: nextAppointment.customer_phone,
+            service_name: nextAppointment.service_name,
+            notes: nextAppointment.notes,
+          }
+        : null,
+    }
+
+    return {
+      success: true,
+      ...payload,
+      data: payload,
     }
   })
 }
@@ -667,18 +672,20 @@ export async function markStaffAttendance(
       }
     }
 
-    const nowFormattedTime = new Date().toLocaleTimeString("en-US", {
+    const nowFormattedTime = new Date().toLocaleTimeString("en-IN", {
+      timeZone: "Asia/Kolkata",
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
     })
 
-    // Find today's attendance record by staff.id and date
+    // Find today's attendance record by staff.id and date (with Asia/Kolkata timezone support)
     const existingRows = await sql`
       SELECT id, check_in_time, check_out_time, status, notes
       FROM attendance
       WHERE staff_id = ${staff.id} 
-        AND date = CURRENT_DATE 
+        AND (date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR date = CURRENT_DATE)
+      ORDER BY id DESC
       LIMIT 1
     `.catch(() => [])
 
@@ -690,7 +697,7 @@ export async function markStaffAttendance(
           UPDATE attendance 
           SET 
             status = 'present',
-            check_in_time = COALESCE(check_in_time, CURRENT_TIME),
+            check_in_time = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::time,
             check_out_time = NULL,
             notes = CASE 
               WHEN ${geoNote}::text IS NOT NULL THEN COALESCE(notes || ' | ' || ${geoNote}, ${geoNote})
@@ -705,7 +712,14 @@ export async function markStaffAttendance(
             INSERT INTO attendance (
               tenant_id, staff_id, date, status, check_in_time, notes, created_at, updated_at
             ) VALUES (
-              ${tenantId}, ${staff.id}, CURRENT_DATE, 'present', CURRENT_TIME, ${geoNote}, NOW(), NOW()
+              ${tenantId}, 
+              ${staff.id}, 
+              (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date, 
+              'present', 
+              (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::time, 
+              ${geoNote}, 
+              NOW(), 
+              NOW()
             )
           `
         } catch {
@@ -713,20 +727,22 @@ export async function markStaffAttendance(
             UPDATE attendance 
             SET 
               status = 'present',
-              check_in_time = COALESCE(check_in_time, CURRENT_TIME),
+              check_in_time = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::time,
               check_out_time = NULL,
               notes = CASE 
                 WHEN ${geoNote}::text IS NOT NULL THEN COALESCE(notes || ' | ' || ${geoNote}, ${geoNote})
                 ELSE notes 
               END,
               updated_at = NOW()
-            WHERE staff_id = ${staff.id} AND date = CURRENT_DATE
+            WHERE staff_id = ${staff.id} 
+              AND (date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR date = CURRENT_DATE)
           `
         }
       }
 
       revalidatePath("/attendance")
       revalidatePath("/staff-portal")
+      revalidatePath("/manage/staff")
       return { success: true, message: `Checked in successfully at ${nowFormattedTime}` }
     } else {
       // check_out
@@ -734,7 +750,7 @@ export async function markStaffAttendance(
         await sql`
           UPDATE attendance 
           SET 
-            check_out_time = CURRENT_TIME,
+            check_out_time = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::time,
             notes = CASE 
               WHEN ${geoNote}::text IS NOT NULL THEN COALESCE(notes || ' | ' || ${geoNote}, ${geoNote})
               ELSE notes 
@@ -748,26 +764,45 @@ export async function markStaffAttendance(
             INSERT INTO attendance (
               tenant_id, staff_id, date, status, check_in_time, check_out_time, notes, created_at, updated_at
             ) VALUES (
-              ${tenantId}, ${staff.id}, CURRENT_DATE, 'present', CURRENT_TIME, CURRENT_TIME, ${geoNote}, NOW(), NOW()
+              ${tenantId}, 
+              ${staff.id}, 
+              (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date, 
+              'present', 
+              (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::time, 
+              (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::time, 
+              ${geoNote}, 
+              NOW(), 
+              NOW()
             )
           `
         } catch {
           await sql`
             UPDATE attendance 
             SET 
-              check_out_time = CURRENT_TIME,
+              check_out_time = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::time,
               notes = CASE 
                 WHEN ${geoNote}::text IS NOT NULL THEN COALESCE(notes || ' | ' || ${geoNote}, ${geoNote})
                 ELSE notes 
               END,
               updated_at = NOW()
-            WHERE staff_id = ${staff.id} AND date = CURRENT_DATE
+            WHERE staff_id = ${staff.id} 
+              AND (date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR date = CURRENT_DATE)
           `
         }
       }
 
+      // Auto-end any active break when checking out
+      await sql`
+        UPDATE staff_breaks
+        SET end_time = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::time
+        WHERE staff_id = ${staff.id}
+          AND (attendance_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR attendance_date = CURRENT_DATE)
+          AND end_time IS NULL
+      `.catch(() => {})
+
       revalidatePath("/attendance")
       revalidatePath("/staff-portal")
+      revalidatePath("/manage/staff")
       return { success: true, message: `Checked out successfully at ${nowFormattedTime}` }
     }
   })
@@ -867,8 +902,8 @@ export async function getStaffAttendance(month?: string) {
         END as working_hours
       FROM attendance
       WHERE staff_id = ${staff.id} 
-        AND date = CURRENT_DATE 
-        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text)
+        AND (date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR date = CURRENT_DATE)
+      ORDER BY id DESC
       LIMIT 1
     `.catch(() => [])
 
