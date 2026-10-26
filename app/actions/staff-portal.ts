@@ -987,7 +987,7 @@ export async function logStaffBreak(
         SELECT id FROM staff_breaks
         WHERE staff_id = ${staff.id}
           AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text)
-          AND attendance_date = CURRENT_DATE
+          AND (attendance_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR attendance_date = CURRENT_DATE)
           AND end_time IS NULL
         LIMIT 1
       `
@@ -1000,11 +1000,14 @@ export async function logStaffBreak(
         INSERT INTO staff_breaks (
           tenant_id, staff_id, attendance_date, break_type, start_time, created_at
         ) VALUES (
-          ${tenantId}, ${staff.id}, CURRENT_DATE, ${breakType || "lunch"}, CURRENT_TIME, NOW()
+          ${tenantId}, ${staff.id}, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date, ${breakType || "lunch"}, (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::time, NOW()
         )
       `
 
-      revalidatePath("/staff-portal")
+      try {
+        revalidatePath("/staff-portal")
+        revalidatePath("/")
+      } catch {}
       return { success: true, message: `${breakType.toUpperCase()} break started at ${nowFormattedTime}` }
     } else {
       // action === 'end'
@@ -1012,7 +1015,7 @@ export async function logStaffBreak(
         SELECT id, start_time FROM staff_breaks
         WHERE staff_id = ${staff.id}
           AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text)
-          AND attendance_date = CURRENT_DATE
+          AND (attendance_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR attendance_date = CURRENT_DATE)
           AND end_time IS NULL
         ORDER BY id DESC
         LIMIT 1
@@ -1024,11 +1027,14 @@ export async function logStaffBreak(
 
       await sql`
         UPDATE staff_breaks 
-        SET end_time = CURRENT_TIME 
+        SET end_time = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::time 
         WHERE id = ${activeBreak[0].id}
       `
 
-      revalidatePath("/staff-portal")
+      try {
+        revalidatePath("/staff-portal")
+        revalidatePath("/")
+      } catch {}
       return { success: true, message: `Break ended successfully at ${nowFormattedTime}` }
     }
   })
@@ -1094,7 +1100,7 @@ export async function getStaffAttendance(month?: string) {
         END as working_hours
       FROM attendance
       WHERE staff_id = ${staff.id} 
-        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text)
+        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text OR tenant_id IS NULL)
       ORDER BY date DESC
       LIMIT 31
     `.catch(() => [])
@@ -1110,7 +1116,7 @@ export async function getStaffAttendance(month?: string) {
         COUNT(*) as total_days
       FROM attendance
       WHERE staff_id = ${staff.id} 
-        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text)
+        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text OR tenant_id IS NULL)
         AND TO_CHAR(date, 'YYYY-MM') = ${currentMonthPrefix}
     `.catch(() => [{ present_days: 0, absent_days: 0, late_days: 0, half_days: 0, total_days: 0 }])
 
@@ -1558,7 +1564,11 @@ export async function applyStaffLeave(data: {
       RETURNING id, leave_type, start_date, end_date, reason, status, created_at
     `
 
-    revalidatePath("/staff-portal")
+    try {
+      revalidatePath("/staff-portal")
+      revalidatePath("/staff-portal/leaves")
+      revalidatePath("/")
+    } catch {}
     return {
       success: true,
       message: "Leave application submitted successfully for review",
@@ -1856,7 +1866,7 @@ export async function verifyFaceWithAi(params: {
   reason: string
 }> {
   return await withStaffAuth(async ({ staff, sql, tenantId }) => {
-    const enrolledPhoto = staff.avatar_url || null
+    let enrolledPhoto = staff.avatar_url || null
     if (!enrolledPhoto) {
       return {
         success: true,
@@ -1865,6 +1875,20 @@ export async function verifyFaceWithAi(params: {
         isRealLiveHuman: true,
         isDifferentPerson: false,
         reason: "Initial biometric face enrollment",
+      }
+    }
+
+    // If enrolled photo is an HTTP/HTTPS URL, fetch and convert to base64 so Gemini receives clean image data
+    if (enrolledPhoto.startsWith("http://") || enrolledPhoto.startsWith("https://")) {
+      try {
+        const fetchRes = await fetch(enrolledPhoto, { signal: AbortSignal.timeout(4000) })
+        if (fetchRes.ok) {
+          const arrayBuf = await fetchRes.arrayBuffer()
+          const mime = fetchRes.headers.get("content-type") || "image/jpeg"
+          enrolledPhoto = `data:${mime};base64,${Buffer.from(arrayBuf).toString("base64")}`
+        }
+      } catch (err) {
+        console.warn("[verifyFaceWithAi] Remote avatar fetch notice:", err)
       }
     }
 

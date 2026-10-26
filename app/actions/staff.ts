@@ -691,7 +691,7 @@ export async function setStaffPin(staffId: number, pin: string) {
           pin_hash = ${pinHash},
           portal_enabled = true,
           updated_at = CURRENT_TIMESTAMP
-        WHERE id = ${staffId} AND tenant_id = ${tenantId}
+        WHERE id = ${staffId} AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text OR tenant_id = ${Number(tenantId)})
         RETURNING id, name, portal_enabled
       `
 
@@ -732,7 +732,7 @@ export async function toggleStaffPortal(staffId: number, enabled: boolean) {
         SET
           portal_enabled = ${enabled},
           updated_at = CURRENT_TIMESTAMP
-        WHERE id = ${staffId} AND tenant_id = ${tenantId}
+        WHERE id = ${staffId} AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text OR tenant_id = ${Number(tenantId)})
         RETURNING id, name, portal_enabled
       `
 
