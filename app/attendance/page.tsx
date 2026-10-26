@@ -30,6 +30,13 @@ import {
   Loader2,
   FileText,
   Sparkles,
+  Coffee,
+  MessageCircle,
+  RefreshCw,
+  Phone,
+  ShieldCheck,
+  Scissors,
+  UserCheck,
 } from "lucide-react"
 import { getStaff, type Staff } from "@/app/actions/staff"
 import {
@@ -38,6 +45,7 @@ import {
   getTenantLeaveRequests,
   reviewStaffLeave,
   createStaffLeaveRequest,
+  getLiveFloorRoster,
   type AttendanceRecord,
   type StaffLeaveRequest,
 } from "@/app/actions/attendance"
@@ -61,6 +69,12 @@ export default function AttendancePage() {
   const [leaveSearch, setLeaveSearch] = useState("")
   const [loadingLeaves, setLoadingLeaves] = useState(false)
   const [reviewingId, setReviewingId] = useState<number | null>(null)
+
+  // Live Floor Roster state
+  const [liveRoster, setLiveRoster] = useState<any[]>([])
+  const [rosterCounts, setRosterCounts] = useState({ total: 0, in_service: 0, on_break: 0, ready: 0, off_duty: 0 })
+  const [loadingRoster, setLoadingRoster] = useState(false)
+  const [rosterFilter, setRosterFilter] = useState("all")
 
   // New Leave Request Dialog
   const [isNewLeaveOpen, setIsNewLeaveOpen] = useState(false)
@@ -101,6 +115,23 @@ export default function AttendancePage() {
     }
   }, [])
 
+  // Fetch Live Floor Roster
+  const loadFloorRoster = useCallback(async () => {
+    setLoadingRoster(true)
+    try {
+      const res = await getLiveFloorRoster()
+      if (res.success) {
+        setLiveRoster(res.roster || [])
+        setRosterCounts(res.counts || { total: 0, in_service: 0, on_break: 0, ready: 0, off_duty: 0 })
+      }
+    } catch (error) {
+      console.error("Error loading floor roster:", error)
+      setLiveRoster([])
+    } finally {
+      setLoadingRoster(false)
+    }
+  }, [])
+
   useEffect(() => {
     loadAttendanceData()
   }, [loadAttendanceData])
@@ -108,6 +139,12 @@ export default function AttendancePage() {
   useEffect(() => {
     loadLeaveData()
   }, [loadLeaveData])
+
+  useEffect(() => {
+    if (activeTab === "roster") {
+      loadFloorRoster()
+    }
+  }, [activeTab, loadFloorRoster])
 
   // CSV Export for Daily Attendance
   const handleExportCSV = () => {
@@ -300,6 +337,12 @@ export default function AttendancePage() {
     return matchesQuery && leave.status === leaveStatusFilter
   })
 
+  // Safe filtering for live floor roster
+  const filteredRoster = liveRoster.filter((member) => {
+    if (rosterFilter === "all") return true
+    return member.liveState === rosterFilter
+  })
+
   const pendingLeavesCount = leaveRequests.filter((l) => l.status === "pending").length
   const approvedLeavesCount = leaveRequests.filter((l) => l.status === "approved").length
   const rejectedLeavesCount = leaveRequests.filter((l) => l.status === "rejected").length
@@ -487,6 +530,15 @@ export default function AttendancePage() {
                 {pendingLeavesCount > 0 && (
                   <Badge className="ml-1.5 h-5 px-1.5 bg-amber-500 text-white rounded-full text-xs">
                     {pendingLeavesCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="roster" className="gap-2 px-5 py-2 relative">
+                <Users className="w-4 h-4 text-emerald-600" />
+                Live Floor Roster
+                {rosterCounts.in_service > 0 && (
+                  <Badge className="ml-1.5 h-5 px-1.5 bg-emerald-600 text-white rounded-full text-xs">
+                    {rosterCounts.in_service} active
                   </Badge>
                 )}
               </TabsTrigger>
@@ -733,7 +785,6 @@ export default function AttendancePage() {
               </Card>
             </div>
           )}
-
           {/* TAB 2: LEAVE REQUESTS */}
           {activeTab === "leaves" && (
             <div className="space-y-6">
@@ -980,6 +1031,341 @@ export default function AttendancePage() {
                   </div>
                 </CardContent>
               </Card>
+            </div>
+          )}
+
+          {/* TAB 3: LIVE FLOOR ROSTER */}
+          {activeTab === "roster" && (
+            <div className="space-y-6">
+              {/* Floor Snapshot Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card className="border-emerald-200 bg-emerald-50/50 shadow-sm">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700">In Service</p>
+                      <p className="text-2xl font-bold text-emerald-900 mt-1">{rosterCounts.in_service}</p>
+                      <p className="text-[11px] text-emerald-600 mt-0.5">Servicing clients right now</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700">
+                      <Scissors className="w-5 h-5" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-amber-200 bg-amber-50/50 shadow-sm">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-amber-700">On Break</p>
+                      <p className="text-2xl font-bold text-amber-900 mt-1">{rosterCounts.on_break}</p>
+                      <p className="text-[11px] text-amber-600 mt-0.5">Lunch / Tea / Rest</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700">
+                      <Coffee className="w-5 h-5" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-sky-200 bg-sky-50/50 shadow-sm">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-sky-700">Ready on Floor</p>
+                      <p className="text-2xl font-bold text-sky-900 mt-1">{rosterCounts.ready}</p>
+                      <p className="text-[11px] text-sky-600 mt-0.5">Checked in & available</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center text-sky-700">
+                      <UserCheck className="w-5 h-5" />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-slate-200 bg-slate-50/70 shadow-sm">
+                  <CardContent className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-600">Off Duty</p>
+                      <p className="text-2xl font-bold text-slate-900 mt-1">{rosterCounts.off_duty}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Not punched or checked out</p>
+                    </div>
+                    <div className="w-10 h-10 rounded-xl bg-slate-200/80 flex items-center justify-center text-slate-600">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Roster Controls & Filters */}
+              <Card className="shadow-sm border-slate-200">
+                <CardContent className="p-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant={rosterFilter === "all" ? "default" : "outline"}
+                        onClick={() => setRosterFilter("all")}
+                        className={rosterFilter === "all" ? "bg-slate-900 text-white text-xs h-8" : "text-xs h-8"}
+                      >
+                        All Staff ({liveRoster.length})
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={rosterFilter === "in_service" ? "default" : "outline"}
+                        onClick={() => setRosterFilter("in_service")}
+                        className={rosterFilter === "in_service" ? "bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-8" : "text-xs h-8 text-emerald-700 border-emerald-200 hover:bg-emerald-50"}
+                      >
+                        In Service ({rosterCounts.in_service})
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={rosterFilter === "on_break" ? "default" : "outline"}
+                        onClick={() => setRosterFilter("on_break")}
+                        className={rosterFilter === "on_break" ? "bg-amber-600 hover:bg-amber-700 text-white text-xs h-8" : "text-xs h-8 text-amber-700 border-amber-200 hover:bg-amber-50"}
+                      >
+                        On Break ({rosterCounts.on_break})
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={rosterFilter === "ready" ? "default" : "outline"}
+                        onClick={() => setRosterFilter("ready")}
+                        className={rosterFilter === "ready" ? "bg-sky-600 hover:bg-sky-700 text-white text-xs h-8" : "text-xs h-8 text-sky-700 border-sky-200 hover:bg-sky-50"}
+                      >
+                        Ready ({rosterCounts.ready})
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={rosterFilter === "off_duty" ? "default" : "outline"}
+                        onClick={() => setRosterFilter("off_duty")}
+                        className={rosterFilter === "off_duty" ? "bg-slate-600 text-white text-xs h-8" : "text-xs h-8 text-slate-600"}
+                      >
+                        Off Duty ({rosterCounts.off_duty})
+                      </Button>
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={loadFloorRoster}
+                        disabled={loadingRoster}
+                        className="h-8 text-xs gap-1.5"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${loadingRoster ? "animate-spin" : ""}`} />
+                        Refresh Floor
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Roster Grid */}
+              {loadingRoster && liveRoster.length === 0 ? (
+                <div className="py-16 text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto mb-3" />
+                  <p className="text-sm font-medium text-slate-600">Syncing live floor activity...</p>
+                </div>
+              ) : filteredRoster.length === 0 ? (
+                <div className="bg-white border rounded-xl p-12 text-center">
+                  <Users className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                  <p className="text-base font-semibold text-slate-700">No staff in this status</p>
+                  <p className="text-xs text-slate-400 mt-1">Try switching filter to 'All Staff' to view everyone.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {filteredRoster.map((member) => {
+                    const statusColorMap = {
+                      in_service: {
+                        ring: "ring-2 ring-emerald-500",
+                        badgeBg: "bg-emerald-100 text-emerald-800 border-emerald-300",
+                        badgeLabel: "In Service",
+                        border: "border-emerald-200",
+                        cardBg: "bg-gradient-to-br from-white to-emerald-50/20",
+                      },
+                      on_break: {
+                        ring: "ring-2 ring-amber-500",
+                        badgeBg: "bg-amber-100 text-amber-800 border-amber-300",
+                        badgeLabel: "On Break",
+                        border: "border-amber-200",
+                        cardBg: "bg-gradient-to-br from-white to-amber-50/20",
+                      },
+                      ready: {
+                        ring: "ring-2 ring-sky-500",
+                        badgeBg: "bg-sky-100 text-sky-800 border-sky-300",
+                        badgeLabel: "Ready on Floor",
+                        border: "border-sky-200",
+                        cardBg: "bg-gradient-to-br from-white to-sky-50/20",
+                      },
+                      off_duty: {
+                        ring: "ring-1 ring-slate-200",
+                        badgeBg: "bg-slate-100 text-slate-600 border-slate-200",
+                        badgeLabel: "Off Duty",
+                        border: "border-slate-200",
+                        cardBg: "bg-white",
+                      },
+                    }
+
+                    const st = statusColorMap[member.liveState as keyof typeof statusColorMap] || statusColorMap.off_duty
+                    const cleanPhone = (member.phone || "").replace(/\D/g, "").slice(-10)
+
+                    return (
+                      <Card
+                        key={member.id}
+                        className={`overflow-hidden transition-all duration-200 hover:shadow-md ${st.border} ${st.cardBg}`}
+                      >
+                        <CardContent className="p-5 flex flex-col justify-between h-full space-y-4">
+                          <div>
+                            {/* Member Header */}
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <div className="relative">
+                                  {member.avatar_url ? (
+                                    <img
+                                      src={member.avatar_url}
+                                      alt={member.name}
+                                      className={`w-12 h-12 rounded-full object-cover ${st.ring}`}
+                                    />
+                                  ) : (
+                                    <div
+                                      className={`w-12 h-12 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-base ${st.ring}`}
+                                    >
+                                      {member.name.charAt(0).toUpperCase()}
+                                    </div>
+                                  )}
+
+                                  {/* Live pulse dot */}
+                                  {member.liveState === "in_service" && (
+                                    <span className="absolute bottom-0 right-0 flex h-3.5 w-3.5">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                      <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white"></span>
+                                    </span>
+                                  )}
+                                  {member.liveState === "on_break" && (
+                                    <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-amber-500 border-2 border-white"></span>
+                                  )}
+                                  {member.liveState === "ready" && (
+                                    <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-sky-500 border-2 border-white"></span>
+                                  )}
+                                </div>
+
+                                <div>
+                                  <h3 className="font-semibold text-slate-900 text-base leading-tight">{member.name}</h3>
+                                  <p className="text-xs text-slate-500 mt-0.5">{member.role}</p>
+                                </div>
+                              </div>
+
+                              <Badge className={`text-[11px] font-semibold gap-1 px-2.5 py-1 ${st.badgeBg}`}>
+                                {member.liveState === "in_service" && <Scissors className="w-3 h-3 text-emerald-700" />}
+                                {member.liveState === "on_break" && <Coffee className="w-3 h-3 text-amber-700" />}
+                                {member.liveState === "ready" && <UserCheck className="w-3 h-3 text-sky-700" />}
+                                {member.liveState === "off_duty" && <Clock className="w-3 h-3 text-slate-500" />}
+                                {st.badgeLabel}
+                              </Badge>
+                            </div>
+
+                            {/* Biometric Verification Badge & Score */}
+                            {member.biometric_verified && (
+                              <div className="mt-3 flex items-center justify-between px-2.5 py-1.5 bg-emerald-50/80 border border-emerald-200/60 rounded-lg text-xs text-emerald-800">
+                                <div className="flex items-center gap-1.5 font-medium">
+                                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>Face ID Verified</span>
+                                </div>
+                                {member.face_match_score && (
+                                  <span className="font-semibold text-[11px] text-emerald-700 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
+                                    {member.face_match_score}% match
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Current Activity Box */}
+                            <div className="mt-4">
+                              {member.liveState === "in_service" && member.activeAppointment && (
+                                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200/80 space-y-1.5">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-semibold text-emerald-900">Current Client</span>
+                                    <span className="text-[11px] text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md font-medium">
+                                      {member.activeAppointment.time || "Active Now"}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm font-bold text-slate-900">{member.activeAppointment.customerName}</p>
+                                  <div className="flex items-center gap-1 text-xs text-emerald-800 font-medium">
+                                    <Sparkles className="w-3 h-3 text-emerald-600 flex-shrink-0" />
+                                    <span className="truncate">{member.activeAppointment.serviceName || "Treatment Service"}</span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {member.liveState === "on_break" && (
+                                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200/80 space-y-1">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-semibold text-amber-900 capitalize">
+                                      {member.breakInfo?.type || "Rest"} Break
+                                    </span>
+                                    <span className="text-[11px] text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md font-medium">
+                                      Started {member.breakInfo?.startTime || ""}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-amber-800">
+                                    Break duration: <strong className="font-semibold">{member.breakInfo?.elapsedMinutes || 0} mins</strong>
+                                  </p>
+                                </div>
+                              )}
+
+                              {member.liveState === "ready" && (
+                                <div className="p-3 bg-sky-50 rounded-xl border border-sky-200/80 space-y-1">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-semibold text-sky-900">Available at Chair</span>
+                                    <span className="text-[11px] text-sky-700 bg-sky-100 px-2 py-0.5 rounded-md font-medium">
+                                      In: {member.check_in_time || "Morning"}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-sky-800">
+                                    Ready on salon floor for walk-ins or upcoming appointments.
+                                  </p>
+                                </div>
+                              )}
+
+                              {member.liveState === "off_duty" && (
+                                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
+                                  <p className="text-xs font-medium text-slate-700">
+                                    {member.check_out_time
+                                      ? `Clocked out at ${member.check_out_time}`
+                                      : "Not clocked in today"}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500">
+                                    {member.check_in_time ? `Punched in: ${member.check_in_time}` : "Awaiting Face ID check-in"}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Quick Floor Manager Actions */}
+                          {cleanPhone && (
+                            <div className="pt-2 border-t border-slate-100 flex items-center gap-2">
+                              <a
+                                href={`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(
+                                  `Hi ${member.name}, checking in from Salon Floor Desk.`
+                                )}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 inline-flex items-center justify-center gap-1.5 h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-semibold transition-colors"
+                              >
+                                <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                                WhatsApp
+                              </a>
+                              <a
+                                href={`tel:${cleanPhone}`}
+                                className="flex-1 inline-flex items-center justify-center gap-1.5 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors"
+                              >
+                                <Phone className="w-3.5 h-3.5 text-slate-600" />
+                                Call
+                              </a>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -16,7 +16,12 @@ import {
   FileText,
   Filter,
   Loader2,
+  MessageCircle,
+  Timer,
+  Sparkles,
 } from "lucide-react"
+import TreatmentTimerModal from "@/components/staff-portal/TreatmentTimerModal"
+import StylingNotesModal from "@/components/staff-portal/StylingNotesModal"
 
 export default function StaffSchedulePage() {
   const [selectedDay, setSelectedDay] = useState<"today" | "tomorrow">("today")
@@ -26,9 +31,33 @@ export default function StaffSchedulePage() {
   const [appointments, setAppointments] = useState<any[]>([])
   const [toastMessage, setToastMessage] = useState<string | null>(null)
 
+  // Treatment Timer & Styling Notes modal state
+  const [activeTimerApp, setActiveTimerApp] = useState<any>(null)
+  const [activeNotesApp, setActiveNotesApp] = useState<any>(null)
+
   const showToast = (msg: string) => {
     setToastMessage(msg)
     setTimeout(() => setToastMessage(null), 3000)
+  }
+
+  const getWhatsAppUrl = (
+    phone: string,
+    customerName: string,
+    bookingTime: string,
+    serviceName: string,
+    status: string
+  ) => {
+    const raw = (phone || "").replace(/\D/g, "")
+    const cleanPhone = raw.length === 10 ? `91${raw}` : raw
+    const salon = "our salon"
+
+    let msg = `Hi ${customerName}, this is your stylist from ${salon}. Looking forward to your appointment today at ${formatBookingTime(
+      bookingTime
+    )} for ${serviceName}. Please let us know if you have any questions!`
+    if (status === "arrived") {
+      msg = `Hi ${customerName}, your chair is ready at ${salon}! Looking forward to serving you.`
+    }
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
   }
 
   const loadSchedule = async (day = selectedDay) => {
@@ -234,16 +263,27 @@ export default function StaffSchedulePage() {
                   </div>
                 )}
 
+                {/* Past Styling Formula Chip */}
+                {(app.past_formula || app.pastFormula) && (
+                  <div className="mt-2 p-2 bg-purple-50 text-purple-900 border border-purple-200/60 rounded-xl text-xs flex items-start gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600 shrink-0 mt-0.5" />
+                    <div className="min-w-0 flex-1">
+                      <span className="font-bold text-[10px] uppercase tracking-wider block">Past Formula:</span>
+                      <p className="font-mono text-[11px] truncate">{app.past_formula || app.pastFormula}</p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Action Bar (Arrived -> In Service -> Completed) */}
-                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-1.5 overflow-x-auto">
                   {isConfirmed && (
                     <button
                       disabled={isLoading}
                       onClick={() => handleStatusUpdate(app.id, "arrived")}
-                      className="flex-1 min-w-0 h-9 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
+                      className="flex-1 min-w-[90px] h-9 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Client Arrived</span>
+                      <span className="truncate">Arrived</span>
                     </button>
                   )}
 
@@ -251,10 +291,10 @@ export default function StaffSchedulePage() {
                     <button
                       disabled={isLoading}
                       onClick={() => handleStatusUpdate(app.id, "in_progress")}
-                      className="flex-1 min-w-0 h-9 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
+                      className="flex-1 min-w-[90px] h-9 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
                     >
                       <Play className="w-3.5 h-3.5 fill-white shrink-0" />
-                      <span className="truncate">Start Service</span>
+                      <span className="truncate">Start</span>
                     </button>
                   )}
 
@@ -262,27 +302,72 @@ export default function StaffSchedulePage() {
                     <button
                       disabled={isLoading}
                       onClick={() => handleStatusUpdate(app.id, "completed")}
-                      className="flex-1 min-w-0 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm"
+                      className="flex-1 min-w-[90px] h-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
                     >
                       <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />
-                      <span className="truncate">Mark Completed</span>
+                      <span className="truncate">Done</span>
                     </button>
                   )}
 
                   {isCompleted && (
-                    <div className="flex-1 min-w-0 h-9 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold flex items-center justify-center gap-1.5 border border-emerald-200/50">
+                    <div className="flex-1 min-w-[90px] h-9 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold flex items-center justify-center gap-1 border border-emerald-200/50">
                       <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">Service Finished</span>
+                      <span className="truncate">Done</span>
                     </div>
                   )}
 
+                  {/* Treatment Processing Timer Button */}
+                  {isInService && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTimerApp(app)}
+                      className="h-9 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white text-xs font-bold transition flex items-center gap-1 shrink-0 shadow-sm"
+                      title="Timer"
+                    >
+                      <Timer className="w-3.5 h-3.5 text-emerald-400" />
+                      <span className="hidden xs:inline">Timer</span>
+                    </button>
+                  )}
+
+                  {/* Formula / Notes Button */}
+                  <button
+                    type="button"
+                    onClick={() => setActiveNotesApp(app)}
+                    className="h-9 px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 active:scale-95 text-purple-700 border border-purple-200 text-xs font-bold transition flex items-center gap-1 shrink-0 shadow-sm"
+                    title="Formula & Notes"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                    <span className="hidden xs:inline">Notes</span>
+                  </button>
+
+                  {/* Call Button */}
                   {(app.customerPhone || app.customer_phone) && (
                     <a
                       href={`tel:${app.customerPhone || app.customer_phone}`}
-                      className="h-9 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 flex items-center justify-center text-xs font-semibold gap-1 transition shrink-0"
+                      className="h-9 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 flex items-center justify-center text-xs font-semibold gap-1 transition shrink-0"
+                      title="Call Client"
                     >
                       <Phone className="w-3.5 h-3.5 text-slate-600" />
-                      <span>Call</span>
+                    </a>
+                  )}
+
+                  {/* WhatsApp Button */}
+                  {(app.customerPhone || app.customer_phone) && (
+                    <a
+                      href={getWhatsAppUrl(
+                        app.customerPhone || app.customer_phone,
+                        customerName,
+                        bookingTime,
+                        serviceName,
+                        app.status
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="h-9 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold flex items-center justify-center gap-1 shrink-0 shadow-sm transition"
+                      title="WhatsApp Client"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span className="hidden xs:inline">WhatsApp</span>
                     </a>
                   )}
                 </div>
@@ -290,6 +375,34 @@ export default function StaffSchedulePage() {
             )
           })}
         </div>
+      )}
+
+      {/* Treatment Processing Timer Modal */}
+      {activeTimerApp && (
+        <TreatmentTimerModal
+          isOpen={Boolean(activeTimerApp)}
+          onClose={() => setActiveTimerApp(null)}
+          bookingId={activeTimerApp.id}
+          customerName={activeTimerApp.customer_name || activeTimerApp.customerName || "Client"}
+          serviceName={activeTimerApp.services || activeTimerApp.service_name || "Service"}
+        />
+      )}
+
+      {/* Styling Notes Modal */}
+      {activeNotesApp && (
+        <StylingNotesModal
+          isOpen={Boolean(activeNotesApp)}
+          onClose={() => setActiveNotesApp(null)}
+          customerName={activeNotesApp.customer_name || activeNotesApp.customerName || "Client"}
+          customerPhone={activeNotesApp.customer_phone || activeNotesApp.customerPhone || ""}
+          customerId={activeNotesApp.customer_id || activeNotesApp.customerId || null}
+          serviceName={activeNotesApp.services || activeNotesApp.service_name || "Service"}
+          initialFormula={activeNotesApp.past_formula || activeNotesApp.pastFormula}
+          onSaved={(newFormula) => {
+            activeNotesApp.past_formula = newFormula
+            activeNotesApp.pastFormula = newFormula
+          }}
+        />
       )}
     </div>
   )

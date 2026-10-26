@@ -117,7 +117,26 @@ export async function ensureStaffPortalSchema(sql: any): Promise<void> {
     await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS face_descriptor TEXT;`.catch(() => {})
     await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS face_enrolled_at TIMESTAMPTZ;`.catch(() => {})
 
-    // 6. Performance indexes
+    // 6. Customer styling & formula notes table
+    await sql`
+      CREATE TABLE IF NOT EXISTS customer_styling_notes (
+        id SERIAL PRIMARY KEY,
+        tenant_id VARCHAR(100) NOT NULL,
+        customer_id INTEGER,
+        customer_phone VARCHAR(50),
+        customer_name VARCHAR(255),
+        staff_id INTEGER NOT NULL,
+        staff_name VARCHAR(255),
+        service_name VARCHAR(255),
+        formula TEXT,
+        preferences TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `.catch(() => {})
+    await sql`CREATE INDEX IF NOT EXISTS idx_styling_notes_phone ON customer_styling_notes(tenant_id, customer_phone);`.catch(() => {})
+
+    // 7. Performance indexes
     await sql`CREATE INDEX IF NOT EXISTS idx_staff_leaves_tenant_staff ON staff_leaves(tenant_id, staff_id);`.catch(() => {})
     await sql`CREATE INDEX IF NOT EXISTS idx_staff_breaks_tenant_staff ON staff_breaks(tenant_id, staff_id, attendance_date);`.catch(() => {})
     await sql`CREATE INDEX IF NOT EXISTS idx_staff_commission_splits_staff ON staff_commission_splits(tenant_id, staff_id, created_at);`.catch(() => {})
@@ -494,9 +513,21 @@ export async function getStaffDashboardData() {
         b.status,
         b.total_amount,
         b.notes,
+        c.id as customer_id,
         COALESCE(c.full_name, 'Walk-in Client') as customer_name,
         COALESCE(c.phone_number, '') as customer_phone,
-        COALESCE(NULLIF(STRING_AGG(DISTINCT s.name, ', '), ''), 'Salon Service') AS service_name
+        COALESCE(NULLIF(STRING_AGG(DISTINCT s.name, ', '), ''), 'Salon Service') AS service_name,
+        COALESCE((
+          SELECT formula 
+          FROM customer_styling_notes csn 
+          WHERE (csn.tenant_id = ${tenantId} OR csn.tenant_id::text = ${tenantId}::text)
+            AND (
+              (c.phone_number IS NOT NULL AND csn.customer_phone = c.phone_number)
+              OR (c.id IS NOT NULL AND csn.customer_id = c.id)
+            )
+          ORDER BY csn.id DESC 
+          LIMIT 1
+        ), '') as past_formula
       FROM bookings b
       LEFT JOIN customers c ON b.customer_id = c.id AND (c.tenant_id = ${tenantId} OR c.tenant_id::text = ${tenantId}::text)
       LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id::text = ${tenantId}::text OR bs.tenant_id IS NULL)
@@ -509,7 +540,7 @@ export async function getStaffDashboardData() {
           OR b.booking_date >= CURRENT_DATE
         )
         AND LOWER(TRIM(b.status)) NOT IN ('cancelled', 'completed')
-      GROUP BY b.id, b.booking_number, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, c.full_name, c.phone_number
+      GROUP BY b.id, b.booking_number, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, c.id, c.full_name, c.phone_number
       ORDER BY 
         CASE 
           WHEN LOWER(TRIM(b.status)) IN ('in_progress', 'in_service') THEN 1
@@ -534,10 +565,12 @@ export async function getStaffDashboardData() {
           booking_time: rawNext.booking_time,
           status: (rawNext.status || "confirmed").toLowerCase().trim(),
           total_amount: Number(rawNext.total_amount) || 0,
+          customer_id: rawNext.customer_id ? Number(rawNext.customer_id) : null,
           customer_name: rawNext.customer_name || "Walk-in Client",
           customer_phone: rawNext.customer_phone || "",
           service_name: rawNext.service_name || "Salon Service",
           notes: rawNext.notes || null,
+          past_formula: rawNext.past_formula || null,
         }
       : null
 
@@ -1389,10 +1422,22 @@ export async function getStaffAppointments(date?: string) {
         b.status,
         b.total_amount,
         b.notes,
+        c.id as customer_id,
         COALESCE(c.full_name, 'Guest Client') as customer_name,
         COALESCE(c.phone_number, '') as customer_phone,
         COALESCE(NULLIF(STRING_AGG(DISTINCT s.name, ', '), ''), 'Salon Service') AS service_name,
-        COALESCE(NULLIF(SUM(s.duration_minutes), 0), 45) AS duration_minutes
+        COALESCE(NULLIF(SUM(s.duration_minutes), 0), 45) AS duration_minutes,
+        COALESCE((
+          SELECT formula 
+          FROM customer_styling_notes csn 
+          WHERE (csn.tenant_id = ${tenantId} OR csn.tenant_id::text = ${tenantId}::text)
+            AND (
+              (c.phone_number IS NOT NULL AND csn.customer_phone = c.phone_number)
+              OR (c.id IS NOT NULL AND csn.customer_id = c.id)
+            )
+          ORDER BY csn.id DESC 
+          LIMIT 1
+        ), '') as past_formula
       FROM bookings b
       LEFT JOIN customers c ON b.customer_id = c.id AND (c.tenant_id = ${tenantId} OR c.tenant_id::text = ${tenantId}::text)
       LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id::text = ${tenantId}::text OR bs.tenant_id IS NULL)
@@ -1409,7 +1454,7 @@ export async function getStaffAppointments(date?: string) {
             OR b.booking_date = CURRENT_DATE
           ))
         )
-      GROUP BY b.id, b.booking_number, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, c.full_name, c.phone_number
+      GROUP BY b.id, b.booking_number, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, c.id, c.full_name, c.phone_number
       ORDER BY b.booking_time ASC
     `.catch((err) => {
       console.error("[getStaffAppointments] error:", err)
@@ -1432,6 +1477,8 @@ export async function getStaffAppointments(date?: string) {
         totalAmount: Number(a.total_amount) || 0,
         durationMinutes: Number(a.duration_minutes) || 45,
         notes: a.notes,
+        customer_id: a.customer_id ? Number(a.customer_id) : null,
+        customerId: a.customer_id ? Number(a.customer_id) : null,
         customer_name: a.customer_name,
         customerName: a.customer_name,
         customer_phone: a.customer_phone,
@@ -1439,6 +1486,8 @@ export async function getStaffAppointments(date?: string) {
         services: a.service_name,
         service_name: a.service_name,
         serviceName: a.service_name,
+        past_formula: a.past_formula || null,
+        pastFormula: a.past_formula || null,
       })),
     }
   })
@@ -1915,6 +1964,102 @@ export async function verifyFaceWithAi(params: {
       isRealLiveHuman: true,
       isDifferentPerson: false,
       reason: "Verified via on-device computer vision engine",
+    }
+  })
+}
+
+/**
+ * Saves a stylist consultation note and chemical formula for a customer.
+ */
+export async function saveCustomerStylingNote(data: {
+  customerId?: number | null
+  customerPhone?: string
+  customerName?: string
+  serviceName?: string
+  formula: string
+  preferences?: string
+}): Promise<{ success: boolean; message: string; note?: any }> {
+  return await withStaffAuth(async ({ staff, sql, tenantId }) => {
+    await ensureStaffPortalSchema(sql)
+
+    const rawPhone = data.customerPhone ? String(data.customerPhone).replace(/\D/g, "") : ""
+    const phone = rawPhone.length >= 10 ? rawPhone.slice(-10) : rawPhone
+    const formula = data.formula ? data.formula.trim() : ""
+    const preferences = data.preferences ? data.preferences.trim() : ""
+
+    if (!formula && !preferences) {
+      return { success: false, message: "Please enter a styling formula or preference note." }
+    }
+
+    const inserted = await sql`
+      INSERT INTO customer_styling_notes (
+        tenant_id, customer_id, customer_phone, customer_name,
+        staff_id, staff_name, service_name, formula, preferences, created_at, updated_at
+      ) VALUES (
+        ${tenantId}, ${data.customerId || null}, ${phone || null}, ${data.customerName || "Client"},
+        ${staff.id}, ${staff.name}, ${data.serviceName || "Service"}, ${formula}, ${preferences}, NOW(), NOW()
+      )
+      RETURNING id, customer_name, formula, preferences, created_at
+    `
+
+    try {
+      revalidatePath("/staff-portal")
+      revalidatePath("/staff-portal/schedule")
+      revalidatePath("/")
+    } catch {}
+
+    return {
+      success: true,
+      message: "Styling note & formula saved successfully ✓",
+      note: inserted[0] || null,
+    }
+  })
+}
+
+/**
+ * Returns historical styling notes & formulas for a specific customer or phone number.
+ */
+export async function getCustomerStylingNotes(
+  customerPhone?: string,
+  customerId?: number | null
+): Promise<{ success: boolean; notes: any[] }> {
+  return await withStaffAuth(async ({ staff, sql, tenantId }) => {
+    await ensureStaffPortalSchema(sql)
+
+    const clean = customerPhone ? String(customerPhone).replace(/\D/g, "") : ""
+    const last10 = clean.length >= 10 ? clean.slice(-10) : clean
+    const custId = customerId && !isNaN(Number(customerId)) ? Number(customerId) : 0
+
+    const notes = await sql`
+      SELECT 
+        id,
+        customer_name,
+        staff_name,
+        service_name,
+        formula,
+        preferences,
+        TO_CHAR(created_at, 'YYYY-MM-DD HH12:MI AM') as created_at
+      FROM customer_styling_notes
+      WHERE (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text)
+        AND (
+          (${last10} != '' AND (customer_phone = ${clean} OR customer_phone = ${last10} OR customer_phone LIKE ${"%" + last10}))
+          OR (${custId} > 0 AND customer_id = ${custId})
+        )
+      ORDER BY id DESC
+      LIMIT 10
+    `.catch(() => [])
+
+    return {
+      success: true,
+      notes: notes.map((n: any) => ({
+        id: Number(n.id),
+        customer_name: n.customer_name,
+        staff_name: n.staff_name,
+        service_name: n.service_name,
+        formula: n.formula,
+        preferences: n.preferences,
+        created_at: n.created_at,
+      })),
     }
   })
 }

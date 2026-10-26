@@ -451,3 +451,133 @@ export async function createStaffLeaveRequest(data: {
     }
   })
 }
+
+/**
+ * Real-time floor roster showing who is currently in-service, on-break, ready at chair, or off-duty today.
+ */
+export async function getLiveFloorRoster() {
+  return await withTenantAuth(async ({ sql, tenantId }) => {
+    try {
+      const rosterRows = await sql`
+        SELECT 
+          s.id,
+          s.name,
+          s.role,
+          s.avatar_url,
+          s.phone,
+          s.skills,
+          a.status as attendance_status,
+          TO_CHAR(a.check_in_time, 'HH12:MI AM') as check_in_time,
+          TO_CHAR(a.check_out_time, 'HH12:MI AM') as check_out_time,
+          a.biometric_verified,
+          a.face_match_score,
+          a.face_snapshot,
+          sb.break_type as active_break_type,
+          TO_CHAR(sb.start_time, 'HH12:MI AM') as break_start_time,
+          ROUND(EXTRACT(EPOCH FROM ((CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::time - sb.start_time)) / 60) as break_elapsed_minutes,
+          active_bk.booking_id,
+          active_bk.customer_name,
+          active_bk.service_name,
+          active_bk.appointment_status,
+          TO_CHAR(active_bk.booking_time, 'HH12:MI AM') as appointment_time
+        FROM staff s
+        LEFT JOIN attendance a ON s.id = a.staff_id 
+          AND (a.date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR a.date = CURRENT_DATE)
+          AND (a.tenant_id = ${tenantId} OR a.tenant_id::text = ${tenantId}::text OR a.tenant_id IS NULL)
+        LEFT JOIN staff_breaks sb ON s.id = sb.staff_id
+          AND (sb.attendance_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR sb.attendance_date = CURRENT_DATE)
+          AND sb.end_time IS NULL
+        LEFT JOIN LATERAL (
+          SELECT 
+            b.id as booking_id,
+            COALESCE(c.full_name, 'Guest') as customer_name,
+            COALESCE(NULLIF(STRING_AGG(DISTINCT srv.name, ', '), ''), 'Salon Service') as service_name,
+            b.status as appointment_status,
+            b.booking_time
+          FROM bookings b
+          LEFT JOIN customers c ON b.customer_id = c.id
+          LEFT JOIN booking_services bs ON b.id = bs.booking_id
+          LEFT JOIN services srv ON bs.service_id = srv.id
+          WHERE b.staff_id = s.id
+            AND (b.booking_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR b.booking_date = CURRENT_DATE)
+            AND LOWER(TRIM(b.status)) IN ('in_progress', 'in_service', 'arrived')
+          GROUP BY b.id, c.full_name, b.status, b.booking_time
+          ORDER BY 
+            CASE WHEN LOWER(TRIM(b.status)) IN ('in_progress', 'in_service') THEN 1 ELSE 2 END ASC,
+            b.booking_time DESC
+          LIMIT 1
+        ) active_bk ON true
+        WHERE (s.tenant_id = ${tenantId} OR s.tenant_id::text = ${tenantId}::text)
+          AND s.is_active = true
+        ORDER BY s.name ASC
+      `
+
+      const roster = rosterRows.map((r: any) => {
+        let liveState: "in_service" | "on_break" | "ready" | "off_duty" = "off_duty"
+
+        const isClockedIn = Boolean(r.check_in_time && !r.check_out_time && r.attendance_status === "present")
+        const isOnBreak = Boolean(r.active_break_type)
+        const isInService = Boolean(r.booking_id && (r.appointment_status === "in_progress" || r.appointment_status === "in_service"))
+
+        if (isInService) {
+          liveState = "in_service"
+        } else if (isOnBreak) {
+          liveState = "on_break"
+        } else if (isClockedIn) {
+          liveState = "ready"
+        } else {
+          liveState = "off_duty"
+        }
+
+        return {
+          id: Number(r.id),
+          name: r.name,
+          role: r.role || "Stylist",
+          avatar_url: r.avatar_url || null,
+          phone: r.phone || "",
+          skills: r.skills || "",
+          liveState,
+          isClockedIn,
+          check_in_time: r.check_in_time,
+          check_out_time: r.check_out_time,
+          biometric_verified: Boolean(r.biometric_verified),
+          face_match_score: r.face_match_score ? Number(r.face_match_score) : null,
+          face_snapshot: r.face_snapshot || null,
+          breakInfo: isOnBreak
+            ? {
+                type: r.active_break_type,
+                startTime: r.break_start_time,
+                elapsedMinutes: Math.max(0, Number(r.break_elapsed_minutes) || 0),
+              }
+            : null,
+          activeAppointment: r.booking_id
+            ? {
+                bookingId: Number(r.booking_id),
+                customerName: r.customer_name,
+                serviceName: r.service_name,
+                status: r.appointment_status,
+                time: r.appointment_time,
+              }
+            : null,
+        }
+      })
+
+      const counts = {
+        total: roster.length,
+        in_service: roster.filter((m) => m.liveState === "in_service").length,
+        on_break: roster.filter((m) => m.liveState === "on_break").length,
+        ready: roster.filter((m) => m.liveState === "ready").length,
+        off_duty: roster.filter((m) => m.liveState === "off_duty").length,
+      }
+
+      return {
+        success: true,
+        roster,
+        counts,
+      }
+    } catch (e: any) {
+      console.error("[getLiveFloorRoster] error:", e)
+      return { success: false, roster: [], counts: { total: 0, in_service: 0, on_break: 0, ready: 0, off_duty: 0 } }
+    }
+  })
+}

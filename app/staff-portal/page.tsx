@@ -30,7 +30,15 @@ import {
   AlertCircle,
   Loader2,
   Check,
+  MessageCircle,
+  Timer,
+  Target,
+  Flame,
+  Edit2,
+  Bell,
 } from "lucide-react"
+import TreatmentTimerModal from "@/components/staff-portal/TreatmentTimerModal"
+import StylingNotesModal from "@/components/staff-portal/StylingNotesModal"
 
 export default function StaffTodayDashboard() {
   const pathname = usePathname() || ""
@@ -44,6 +52,18 @@ export default function StaffTodayDashboard() {
   const [geoCoords, setGeoCoords] = useState<{ lat: number; lng: number } | undefined>(undefined)
   const [isFaceScanOpen, setIsFaceScanOpen] = useState(false)
   const [pendingPunchAction, setPendingPunchAction] = useState<"check_in" | "check_out">("check_in")
+
+  // Treatment Timer & Styling Notes state
+  const [isTimerModalOpen, setIsTimerModalOpen] = useState(false)
+  const [isNotesModalOpen, setIsNotesModalOpen] = useState(false)
+  const [activeTimerLabel, setActiveTimerLabel] = useState<string | null>(null)
+
+  // Gamified daily ambition target state
+  const [dailyTarget, setDailyTarget] = useState(3500)
+  const [isEditingTarget, setIsEditingTarget] = useState(false)
+  const [targetInput, setTargetInput] = useState("3500")
+
+  const prevClientStatusRef = React.useRef<string | null>(null)
 
   // Live digital clock
   useEffect(() => {
@@ -76,12 +96,91 @@ export default function StaffTodayDashboard() {
     }
   }, [])
 
+  // Load custom daily target from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("hanva_staff_daily_target")
+      if (stored && !isNaN(Number(stored)) && Number(stored) > 0) {
+        setDailyTarget(Number(stored))
+        setTargetInput(stored)
+      }
+    } catch {}
+  }, [])
+
+  // Synthesize Web Audio Arrival Chime when a client arrives
+  const playArrivalChime = () => {
+    if (typeof window === "undefined") return
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+      if (!AudioCtx) return
+      const ctx = new AudioCtx()
+      const notes = [659.25, 880.0, 987.77] // E5, A5, B5 bright doorbell
+      notes.forEach((freq, idx) => {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.type = "sine"
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.14)
+        gain.gain.setValueAtTime(0.06, ctx.currentTime + idx * 0.14)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.14 + 0.28)
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.start(ctx.currentTime + idx * 0.14)
+        osc.stop(ctx.currentTime + idx * 0.14 + 0.28)
+      })
+      if (navigator.vibrate) navigator.vibrate([100, 50, 150])
+    } catch {}
+  }
+
+  // Active treatment timer checker
+  useEffect(() => {
+    const nextId = data?.next_appointment?.id
+    if (!nextId) {
+      setActiveTimerLabel(null)
+      return
+    }
+
+    const checkTimer = () => {
+      try {
+        const key = `treatment_timer_${nextId}`
+        const stored = localStorage.getItem(key)
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          if (parsed.endsAt && parsed.endsAt > Date.now()) {
+            const rem = Math.round((parsed.endsAt - Date.now()) / 1000)
+            const m = Math.floor(rem / 60)
+            const s = rem % 60
+            setActiveTimerLabel(`${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`)
+            return
+          }
+        }
+        setActiveTimerLabel(null)
+      } catch {}
+    }
+
+    checkTimer()
+    const intv = setInterval(checkTimer, 1000)
+    return () => clearInterval(intv)
+  }, [data?.next_appointment?.id])
+
   const loadDashboard = async () => {
     try {
       setLoading(true)
       const res = await getStaffDashboardData()
       const d = (res as any)?.data || res || {}
       setData(d)
+
+      // Audio notification when client status flips to 'arrived'
+      const currentNextStatus = d?.next_appointment?.status
+      if (
+        currentNextStatus === "arrived" &&
+        prevClientStatusRef.current &&
+        prevClientStatusRef.current !== "arrived"
+      ) {
+        playArrivalChime()
+        showToast(`🔔 Client in Chair: ${d?.next_appointment?.customer_name || "Client"} has arrived!`)
+      }
+      prevClientStatusRef.current = currentNextStatus || null
+
       const att = d?.attendance || {}
       const currentlyCheckedIn = Boolean(
         att?.status === "present" &&
@@ -108,6 +207,29 @@ export default function StaffTodayDashboard() {
 
   const showToast = (msg: string) => {
     setToastMessage(msg)
+    setTimeout(() => setToastMessage(null), 3500)
+  }
+
+  const getWhatsAppUrl = (
+    phone: string,
+    customerName: string,
+    bookingTime: string,
+    serviceName: string,
+    status: string
+  ) => {
+    const raw = (phone || "").replace(/\D/g, "")
+    const cleanPhone = raw.length === 10 ? `91${raw}` : raw
+    const salon = "our salon"
+    const staff = data?.staff?.name || "your stylist"
+
+    let msg = `Hi ${customerName}, this is ${staff} from ${salon}. Looking forward to your appointment today at ${formatBookingTime(
+      bookingTime
+    )} for ${serviceName}. Please let us know if you have any questions!`
+    if (status === "arrived") {
+      msg = `Hi ${customerName}, your chair is ready at ${salon}! ${staff} is looking forward to serving you.`
+    }
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
+  }
     setTimeout(() => setToastMessage(null), 3500)
   }
 
@@ -335,7 +457,109 @@ export default function StaffTodayDashboard() {
         </div>
       </section>
 
-      {/* 2. Today's Performance & Commission Ticker */}
+      {/* 2. Shift Ambition & Daily Goal Progress */}
+      {(() => {
+        const todayRevenue = Number(metrics.today_business_revenue) || 0
+        const targetPercent = dailyTarget > 0 ? Math.round((todayRevenue / dailyTarget) * 100) : 0
+        const isGoalAchieved = todayRevenue >= dailyTarget
+
+        return (
+          <section className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <div className="p-1 rounded-lg bg-amber-50 text-amber-600">
+                  <Target className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Shift Ambition & Goal
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-medium">
+                    Target: ₹{dailyTarget.toLocaleString("en-IN")}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                {isGoalAchieved ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black border border-emerald-300 animate-pulse">
+                    <Flame className="w-3 h-3 text-emerald-600 fill-emerald-600" /> Smashed ({targetPercent}%)!
+                  </span>
+                ) : (
+                  <span className="text-xs font-black text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full">
+                    {targetPercent}%
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsEditingTarget(!isEditingTarget)}
+                  className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+                  title="Customize daily goal"
+                >
+                  <Edit2 className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+
+            {/* Custom target input form */}
+            {isEditingTarget && (
+              <div className="my-2 p-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-2 animate-in fade-in">
+                <span className="text-xs font-bold text-slate-500">₹</span>
+                <input
+                  type="number"
+                  value={targetInput}
+                  onChange={(e) => setTargetInput(e.target.value)}
+                  placeholder="e.g. 4000"
+                  className="flex-1 h-8 px-2.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-900 bg-white focus:outline-none focus:ring-1 focus:ring-slate-900"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const val = parseInt(targetInput, 10)
+                    if (val > 0) {
+                      setDailyTarget(val)
+                      try {
+                        localStorage.setItem("hanva_staff_daily_target", String(val))
+                      } catch {}
+                      setIsEditingTarget(false)
+                    }
+                  }}
+                  className="h-8 px-3 rounded-lg bg-slate-900 text-white text-xs font-bold active:scale-95 transition"
+                >
+                  Save
+                </button>
+              </div>
+            )}
+
+            {/* Target Progress Bar */}
+            <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden my-2 border border-slate-200/50">
+              <div
+                className={`h-full rounded-full transition-all duration-700 ${
+                  isGoalAchieved
+                    ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400"
+                    : "bg-gradient-to-r from-amber-500 to-amber-600"
+                }`}
+                style={{ width: `${Math.min(100, targetPercent)}%` }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-[11px] font-medium text-slate-500">
+              <span>₹{todayRevenue.toLocaleString("en-IN")} generated</span>
+              {isGoalAchieved ? (
+                <span className="text-emerald-700 font-bold flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-emerald-500" /> ₹{(todayRevenue - dailyTarget).toLocaleString("en-IN")} bonus surplus!
+                </span>
+              ) : (
+                <span className="text-amber-700 font-bold">
+                  ₹{(dailyTarget - todayRevenue).toLocaleString("en-IN")} to goal!
+                </span>
+              )}
+            </div>
+          </section>
+        )
+      })()}
+
+      {/* 3. Today's Performance & Commission Ticker */}
       <section className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200/80">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-1.5">
@@ -428,13 +652,43 @@ export default function StaffTodayDashboard() {
               </div>
             )}
 
+            {/* Past styling formula chip */}
+            {nextClient.past_formula && (
+              <div className="text-xs bg-purple-50 text-purple-900 border border-purple-200/60 rounded-xl p-2.5 flex items-start gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-purple-600 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <span className="font-bold text-[11px] block">Past Styling Formula:</span>
+                  <p className="font-mono text-[11px] truncate">{nextClient.past_formula}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Active Treatment Timer Pill Banner */}
+            {activeTimerLabel && (
+              <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-emerald-500/80 text-white shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="text-xs font-mono font-bold text-emerald-300">
+                    Chair Timer: {activeTimerLabel}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsTimerModalOpen(true)}
+                  className="text-[10px] font-bold text-slate-950 bg-emerald-400 hover:bg-emerald-300 px-2.5 py-1 rounded-lg transition active:scale-95"
+                >
+                  View Timer
+                </button>
+              </div>
+            )}
+
             {/* Quick Status Action Buttons */}
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-1.5 pt-1 overflow-x-auto">
               {(nextClient.status === "confirmed" || nextClient.status === "pending" || nextClient.status === "booked") && (
                 <button
                   disabled={actionLoading}
                   onClick={() => handleStatusChange(nextClient.id, "arrived")}
-                  className="flex-1 min-w-0 h-9 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
+                  className="flex-1 min-w-[100px] h-9 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate">Mark Arrived</span>
@@ -445,7 +699,7 @@ export default function StaffTodayDashboard() {
                 <button
                   disabled={actionLoading}
                   onClick={() => handleStatusChange(nextClient.id, "in_progress")}
-                  className="flex-1 min-w-0 h-9 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
+                  className="flex-1 min-w-[100px] h-9 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
                 >
                   <Play className="w-3.5 h-3.5 shrink-0 fill-white" />
                   <span className="truncate">Start Service</span>
@@ -456,20 +710,65 @@ export default function StaffTodayDashboard() {
                 <button
                   disabled={actionLoading}
                   onClick={() => handleStatusChange(nextClient.id, "completed")}
-                  className="flex-1 min-w-0 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
+                  className="flex-1 min-w-[100px] h-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm"
                 >
                   <Check className="w-3.5 h-3.5 stroke-[3] shrink-0" />
-                  <span className="truncate">Complete Service</span>
+                  <span className="truncate">Done</span>
                 </button>
               )}
 
+              {/* Treatment Processing Timer Button */}
+              {(nextClient.status === "in_progress" || nextClient.status === "in_service") && (
+                <button
+                  type="button"
+                  onClick={() => setIsTimerModalOpen(true)}
+                  className="h-9 px-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white text-xs font-bold transition flex items-center gap-1 shrink-0 shadow-sm"
+                  title="Hair color & treatment processing timer"
+                >
+                  <Timer className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden xs:inline">Timer</span>
+                </button>
+              )}
+
+              {/* Formula & Styling Notes Button */}
+              <button
+                type="button"
+                onClick={() => setIsNotesModalOpen(true)}
+                className="h-9 px-2.5 rounded-xl bg-purple-50 hover:bg-purple-100 active:scale-95 text-purple-700 border border-purple-200 text-xs font-bold transition flex items-center gap-1 shrink-0 shadow-sm"
+                title="Client styling formulas & notes"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                <span className="hidden xs:inline">Notes</span>
+              </button>
+
+              {/* Call Client Button */}
               {nextClient.customer_phone && (
                 <a
                   href={`tel:${nextClient.customer_phone}`}
-                  className="h-9 px-3 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95 flex items-center justify-center text-xs font-semibold gap-1 shrink-0 shadow-sm"
+                  className="h-9 px-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95 flex items-center justify-center text-xs font-semibold gap-1 shrink-0 shadow-sm transition"
+                  title="Call Client"
                 >
                   <Phone className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Call</span>
+                </a>
+              )}
+
+              {/* WhatsApp Client Button */}
+              {nextClient.customer_phone && (
+                <a
+                  href={getWhatsAppUrl(
+                    nextClient.customer_phone,
+                    nextClient.customer_name,
+                    nextClient.booking_time,
+                    nextClient.service_name,
+                    nextClient.status
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="h-9 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold flex items-center justify-center gap-1 shrink-0 shadow-sm transition"
+                  title="Chat with client on WhatsApp"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  <span className="hidden xs:inline">WhatsApp</span>
                 </a>
               )}
             </div>
@@ -524,6 +823,33 @@ export default function StaffTodayDashboard() {
         onEnrolled={handleEnrolled}
         onVerified={(bioData) => handlePunchWithBio(pendingPunchAction, bioData)}
       />
+
+      {/* Chair Treatment Processing Timer Modal */}
+      {nextClient && (
+        <TreatmentTimerModal
+          isOpen={isTimerModalOpen}
+          onClose={() => setIsTimerModalOpen(false)}
+          bookingId={nextClient.id}
+          customerName={nextClient.customer_name}
+          serviceName={nextClient.service_name}
+        />
+      )}
+
+      {/* Styling Notes & Formula Modal */}
+      {nextClient && (
+        <StylingNotesModal
+          isOpen={isNotesModalOpen}
+          onClose={() => setIsNotesModalOpen(false)}
+          customerName={nextClient.customer_name}
+          customerPhone={nextClient.customer_phone}
+          customerId={nextClient.customer_id}
+          serviceName={nextClient.service_name}
+          initialFormula={nextClient.past_formula}
+          onSaved={(newFormula) => {
+            if (nextClient) nextClient.past_formula = newFormula
+          }}
+        />
+      )}
     </div>
   )
 }
