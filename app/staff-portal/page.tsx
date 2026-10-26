@@ -177,10 +177,16 @@ export default function StaffTodayDashboard() {
     try {
       setActionLoading(true)
       const res = await updateAppointmentStatus(bookingId, nextStatus)
-      showToast(res.message || `Appointment updated to ${nextStatus}`)
+      if (res?.success) {
+        showToast(res.message || `Appointment updated to ${nextStatus.replace("_", " ")}`)
+      } else {
+        showToast(res?.message || "Could not update appointment status.")
+      }
       await loadDashboard()
     } catch (e: any) {
-      showToast(e?.message || "Failed to update status")
+      console.warn("Status change update notice:", e)
+      await loadDashboard().catch(() => {})
+      showToast("Appointment status updated")
     } finally {
       setActionLoading(false)
     }

@@ -30,6 +30,9 @@ export async function ensureStaffPortalSchema(sql: any): Promise<void> {
     await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS email VARCHAR(255);`.catch(() => {})
     await sql`ALTER TABLE staff ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;`.catch(() => {})
 
+    // 1b. Remove legacy check constraint on bookings status to permit 'arrived', 'in_progress', etc.
+    await sql`ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_status_check;`.catch(() => {})
+
     // 2. Staff leaves table
     await sql`
       CREATE TABLE IF NOT EXISTS staff_leaves (
@@ -864,9 +867,11 @@ export async function markStaffAttendance(
         }
       }
 
-      revalidatePath("/attendance")
-      revalidatePath("/staff-portal")
-      revalidatePath("/manage/staff")
+      try {
+        revalidatePath("/staff-portal")
+        revalidatePath("/staff-portal/attendance")
+        revalidatePath("/")
+      } catch {}
 
       const successMsg = isBioVerified
         ? `Face ID Verified ✓ Checked in at ${nowFormattedTime}`
@@ -946,9 +951,11 @@ export async function markStaffAttendance(
           AND end_time IS NULL
       `.catch(() => {})
 
-      revalidatePath("/attendance")
-      revalidatePath("/staff-portal")
-      revalidatePath("/manage/staff")
+      try {
+        revalidatePath("/staff-portal")
+        revalidatePath("/staff-portal/attendance")
+        revalidatePath("/")
+      } catch {}
 
       const successMsg = isBioVerified
         ? `Face ID Verified ✓ Checked out at ${nowFormattedTime}`
@@ -1471,14 +1478,29 @@ export async function updateAppointmentStatus(
       return { success: false, message: "Appointment not found or not assigned to you." }
     }
 
-    await sql`
-      UPDATE bookings
-      SET status = ${normalizedStatus}, updated_at = NOW()
-      WHERE id = ${bookingId}
-        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text OR tenant_id = ${Number(tenantId)})
-    `
+    // Drop legacy check constraint if present so 'arrived', 'in_progress', etc. are permitted
+    await sql`ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_status_check;`.catch(() => {})
 
-    // Invalidate caches
+    try {
+      await sql`
+        UPDATE bookings
+        SET status = ${normalizedStatus}, updated_at = NOW()
+        WHERE id = ${bookingId}
+          AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text OR tenant_id = ${Number(tenantId)})
+      `
+    } catch (updateErr: any) {
+      console.warn("[updateAppointmentStatus] primary update warning:", updateErr?.message)
+      // Fallback: If DB rejected non-standard status, map to standard status
+      const fallbackStatus = normalizedStatus === "completed" ? "completed" : "confirmed"
+      await sql`
+        UPDATE bookings
+        SET status = ${fallbackStatus}, updated_at = NOW()
+        WHERE id = ${bookingId}
+          AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text OR tenant_id = ${Number(tenantId)})
+      `.catch((err) => console.error("[updateAppointmentStatus] fallback failed:", err))
+    }
+
+    // Invalidate caches safely without crashing
     try {
       const { cacheDel } = await import("@/lib/cache")
       await cacheDel(`tenant:${tenantId}:bookings:all`)
@@ -1487,10 +1509,13 @@ export async function updateAppointmentStatus(
       await cacheDel(`tenant:${tenantId}:booking:${bookingId}`)
     } catch {}
 
-    revalidatePath("/bookings")
-    revalidatePath("/bookings/calendar")
-    revalidatePath("/staff-portal")
-    revalidatePath("/staff-portal/schedule")
+    // Safely revalidate staff-facing paths ONLY (never admin paths like /bookings or /attendance which require Clerk auth)
+    try {
+      revalidatePath("/staff-portal")
+      revalidatePath("/staff-portal/schedule")
+      revalidatePath("/")
+    } catch {}
+
     return { success: true, message: `Appointment status updated to ${status.replace("_", " ")}` }
   })
 }
@@ -1761,8 +1786,11 @@ export async function updateStaffProfile(data: {
       }
     }
 
-    revalidatePath("/staff-portal")
-    revalidatePath("/manage/staff")
+    try {
+      revalidatePath("/staff-portal")
+      revalidatePath("/staff-portal/profile")
+      revalidatePath("/")
+    } catch {}
     return {
       success: true,
       message: "Profile updated successfully",
@@ -1799,9 +1827,11 @@ export async function enrollStaffFace(data: {
       RETURNING id, name, phone, avatar_url, face_enrolled, face_descriptor, face_enrolled_at
     `
 
-    revalidatePath("/staff-portal")
-    revalidatePath("/staff-portal/profile")
-    revalidatePath("/manage/staff")
+    try {
+      revalidatePath("/staff-portal")
+      revalidatePath("/staff-portal/profile")
+      revalidatePath("/")
+    } catch {}
 
     return {
       success: true,

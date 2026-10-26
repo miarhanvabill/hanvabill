@@ -1,5 +1,7 @@
 // app/page.tsx
 import { Suspense } from "react"
+import { headers } from "next/headers"
+import { redirect } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Users, Calendar, IndianRupee, TrendingUp, Clock, Star, ShoppingBag, UserPlus } from "lucide-react"
@@ -12,7 +14,7 @@ import { auth } from "@clerk/nextjs/server"
 async function DashboardStats() {
   const { orgId, orgSlug } = await auth()
   if (!orgId) {
-    throw new Error("Organization required")
+    return null
   }
 
   const tenantKey = orgSlug ?? orgId
@@ -229,6 +231,21 @@ async function DashboardStats() {
 }
 
 export default async function DashboardPage() {
+  try {
+    const headersList = await headers()
+    const host = headersList.get("host") || ""
+    const isStaff =
+      host.startsWith("staff.") ||
+      host.includes("staff.biz.hanva.in") ||
+      headersList.get("x-is-staff-portal") === "1"
+
+    if (isStaff) {
+      redirect("/staff-portal")
+    }
+  } catch (err: any) {
+    if (err?.digest?.startsWith("NEXT_REDIRECT")) throw err
+  }
+
   const settings = await getBusinessSettings();
   const salonName = settings?.profile?.salonName || "Hanva Billing";
   

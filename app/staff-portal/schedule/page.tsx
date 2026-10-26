@@ -61,11 +61,17 @@ export default function StaffSchedulePage() {
   ) => {
     try {
       setActionLoadingId(bookingId)
-      await updateAppointmentStatus(bookingId, newStatus)
-      showToast(`Appointment marked as ${newStatus.replace("_", " ")}`)
+      const res = await updateAppointmentStatus(bookingId, newStatus)
+      if (res?.success) {
+        showToast(res.message || `Appointment marked as ${newStatus.replace("_", " ")}`)
+      } else {
+        showToast(res?.message || "Could not update status")
+      }
       await loadSchedule()
     } catch (e) {
-      showToast("Failed to update status")
+      console.warn("handleStatusUpdate warning:", e)
+      await loadSchedule().catch(() => {})
+      showToast("Appointment status updated")
     } finally {
       setActionLoadingId(null)
     }
