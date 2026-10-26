@@ -84,6 +84,12 @@ export default function CustomerSchedulePage() {
         email: cust.email || prev.email,
       }))
     },
+    onCustomerNotFound: () => {
+      setCustomerInfo((prev) => ({
+        ...prev,
+        customerId: null,
+      }))
+    },
     onClear: () => {
       setCustomerInfo((prev) => ({
         ...prev,

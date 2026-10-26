@@ -472,10 +472,10 @@ export async function getStaffDashboardData() {
     const completedBookings = await sql`
       SELECT COUNT(*) as count
       FROM bookings
-      WHERE staff_id = ${staff.id}
-        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text)
-        AND booking_date = CURRENT_DATE
-        AND status = 'completed'
+      WHERE (staff_id = ${staff.id} OR staff_id = ${Number(staff.id)} OR staff_id::text = ${String(staff.id)})
+        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text OR tenant_id = ${Number(tenantId)})
+        AND (booking_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR booking_date = CURRENT_DATE)
+        AND LOWER(TRIM(status)) = 'completed'
     `.catch(() => [{ count: 0 }])
 
     const bookingsCount = Number(completedBookings[0]?.count) || 0
@@ -493,21 +493,65 @@ export async function getStaffDashboardData() {
         b.notes,
         COALESCE(c.full_name, 'Walk-in Client') as customer_name,
         COALESCE(c.phone_number, '') as customer_phone,
-        COALESCE(b.service_name, 'Salon Service') as service_name
+        COALESCE(NULLIF(STRING_AGG(DISTINCT s.name, ', '), ''), 'Salon Service') AS service_name
       FROM bookings b
       LEFT JOIN customers c ON b.customer_id = c.id AND (c.tenant_id = ${tenantId} OR c.tenant_id::text = ${tenantId}::text)
-      WHERE b.staff_id = ${staff.id}
-        AND (b.tenant_id = ${tenantId} OR b.tenant_id::text = ${tenantId}::text)
+      LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id::text = ${tenantId}::text OR bs.tenant_id IS NULL)
+      LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id::text = ${tenantId}::text OR s.tenant_id IS NULL)
+      WHERE (b.staff_id = ${staff.id} OR b.staff_id = ${Number(staff.id)} OR b.staff_id::text = ${String(staff.id)})
+        AND (b.tenant_id = ${tenantId} OR b.tenant_id::text = ${tenantId}::text OR b.tenant_id = ${Number(tenantId)})
         AND (
-          b.booking_date > CURRENT_DATE
-          OR (b.booking_date = CURRENT_DATE AND (b.booking_time >= TO_CHAR(CURRENT_TIME, 'HH24:MI') OR b.status IN ('confirmed', 'in_progress', 'pending')))
+          b.booking_date > (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+          OR b.booking_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+          OR b.booking_date >= CURRENT_DATE
         )
-        AND b.status NOT IN ('cancelled', 'completed')
-      ORDER BY b.booking_date ASC, b.booking_time ASC
+        AND LOWER(TRIM(b.status)) NOT IN ('cancelled', 'completed')
+      GROUP BY b.id, b.booking_number, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, c.full_name, c.phone_number
+      ORDER BY 
+        CASE 
+          WHEN LOWER(TRIM(b.status)) IN ('in_progress', 'in_service') THEN 1
+          WHEN LOWER(TRIM(b.status)) = 'arrived' THEN 2
+          WHEN LOWER(TRIM(b.status)) IN ('confirmed', 'pending', 'booked') THEN 3
+          ELSE 4
+        END ASC,
+        b.booking_date ASC,
+        b.booking_time ASC
       LIMIT 1
-    `.catch(() => [])
+    `.catch((err) => {
+      console.error("[getStaffDashboardData] nextAppointments error:", err)
+      return []
+    })
 
-    const nextAppointment = nextAppointments[0] || null
+    const rawNext = nextAppointments[0] || null
+    const nextAppointment = rawNext
+      ? {
+          id: Number(rawNext.id),
+          booking_number: rawNext.booking_number,
+          booking_date: rawNext.booking_date,
+          booking_time: rawNext.booking_time,
+          status: (rawNext.status || "confirmed").toLowerCase().trim(),
+          total_amount: Number(rawNext.total_amount) || 0,
+          customer_name: rawNext.customer_name || "Walk-in Client",
+          customer_phone: rawNext.customer_phone || "",
+          service_name: rawNext.service_name || "Salon Service",
+          notes: rawNext.notes || null,
+        }
+      : null
+
+    // 7. Active upcoming bookings count for today
+    const todayBookingsCountRow = await sql`
+      SELECT COUNT(DISTINCT b.id) as count
+      FROM bookings b
+      WHERE (b.staff_id = ${staff.id} OR b.staff_id = ${Number(staff.id)} OR b.staff_id::text = ${String(staff.id)})
+        AND (b.tenant_id = ${tenantId} OR b.tenant_id::text = ${tenantId}::text OR b.tenant_id = ${Number(tenantId)})
+        AND (
+          b.booking_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+          OR b.booking_date = CURRENT_DATE
+        )
+        AND LOWER(TRIM(b.status)) NOT IN ('cancelled', 'completed')
+    `.catch(() => [{ count: 0 }])
+
+    const upcomingCount = Number(todayBookingsCountRow[0]?.count) || (nextAppointment ? 1 : 0)
 
     const payload = {
       staff: {
@@ -555,6 +599,7 @@ export async function getStaffDashboardData() {
         today_commission_earned: Math.round(todayCommissionEarned * 100) / 100,
         services_completed_today: servicesCompletedToday,
         tips_collected_today: Math.round(tipsToday * 100) / 100,
+        upcoming_count: upcomingCount,
       },
       next_appointment: nextAppointment
         ? {
@@ -1316,11 +1361,11 @@ export async function getStaffEarnings(period: "today" | "week" | "month" = "tod
 }
 
 /**
- * Returns bookings assigned to this staff member for a specific date (default today).
+ * Returns bookings assigned to this staff member for a specific date (default today in Asia/Kolkata).
  */
 export async function getStaffAppointments(date?: string) {
   return await withStaffAuth(async ({ staff, sql, tenantId }) => {
-    const targetDate = date && date.trim() ? date : new Date().toISOString().slice(0, 10)
+    const rawTargetDate = date && date.trim() ? date.trim() : null
 
     const appointments = await sql`
       SELECT 
@@ -1333,18 +1378,34 @@ export async function getStaffAppointments(date?: string) {
         b.notes,
         COALESCE(c.full_name, 'Guest Client') as customer_name,
         COALESCE(c.phone_number, '') as customer_phone,
-        COALESCE(b.service_name, 'Salon Service') as service_name
+        COALESCE(NULLIF(STRING_AGG(DISTINCT s.name, ', '), ''), 'Salon Service') AS service_name,
+        COALESCE(NULLIF(SUM(s.duration_minutes), 0), 45) AS duration_minutes
       FROM bookings b
       LEFT JOIN customers c ON b.customer_id = c.id AND (c.tenant_id = ${tenantId} OR c.tenant_id::text = ${tenantId}::text)
-      WHERE b.staff_id = ${staff.id}
-        AND (b.tenant_id = ${tenantId} OR b.tenant_id::text = ${tenantId}::text)
-        AND b.booking_date = ${targetDate}::date
+      LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id::text = ${tenantId}::text OR bs.tenant_id IS NULL)
+      LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id::text = ${tenantId}::text OR s.tenant_id IS NULL)
+      WHERE (b.staff_id = ${staff.id} OR b.staff_id = ${Number(staff.id)} OR b.staff_id::text = ${String(staff.id)})
+        AND (b.tenant_id = ${tenantId} OR b.tenant_id::text = ${tenantId}::text OR b.tenant_id = ${Number(tenantId)})
+        AND (
+          (${rawTargetDate}::text IS NOT NULL AND (
+            b.booking_date = ${rawTargetDate}::date
+            OR TO_CHAR(b.booking_date, 'YYYY-MM-DD') = ${rawTargetDate}
+          ))
+          OR (${rawTargetDate}::text IS NULL AND (
+            b.booking_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+            OR b.booking_date = CURRENT_DATE
+          ))
+        )
+      GROUP BY b.id, b.booking_number, b.booking_date, b.booking_time, b.status, b.total_amount, b.notes, c.full_name, c.phone_number
       ORDER BY b.booking_time ASC
-    `.catch(() => [])
+    `.catch((err) => {
+      console.error("[getStaffAppointments] error:", err)
+      return []
+    })
 
     return {
       success: true,
-      date: targetDate,
+      date: rawTargetDate || new Date().toISOString().slice(0, 10),
       appointments: appointments.map((a: any) => ({
         id: Number(a.id),
         booking_number: a.booking_number,
@@ -1353,10 +1414,10 @@ export async function getStaffAppointments(date?: string) {
         bookingDate: a.booking_date,
         booking_time: a.booking_time,
         bookingTime: a.booking_time,
-        status: a.status,
+        status: (a.status || "confirmed").toLowerCase().trim(),
         total_amount: Number(a.total_amount) || 0,
         totalAmount: Number(a.total_amount) || 0,
-        durationMinutes: 45,
+        durationMinutes: Number(a.duration_minutes) || 45,
         notes: a.notes,
         customer_name: a.customer_name,
         customerName: a.customer_name,
@@ -1395,14 +1456,14 @@ export async function updateAppointmentStatus(
     }
 
     // Map 'in_service' to 'in_progress' for database consistency if needed
-    const normalizedStatus = status === "in_service" ? "in_progress" : status
+    const normalizedStatus = status === "in_service" ? "in_progress" : status.toLowerCase().trim()
 
     const existing = await sql`
       SELECT id, status 
       FROM bookings 
       WHERE id = ${bookingId}
-        AND staff_id = ${staff.id}
-        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text)
+        AND (staff_id = ${staff.id} OR staff_id = ${Number(staff.id)} OR staff_id::text = ${String(staff.id)})
+        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text OR tenant_id = ${Number(tenantId)})
       LIMIT 1
     `
 
@@ -1414,12 +1475,23 @@ export async function updateAppointmentStatus(
       UPDATE bookings
       SET status = ${normalizedStatus}, updated_at = NOW()
       WHERE id = ${bookingId}
-        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text)
+        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text OR tenant_id = ${Number(tenantId)})
     `
 
+    // Invalidate caches
+    try {
+      const { cacheDel } = await import("@/lib/cache")
+      await cacheDel(`tenant:${tenantId}:bookings:all`)
+      await cacheDel(`tenant:${tenantId}:bookings:stats`)
+      await cacheDel(`tenant:${tenantId}:bookings:staff:${staff.id}`)
+      await cacheDel(`tenant:${tenantId}:booking:${bookingId}`)
+    } catch {}
+
     revalidatePath("/bookings")
+    revalidatePath("/bookings/calendar")
     revalidatePath("/staff-portal")
-    return { success: true, message: `Appointment status updated to ${status}` }
+    revalidatePath("/staff-portal/schedule")
+    return { success: true, message: `Appointment status updated to ${status.replace("_", " ")}` }
   })
 }
 

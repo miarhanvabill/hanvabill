@@ -11,6 +11,7 @@ import {
   enrollStaffFace,
 } from "@/app/actions/staff-portal"
 import FaceScanModal from "@/components/staff-portal/FaceScanModal"
+import { formatBookingTime } from "@/lib/utils"
 import {
   Clock,
   MapPin,
@@ -385,7 +386,7 @@ export default function StaffTodayDashboard() {
             href={`${prefix}/schedule`}
             className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-0.5"
           >
-            Queue <ChevronRight className="w-3.5 h-3.5" />
+            Queue {metrics.upcoming_count > 0 && `(${metrics.upcoming_count})`} <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>
 
@@ -394,7 +395,7 @@ export default function StaffTodayDashboard() {
             <div className="flex items-start justify-between">
               <div>
                 <span className="inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 mb-1">
-                  {nextClient.booking_time}
+                  {formatBookingTime(nextClient.booking_time)}
                 </span>
                 <h3 className="text-sm font-bold text-slate-900">
                   {nextClient.customer_name}
@@ -423,7 +424,7 @@ export default function StaffTodayDashboard() {
 
             {/* Quick Status Action Buttons */}
             <div className="flex items-center gap-2 pt-1">
-              {(nextClient.status === "confirmed" || nextClient.status === "pending") && (
+              {(nextClient.status === "confirmed" || nextClient.status === "pending" || nextClient.status === "booked") && (
                 <button
                   disabled={actionLoading}
                   onClick={() => handleStatusChange(nextClient.id, "arrived")}
@@ -445,7 +446,7 @@ export default function StaffTodayDashboard() {
                 </button>
               )}
 
-              {nextClient.status === "in_progress" && (
+              {(nextClient.status === "in_progress" || nextClient.status === "in_service") && (
                 <button
                   disabled={actionLoading}
                   onClick={() => handleStatusChange(nextClient.id, "completed")}

@@ -5,6 +5,25 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export function formatBookingTime(time: string | null | undefined): string {
+  if (!time) return "--:--"
+  const str = String(time).trim()
+  if (str.includes("AM") || str.includes("PM") || str.includes("am") || str.includes("pm")) {
+    return str
+  }
+  const parts = str.split(":")
+  if (parts.length >= 2) {
+    const hours = parseInt(parts[0], 10)
+    const mins = parts[1].padStart(2, "0")
+    if (!isNaN(hours)) {
+      const ampm = hours >= 12 ? "PM" : "AM"
+      const h12 = hours % 12 || 12
+      return `${h12}:${mins} ${ampm}`
+    }
+  }
+  return str
+}
+
 export function downloadCSV(data: any[], filename: string) {
   if (!data || data.length === 0) {
     alert("No data to export");

@@ -417,10 +417,10 @@ export async function createBooking(formData: FormData) {
       }
 
       let finalCustomerId: number
-      let finalServiceIds: number[]
+      let finalServiceIds: number[] = []
       let finalStaffId: number | null = null
 
-      // Handle customer portal booking (create customer if needed)
+      // Handle customer resolution (existing customer or create new if not existing)
       if (customerId && !isNaN(Number(customerId)) && Number(customerId) > 0) {
         finalCustomerId = Number(customerId)
       } else if (customerName && customerPhone) {
@@ -462,62 +462,54 @@ export async function createBooking(formData: FormData) {
           `
           finalCustomerId = Number(newCustomer.id)
         }
-
-        if (serviceIds) {
-          finalServiceIds = serviceIds
-            .toString()
-            .split(",")
-            .map((id) => Number(id.trim()))
-            .filter((id) => !isNaN(id))
-          if (finalServiceIds.length === 0) {
-            return {
-              success: false,
-              message: "Invalid service IDs provided.",
-            }
-          }
-        } else if (serviceNames) {
-
-          // First try exact match (case-insensitive)
-          let serviceResult = await sql`
-            SELECT id, name FROM services WHERE LOWER(name) = LOWER(${serviceNames.toString()}) AND tenant_id = ${tenantId} LIMIT 1
-          `
-
-          // If no exact match, try partial match
-          if (serviceResult.length === 0) {
-            serviceResult = await sql`
-              SELECT id, name FROM services WHERE LOWER(name) LIKE LOWER(${"%" + serviceNames.toString() + "%"}) AND tenant_id = ${tenantId} LIMIT 1
-            `
-          }
-
-          // If still no match, get all available services for debugging
-          if (serviceResult.length === 0) {
-            const allServices = await sql`SELECT id, name FROM services WHERE tenant_id = ${tenantId} ORDER BY name`
-
-            return {
-              success: false,
-              message: `Service "${serviceNames.toString()}" not found. Available services: ${allServices.map((s: any) => s.name).join(", ")}`,
-            }
-          }
-
-          finalServiceIds = [Number(serviceResult[0].id)]
-        } else {
-          return {
-            success: false,
-            message: "Service selection is required.",
-          }
+      } else {
+        return {
+          success: false,
+          message: "Either customer details or customer ID must be provided.",
         }
-      } else if (customerId && serviceIds) {
-        // Handle direct booking with IDs
-        finalCustomerId = Number(customerId)
+      }
+
+      // Handle service resolution (works for both existing and new customer flows)
+      if (serviceIds) {
         finalServiceIds = serviceIds
           .toString()
           .split(",")
           .map((id) => Number(id.trim()))
           .filter((id) => !isNaN(id))
+        if (finalServiceIds.length === 0) {
+          return {
+            success: false,
+            message: "Invalid service IDs provided.",
+          }
+        }
+      } else if (serviceNames) {
+        // First try exact match (case-insensitive)
+        let serviceResult = await sql`
+          SELECT id, name FROM services WHERE LOWER(name) = LOWER(${serviceNames.toString()}) AND tenant_id = ${tenantId} LIMIT 1
+        `
+
+        // If no exact match, try partial match
+        if (serviceResult.length === 0) {
+          serviceResult = await sql`
+            SELECT id, name FROM services WHERE LOWER(name) LIKE LOWER(${"%" + serviceNames.toString() + "%"}) AND tenant_id = ${tenantId} LIMIT 1
+          `
+        }
+
+        // If still no match, get all available services for debugging
+        if (serviceResult.length === 0) {
+          const allServices = await sql`SELECT id, name FROM services WHERE tenant_id = ${tenantId} ORDER BY name`
+
+          return {
+            success: false,
+            message: `Service "${serviceNames.toString()}" not found. Available services: ${allServices.map((s: any) => s.name).join(", ")}`,
+          }
+        }
+
+        finalServiceIds = [Number(serviceResult[0].id)]
       } else {
         return {
           success: false,
-          message: "Either customer details or customer ID must be provided.",
+          message: "Service selection is required.",
         }
       }
 

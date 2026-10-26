@@ -128,6 +128,12 @@ export default function BookingCalendarPage() {
         customerEmail: cust.email || prev.customerEmail,
       }))
     },
+    onCustomerNotFound: () => {
+      setQuickBookForm((prev) => ({
+        ...prev,
+        customerId: null,
+      }))
+    },
     onClear: () => {
       setQuickBookForm((prev) => ({
         ...prev,

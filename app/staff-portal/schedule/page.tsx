@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react"
 import { getStaffSchedule, updateAppointmentStatus } from "@/app/actions/staff-portal"
+import { formatBookingTime } from "@/lib/utils"
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -37,7 +38,10 @@ export default function StaffSchedulePage() {
       if (day === "tomorrow") {
         targetDate.setDate(targetDate.getDate() + 1)
       }
-      const dateStr = targetDate.toISOString().slice(0, 10)
+      const y = targetDate.getFullYear()
+      const m = String(targetDate.getMonth() + 1).padStart(2, "0")
+      const d = String(targetDate.getDate()).padStart(2, "0")
+      const dateStr = `${y}-${m}-${d}`
       const res = await getStaffSchedule(dateStr)
       setAppointments(res.appointments || [])
     } catch (e) {
@@ -68,10 +72,15 @@ export default function StaffSchedulePage() {
   }
 
   const filteredAppointments = appointments.filter((app) => {
+    const s = String(app.status || "").toLowerCase().trim()
     if (filterStatus === "all") return true
     if (filterStatus === "in_service")
-      return app.status === "in_service" || app.status === "in_progress" || app.status === "arrived"
-    return app.status === filterStatus
+      return s === "in_service" || s === "in_progress" || s === "arrived"
+    if (filterStatus === "confirmed")
+      return s === "confirmed" || s === "pending" || s === "booked"
+    if (filterStatus === "completed")
+      return s === "completed"
+    return s === filterStatus
   })
 
   return (
@@ -172,7 +181,7 @@ export default function StaffSchedulePage() {
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded-md">
-                      {bookingTime}
+                      {formatBookingTime(bookingTime)}
                     </span>
                     <span className="text-[11px] font-semibold text-slate-500">
                       {durationMinutes} mins
