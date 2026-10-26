@@ -230,8 +230,6 @@ export default function StaffTodayDashboard() {
     }
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`
   }
-    setTimeout(() => setToastMessage(null), 3500)
-  }
 
   const triggerPunchWithBiometric = (action: "check_in" | "check_out") => {
     setPendingPunchAction(action)
