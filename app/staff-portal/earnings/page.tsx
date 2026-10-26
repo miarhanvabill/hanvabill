@@ -157,11 +157,16 @@ export default function StaffEarningsPage() {
             </h3>
           </div>
           <span className="text-[11px] font-semibold text-slate-400">
-            {completedServices.length} logged
+            {loading ? "..." : `${completedServices.length} logged`}
           </span>
         </div>
 
-        {completedServices.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-6 text-slate-400">
+            <Loader2 className="w-6 h-6 animate-spin text-slate-400 mx-auto mb-1.5" />
+            <p className="text-xs font-medium text-slate-500">Loading commission ledger...</p>
+          </div>
+        ) : completedServices.length === 0 ? (
           <div className="text-center py-6 text-slate-400">
             <Scissors className="w-8 h-8 text-slate-300 mx-auto mb-1.5" />
             <p className="text-xs font-medium text-slate-600">No service commissions recorded for this period.</p>
@@ -179,7 +184,7 @@ export default function StaffEarningsPage() {
               const tipAmount = srv.tip ?? 0
 
               return (
-                <div key={srv.id} className="py-3 flex items-start justify-between">
+                <div key={`${srv.id}-${srv.invoiceNumber || srv.serviceName}`} className="py-3 flex items-start justify-between">
                   <div>
                     <span className="text-xs font-bold text-slate-900 block">
                       {serviceName}

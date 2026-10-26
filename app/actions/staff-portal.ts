@@ -449,32 +449,47 @@ export async function getStaffDashboardData() {
         scs.revenue_amount,
         scs.split_percentage,
         scs.created_at,
+        i.booking_id,
         i.invoice_number,
         i.metadata
       FROM staff_commission_splits scs
       LEFT JOIN invoices i ON scs.invoice_id = i.id AND (i.tenant_id = ${tenantId} OR i.tenant_id::text = ${tenantId}::text)
       WHERE scs.staff_id = ${staff.id}
         AND (scs.tenant_id = ${Number(tenantId)} OR scs.tenant_id::text = ${tenantId}::text)
-        AND scs.created_at >= CURRENT_DATE
-        AND scs.created_at < CURRENT_DATE + INTERVAL '1 day'
+        AND (
+          (scs.created_at AT TIME ZONE 'Asia/Kolkata')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+          OR scs.created_at::date = CURRENT_DATE
+        )
     `.catch(() => [])
 
     let todayBusinessRevenue = 0
     let todayCommissionEarned = 0
     let tipsToday = 0
 
-    const staffRate = staff.commission_rate ? parseFloat(staff.commission_rate) : null
+    // Active commission rate determination
+    let activeRate = staff.commission_rate ? parseFloat(staff.commission_rate) : null
+    if (activeRate === null && staff.commission_profile_id) {
+      const prof = await sql`
+        SELECT base_rate FROM commission_profiles WHERE id = ${staff.commission_profile_id} LIMIT 1
+      `.catch(() => [])
+      if (prof.length > 0 && prof[0].base_rate) {
+        activeRate = parseFloat(prof[0].base_rate) || 10
+      }
+    }
+    if (activeRate === null) activeRate = 10
+
+    const todayCoveredBookingIds = new Set<number>()
 
     for (const split of splitsToday) {
+      if (split.booking_id) {
+        todayCoveredBookingIds.add(Number(split.booking_id))
+      }
+
       const rev = Number(split.revenue_amount) || 0
-      const splitPct = Number(split.split_percentage) || 100
+      const splitPct = Number(split.split_percentage) || activeRate
       todayBusinessRevenue += rev
 
-      const commission =
-        staffRate !== null
-          ? (rev * staffRate) / 100
-          : (rev * splitPct) / 100
-
+      const commission = (rev * (activeRate || splitPct)) / 100
       todayCommissionEarned += commission
 
       // Check for tips in invoice metadata
@@ -490,18 +505,38 @@ export async function getStaffDashboardData() {
       }
     }
 
-    // 5. Total services completed today
-    const completedBookings = await sql`
-      SELECT COUNT(*) as count
-      FROM bookings
-      WHERE (staff_id = ${staff.id} OR staff_id = ${Number(staff.id)} OR staff_id::text = ${String(staff.id)})
-        AND (tenant_id = ${tenantId} OR tenant_id::text = ${tenantId}::text OR tenant_id = ${Number(tenantId)})
-        AND (booking_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date OR booking_date = CURRENT_DATE)
-        AND LOWER(TRIM(status)) = 'completed'
-    `.catch(() => [{ count: 0 }])
+    // 5. Total services completed today (include completed appointments)
+    const completedBookingsToday = await sql`
+      SELECT 
+        b.id,
+        b.total_amount,
+        COALESCE(
+          NULLIF(SUM(COALESCE(bs.price, 0) * COALESCE(bs.quantity, 1)), 0),
+          b.total_amount,
+          0
+        ) as service_amount
+      FROM bookings b
+      LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id::text = ${tenantId}::text OR bs.tenant_id IS NULL)
+      WHERE (b.staff_id = ${staff.id} OR b.staff_id = ${Number(staff.id)} OR b.staff_id::text = ${String(staff.id)})
+        AND (b.tenant_id = ${tenantId} OR b.tenant_id::text = ${tenantId}::text OR b.tenant_id = ${Number(tenantId)})
+        AND (
+          b.booking_date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+          OR b.booking_date = CURRENT_DATE
+          OR TO_CHAR(b.booking_date, 'YYYY-MM-DD') = TO_CHAR(CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD')
+        )
+        AND LOWER(TRIM(b.status)) IN ('completed', 'done', 'finished')
+      GROUP BY b.id, b.total_amount
+    `.catch(() => [])
 
-    const bookingsCount = Number(completedBookings[0]?.count) || 0
-    const servicesCompletedToday = Math.max(bookingsCount, splitsToday.length)
+    // Add revenue & commission from completed appointments not yet in staff_commission_splits
+    for (const cb of completedBookingsToday) {
+      if (todayCoveredBookingIds.has(Number(cb.id))) continue
+      const rev = Number(cb.service_amount) || Number(cb.total_amount) || 0
+      todayBusinessRevenue += rev
+      todayCommissionEarned += (rev * activeRate) / 100
+    }
+
+    const servicesCompletedToday = Math.max(completedBookingsToday.length, splitsToday.length)
 
     // 6. Next upcoming appointment
     const nextAppointments = await sql`
@@ -1213,27 +1248,40 @@ export async function getStaffCommissions(
   return await withStaffAuth(async ({ staff, sql, tenantId }) => {
     await ensureStaffPortalSchema(sql)
 
+    // Calculate dates in Asia/Kolkata (IST) timezone
     const now = new Date()
-    let startStr = ""
-    let endStr = now.toISOString().slice(0, 10)
+    const getKolkataDate = (d: Date) => {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(d)
+    }
+
+    const todayStr = getKolkataDate(now)
+    let startStr = todayStr
+    let endStr = todayStr
 
     if (period === "today") {
-      startStr = endStr
+      startStr = todayStr
+      endStr = todayStr
     } else if (period === "week") {
       const past = new Date(now)
       past.setDate(past.getDate() - 7)
-      startStr = past.toISOString().slice(0, 10)
+      startStr = getKolkataDate(past)
+      endStr = todayStr
     } else if (period === "month") {
       const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-      startStr = firstOfMonth.toISOString().slice(0, 10)
+      startStr = getKolkataDate(firstOfMonth)
+      endStr = todayStr
     } else if (period === "custom") {
-      startStr = startDate && startDate.trim() ? startDate : endStr
-      endStr = endDate && endDate.trim() ? endDate : endStr
-    } else {
-      startStr = endStr
+      startStr = startDate && startDate.trim() ? startDate.trim() : todayStr
+      endStr = endDate && endDate.trim() ? endDate.trim() : todayStr
     }
 
-    const rows = await sql`
+    // 1. Fetch invoice splits for this staff
+    const splitRows = await sql`
       SELECT 
         scs.id,
         scs.invoice_id,
@@ -1241,9 +1289,10 @@ export async function getStaffCommissions(
         scs.split_percentage,
         scs.revenue_amount,
         scs.created_at,
-        TO_CHAR(scs.created_at, 'YYYY-MM-DD') as date,
+        TO_CHAR(scs.created_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') as date,
         COALESCE(i.invoice_number, CONCAT('INV-', scs.invoice_id)) as invoice_number,
         COALESCE(c.full_name, 'Walk-in Customer') as customer_name,
+        i.booking_id,
         i.service_details,
         i.product_details,
         i.metadata
@@ -1252,25 +1301,80 @@ export async function getStaffCommissions(
       LEFT JOIN customers c ON i.customer_id = c.id AND (c.tenant_id = ${tenantId} OR c.tenant_id::text = ${tenantId}::text)
       WHERE scs.staff_id = ${staff.id}
         AND (scs.tenant_id = ${Number(tenantId)} OR scs.tenant_id::text = ${tenantId}::text)
-        AND scs.created_at >= ${startStr}::date
-        AND scs.created_at < (${endStr}::date + INTERVAL '1 day')
+        AND (
+          (scs.created_at AT TIME ZONE 'Asia/Kolkata')::date >= ${startStr}::date
+          AND (scs.created_at AT TIME ZONE 'Asia/Kolkata')::date <= ${endStr}::date
+        )
       ORDER BY scs.created_at DESC
     `.catch(() => [])
+
+    // 2. Fetch completed bookings assigned to this staff in the date range
+    const completedBookingRows = await sql`
+      SELECT 
+        b.id,
+        b.booking_number,
+        TO_CHAR(b.booking_date, 'YYYY-MM-DD') as booking_date,
+        b.booking_time,
+        b.status,
+        b.total_amount,
+        b.created_at,
+        TO_CHAR(b.created_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') as created_date,
+        c.id as customer_id,
+        COALESCE(c.full_name, 'Walk-in Client') as customer_name,
+        COALESCE(NULLIF(STRING_AGG(DISTINCT s.name, ', '), ''), 'Salon Service') as service_name,
+        COALESCE(
+          NULLIF(SUM(COALESCE(bs.price, 0) * COALESCE(bs.quantity, 1)), 0),
+          b.total_amount,
+          0
+        ) as service_amount
+      FROM bookings b
+      LEFT JOIN customers c ON b.customer_id = c.id AND (c.tenant_id = ${tenantId} OR c.tenant_id::text = ${tenantId}::text)
+      LEFT JOIN booking_services bs ON b.id = bs.booking_id AND (bs.tenant_id = ${tenantId} OR bs.tenant_id::text = ${tenantId}::text OR bs.tenant_id IS NULL)
+      LEFT JOIN services s ON bs.service_id = s.id AND (s.tenant_id = ${tenantId} OR s.tenant_id::text = ${tenantId}::text OR s.tenant_id IS NULL)
+      WHERE (b.staff_id = ${staff.id} OR b.staff_id = ${Number(staff.id)} OR b.staff_id::text = ${String(staff.id)})
+        AND (b.tenant_id = ${tenantId} OR b.tenant_id::text = ${tenantId}::text OR b.tenant_id = ${Number(tenantId)})
+        AND LOWER(TRIM(b.status)) IN ('completed', 'done', 'finished')
+        AND (
+          (b.booking_date >= ${startStr}::date AND b.booking_date <= ${endStr}::date)
+          OR (TO_CHAR(b.booking_date, 'YYYY-MM-DD') >= ${startStr} AND TO_CHAR(b.booking_date, 'YYYY-MM-DD') <= ${endStr})
+          OR ((b.created_at AT TIME ZONE 'Asia/Kolkata')::date >= ${startStr}::date AND (b.created_at AT TIME ZONE 'Asia/Kolkata')::date <= ${endStr}::date)
+        )
+      GROUP BY b.id, b.booking_number, b.booking_date, b.booking_time, b.status, b.total_amount, b.created_at, c.id, c.full_name
+      ORDER BY b.booking_date DESC, b.booking_time DESC
+    `.catch((err) => {
+      console.error("[getStaffCommissions] completed bookings error:", err)
+      return []
+    })
+
+    // Active commission rate determination
+    let activeRate = staff.commission_rate ? parseFloat(staff.commission_rate) : null
+    if (activeRate === null && staff.commission_profile_id) {
+      const prof = await sql`
+        SELECT base_rate FROM commission_profiles WHERE id = ${staff.commission_profile_id} LIMIT 1
+      `.catch(() => [])
+      if (prof.length > 0 && prof[0].base_rate) {
+        activeRate = parseFloat(prof[0].base_rate) || 10
+      }
+    }
+    if (activeRate === null) activeRate = 10
 
     let total_service_commission = 0
     let total_product_commission = 0
     let total_tips = 0
+    let total_service_revenue = 0
 
-    const staffRate = staff.commission_rate ? parseFloat(staff.commission_rate) : null
+    const coveredBookingIds = new Set<number>()
+    const ledger: any[] = []
 
-    const ledger = rows.map((r: any) => {
+    // Process invoice commission splits
+    for (const r of splitRows) {
+      if (r.booking_id) coveredBookingIds.add(Number(r.booking_id))
+
       const servicePrice = Number(r.revenue_amount) || 0
-      const splitPct = Number(r.split_percentage) || 100
+      const splitPct = Number(r.split_percentage) || activeRate
 
       const commissionEarned =
-        staffRate !== null
-          ? Math.round(((servicePrice * staffRate) / 100) * 100) / 100
-          : Math.round(((servicePrice * splitPct) / 100) * 100) / 100
+        Math.round(((servicePrice * (activeRate || splitPct)) / 100) * 100) / 100
 
       // Distinguish retail products from services
       let isProduct = false
@@ -1287,6 +1391,7 @@ export async function getStaffCommissions(
         total_product_commission += commissionEarned
       } else {
         total_service_commission += commissionEarned
+        total_service_revenue += servicePrice
       }
 
       // Tips from metadata
@@ -1301,18 +1406,50 @@ export async function getStaffCommissions(
         } catch {}
       }
 
-      return {
+      ledger.push({
         id: Number(r.id),
         date: r.date,
         invoice_number: r.invoice_number,
         service_name: r.service_item_name,
         customer_name: r.customer_name,
         service_price: servicePrice,
-        split_percentage: splitPct,
+        split_percentage: activeRate || splitPct,
         commission_earned: commissionEarned,
         is_product: isProduct,
-      }
-    })
+      })
+    }
+
+    // Process completed bookings not yet covered by an invoice split
+    for (const b of completedBookingRows) {
+      const bId = Number(b.id)
+      if (coveredBookingIds.has(bId)) continue
+
+      const servicePrice = Number(b.service_amount) || Number(b.total_amount) || 0
+      const commissionEarned = Math.round(((servicePrice * activeRate) / 100) * 100) / 100
+
+      total_service_commission += commissionEarned
+      total_service_revenue += servicePrice
+
+      const timeStr = b.booking_time ? ` • ${b.booking_time}` : ""
+      const displayDate = b.booking_date ? `${b.booking_date}${timeStr}` : b.created_date
+
+      ledger.push({
+        id: bId,
+        booking_id: bId,
+        date: displayDate,
+        invoice_number: b.booking_number || `BKG-${bId}`,
+        service_name: b.service_name || "Completed Salon Service",
+        customer_name: b.customer_name || "Client",
+        service_price: servicePrice,
+        split_percentage: activeRate,
+        commission_earned: commissionEarned,
+        is_product: false,
+        is_direct_appointment: true,
+      })
+    }
+
+    // Sort ledger by id descending so newest appears first
+    ledger.sort((a, b) => (b.id || 0) - (a.id || 0))
 
     total_service_commission = Math.round(total_service_commission * 100) / 100
     total_product_commission = Math.round(total_product_commission * 100) / 100
@@ -1325,6 +1462,8 @@ export async function getStaffCommissions(
       period,
       startDate: startStr,
       endDate: endStr,
+      activeRate,
+      total_service_revenue,
       totals: {
         total_service_commission,
         total_product_commission,
@@ -1380,6 +1519,12 @@ export async function getStaffEarnings(period: "today" | "week" | "month" = "tod
       earnedCommission: l.commission_earned,
     }))
 
+  const currentRate = comms.activeRate || 10
+  const salesRev = comms.total_service_revenue || 0
+  const targetSales = 50000
+  const remainingSales = Math.max(0, targetSales - salesRev)
+  const progressPct = Math.min(100, Math.max(10, Math.round((salesRev / targetSales) * 100)))
+
   return {
     success: true,
     summary: {
@@ -1391,15 +1536,15 @@ export async function getStaffEarnings(period: "today" | "week" | "month" = "tod
     tierInfo: {
       tierName: "Standard",
       currentTier: "Standard Stylist",
-      currentTierRate: "10%",
-      commissionRate: "10%",
+      currentTierRate: `${currentRate}%`,
+      commissionRate: `${currentRate}%`,
       nextTier: "Senior Stylist",
       nextTierRate: "15%",
-      nextTierTarget: 50000,
-      currentSales: totals.total_service_commission ? totals.total_service_commission * 5 : 25000,
-      remainingToNextTier: 25000,
-      progressPercent: 65,
-      progressPercentage: 65,
+      nextTierTarget: targetSales,
+      currentSales: salesRev,
+      remainingToNextTier: remainingSales,
+      progressPercent: progressPct,
+      progressPercentage: progressPct,
     },
     completedServices,
     productSales,
@@ -1568,6 +1713,7 @@ export async function updateAppointmentStatus(
     try {
       revalidatePath("/staff-portal")
       revalidatePath("/staff-portal/schedule")
+      revalidatePath("/staff-portal/earnings")
       revalidatePath("/")
     } catch {}
 
