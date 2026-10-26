@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
-  Fingerprint,
   RefreshCw,
   ShieldCheck,
   ShieldAlert,
@@ -28,7 +27,7 @@ interface FaceScanModalProps {
   isOpen: boolean
   onClose: () => void
   onVerified: (biometricData: {
-    verificationMethod: "face_id" | "webauthn" | "manual"
+    verificationMethod: "face_id"
     faceSnapshot: string
     matchScore: number
     biometricVerified: boolean
@@ -38,7 +37,6 @@ interface FaceScanModalProps {
     faceSnapshot: string
     faceDescriptor: string
   }) => void
-  onManualOverride?: () => void
   actionType?: "check_in" | "check_out"
   staffName?: string
   staffAvatarUrl?: string | null
@@ -61,7 +59,6 @@ export default function FaceScanModal({
   onClose,
   onVerified,
   onEnrolled,
-  onManualOverride,
   actionType = "check_in",
   staffName = "Staff Member",
   staffAvatarUrl,
@@ -88,7 +85,6 @@ export default function FaceScanModal({
   const [matchScore, setMatchScore] = useState<number>(98.4)
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [hasFaceDetected, setHasFaceDetected] = useState(false)
-  const [hardwareBiometricAvailable, setHardwareBiometricAvailable] = useState(false)
 
   // 1. Synthesize audio cues with Web Audio API (zero external assets needed)
   const playBiometricSound = (type: "scan" | "success" | "error") => {
@@ -150,20 +146,7 @@ export default function FaceScanModal({
     }
   }
 
-  // 3. Check for native hardware biometrics (Apple Touch ID / Face ID)
-  useEffect(() => {
-    if (
-      typeof window !== "undefined" &&
-      window.PublicKeyCredential &&
-      typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === "function"
-    ) {
-      window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
-        .then((available) => setHardwareBiometricAvailable(available))
-        .catch(() => setHardwareBiometricAvailable(false))
-    }
-  }, [])
-
-  // 4. Initialize Camera Stream
+  // 3. Initialize Camera Stream
   const startCamera = async () => {
     setStage("requesting")
     setErrorMessage(null)
@@ -444,31 +427,6 @@ export default function FaceScanModal({
     setProgress(0)
   }
 
-  // 9. Hardware WebAuthn Fast-Track Handler
-  const handleHardwareBiometric = async () => {
-    try {
-      triggerHaptic("light")
-      playBiometricSound("scan")
-      setProgress(100)
-      setStage("verified")
-      playBiometricSound("success")
-      triggerHaptic("success")
-
-      setTimeout(() => {
-        stopCamera()
-        onVerified({
-          verificationMethod: "webauthn",
-          faceSnapshot: staffAvatarUrl || "",
-          matchScore: 99.8,
-          biometricVerified: true,
-          deviceInfo: "Hardware Biometrics (Face ID/Touch ID)",
-        })
-      }, 800)
-    } catch {
-      startCamera()
-    }
-  }
-
   if (!isOpen) return null
 
   const isCheckIn = actionType === "check_in"
@@ -723,43 +681,16 @@ export default function FaceScanModal({
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 bg-slate-900/60 border-t border-slate-800/80 space-y-2">
-          {/* Optional Native Hardware Biometric (Apple Touch ID / Face ID) Button */}
-          {hardwareBiometricAvailable && (
-            <button
-              onClick={handleHardwareBiometric}
-              className="w-full h-10 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-semibold border border-slate-700 transition flex items-center justify-center gap-2"
-            >
-              <Fingerprint className="w-4 h-4 text-amber-400" />
-              <span>Use Apple Touch ID / Passkey</span>
-            </button>
-          )}
-
-          {/* Manual Override Fallback Button */}
-          <div className="flex items-center justify-between gap-2 pt-1">
-            <button
-              onClick={() => {
-                stopCamera()
-                onClose()
-              }}
-              className="flex-1 h-9 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 text-xs font-medium transition"
-            >
-              Cancel
-            </button>
-
-            {onManualOverride && (
-              <button
-                onClick={() => {
-                  stopCamera()
-                  onClose()
-                  onManualOverride()
-                }}
-                className="flex-1 h-9 rounded-xl text-amber-400/90 hover:text-amber-300 hover:bg-amber-500/10 text-xs font-medium transition"
-              >
-                Standard Punch
-              </button>
-            )}
-          </div>
+        <div className="p-4 bg-slate-900/60 border-t border-slate-800/80">
+          <button
+            onClick={() => {
+              stopCamera()
+              onClose()
+            }}
+            className="w-full h-10 rounded-xl bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 hover:text-white text-xs font-semibold transition active:scale-95 border border-slate-700/60 flex items-center justify-center"
+          >
+            Cancel
+          </button>
         </div>
       </div>
     </div>

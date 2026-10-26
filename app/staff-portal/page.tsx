@@ -118,7 +118,7 @@ export default function StaffTodayDashboard() {
   const handlePunchWithBio = async (
     action: "check_in" | "check_out",
     bioData: {
-      verificationMethod: "face_id" | "webauthn" | "manual"
+      verificationMethod: "face_id"
       faceSnapshot: string
       matchScore: number
       biometricVerified: boolean
@@ -151,13 +151,10 @@ export default function StaffTodayDashboard() {
     }
   }
 
-  const handlePunch = async (action: "check_in" | "check_out" | "break_start" | "break_end") => {
+  const handleBreak = async (action: "break_start" | "break_end") => {
     try {
       setActionLoading(true)
-      if (action === "check_in" || action === "check_out") {
-        const res = await markStaffAttendance(action, geoCoords)
-        showToast(res.message)
-      } else if (action === "break_start") {
+      if (action === "break_start") {
         const res = await logStaffBreak("start", "lunch")
         showToast(res.message)
       } else if (action === "break_end") {
@@ -166,7 +163,7 @@ export default function StaffTodayDashboard() {
       }
       await loadDashboard()
     } catch (err: any) {
-      showToast(err?.message || "Could not update punch status.")
+      showToast(err?.message || "Could not update break status.")
     } finally {
       setActionLoading(false)
     }
@@ -312,7 +309,7 @@ export default function StaffTodayDashboard() {
           {isOnBreak ? (
             <button
               disabled={actionLoading}
-              onClick={() => handlePunch("break_end")}
+              onClick={() => handleBreak("break_end")}
               className="h-12 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-md transition flex items-center justify-center gap-2"
             >
               <Play className="w-4 h-4 fill-slate-950" />
@@ -321,7 +318,7 @@ export default function StaffTodayDashboard() {
           ) : (
             <button
               disabled={actionLoading || !isCheckedIn}
-              onClick={() => handlePunch("break_start")}
+              onClick={() => handleBreak("break_start")}
               className="h-12 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs font-semibold border border-slate-700/80 transition flex items-center justify-center gap-2 disabled:opacity-40"
             >
               <Coffee className="w-4 h-4 text-amber-400" />
@@ -519,7 +516,6 @@ export default function StaffTodayDashboard() {
         isFaceEnrolled={Boolean(data?.staff?.face_enrolled)}
         onEnrolled={handleEnrolled}
         onVerified={(bioData) => handlePunchWithBio(pendingPunchAction, bioData)}
-        onManualOverride={() => handlePunch(pendingPunchAction)}
       />
     </div>
   )
