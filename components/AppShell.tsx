@@ -1,20 +1,29 @@
 "use client"
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth, useUser } from '@clerk/nextjs';
 import Sidebar from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { usePermissions } from "@/hooks/use-permissions"
 import { ShieldAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import LoginToDashboardTransition, { type LoginTransitionPhase } from "@/components/auth/LoginToDashboardTransition"
+
+const LOGIN_TRANSITION_KEY = "hanva_login_pending";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { isLoaded: isAuthLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
   const { canAccessRoute, isLoading, isAdmin } = usePermissions();
+
+  const wasOnAuthRouteRef = useRef(false);
+  const revealScheduledRef = useRef(false);
+  const [transitionPhase, setTransitionPhase] = useState<LoginTransitionPhase>("idle");
+  const [animateDashboardIn, setAnimateDashboardIn] = useState(false);
 
   // Check if current route belongs to Staff Portal (isolated from admin dashboard)
   const isStaffRoute =
@@ -23,19 +32,99 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       (window.location.hostname.startsWith('staff.') ||
         window.location.hostname.includes('staff.biz.hanva.in')));
 
+  const isAuthRoute =
+    pathname?.startsWith('/sign-in') ||
+    pathname?.startsWith('/sign-up') ||
+    pathname === '/login';
+
   // Hide sidebar/header on public invoice, customer booking, and auth pages
   const isPublic = 
     isStaffRoute ||
+    isAuthRoute ||
     pathname?.startsWith('/inv/') || 
-    pathname?.startsWith('/sign-in') || 
-    pathname?.startsWith('/sign-up') || 
     pathname?.startsWith('/terms-of-service') || 
     pathname?.startsWith('/privacy-policy') || 
     pathname?.startsWith('/unauthorized-sign-in') || 
     pathname?.startsWith('/book/') ||
     pathname === '/book' ||
-    pathname?.startsWith('/bookings/customer-schedule') ||
-    pathname === '/login';
+    pathname?.startsWith('/bookings/customer-schedule');
+
+  // Record when user visits login / sign-up so we can play the luxury transition upon entering dashboard
+  useEffect(() => {
+    if (isAuthRoute && !isSignedIn) {
+      wasOnAuthRouteRef.current = true;
+      revealScheduledRef.current = false;
+      try {
+        sessionStorage.setItem(LOGIN_TRANSITION_KEY, String(Date.now()));
+      } catch {}
+    }
+  }, [isAuthRoute, isSignedIn]);
+
+  // Orchestrate smooth Login -> Dashboard transition across route change
+  useEffect(() => {
+    if (!isAuthLoaded || !isSignedIn || isStaffRoute) return;
+
+    let hasPendingFlag = false;
+    try {
+      const raw = sessionStorage.getItem(LOGIN_TRANSITION_KEY);
+      if (raw) {
+        const ageMs = Date.now() - Number(raw);
+        if (!Number.isNaN(ageMs) && ageMs >= 0 && ageMs < 3 * 60 * 1000) {
+          hasPendingFlag = true;
+        } else {
+          sessionStorage.removeItem(LOGIN_TRANSITION_KEY);
+        }
+      }
+    } catch {}
+
+    const comingFromLogin = wasOnAuthRouteRef.current || hasPendingFlag;
+
+    // 1. Trigger active transition overlay as soon as sign-in completes
+    if (comingFromLogin && transitionPhase === "idle") {
+      setTransitionPhase("active");
+      return;
+    }
+
+    // 2. Once landed on authenticated dashboard (!isPublic), wait briefly then reveal smoothly
+    if (!isPublic && transitionPhase === "active" && !revealScheduledRef.current) {
+      revealScheduledRef.current = true;
+      wasOnAuthRouteRef.current = false;
+      try {
+        sessionStorage.removeItem(LOGIN_TRANSITION_KEY);
+      } catch {}
+
+      const revealTimer = setTimeout(() => {
+        setAnimateDashboardIn(true);
+        setTransitionPhase("revealing");
+      }, 820);
+
+      return () => clearTimeout(revealTimer);
+    }
+  }, [isAuthLoaded, isSignedIn, isPublic, isStaffRoute, transitionPhase]);
+
+  // Finish fade-out smoothly once revealing begins
+  useEffect(() => {
+    if (transitionPhase !== "revealing") return;
+    const doneTimer = setTimeout(() => {
+      setTransitionPhase("idle");
+      revealScheduledRef.current = false;
+    }, 540);
+    return () => clearTimeout(doneTimer);
+  }, [transitionPhase]);
+
+  // Safety valve: never allow the transition overlay to remain stuck
+  useEffect(() => {
+    if (transitionPhase !== "active") return;
+    const safetyTimer = setTimeout(() => {
+      wasOnAuthRouteRef.current = false;
+      try {
+        sessionStorage.removeItem(LOGIN_TRANSITION_KEY);
+      } catch {}
+      setAnimateDashboardIn(true);
+      setTransitionPhase("revealing");
+    }, 3000);
+    return () => clearTimeout(safetyTimer);
+  }, [transitionPhase]);
 
   // If user is definitely not logged in on a protected salon route, redirect directly to login
   useEffect(() => {
@@ -45,17 +134,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthLoaded, isSignedIn, isPublic, pathname, router]);
 
+  const userName = user?.firstName || user?.fullName || undefined;
+
   if (isStaffRoute) {
     return <div className="min-h-screen bg-slate-50 antialiased selection:bg-slate-900 selection:text-white">{children}</div>;
   }
 
   if (isPublic) {
     return (
-      <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
-      </div>
+      <>
+        <LoginToDashboardTransition phase={transitionPhase} userName={userName} />
+        <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+          <main className="flex-1 overflow-y-auto">
+            {children}
+          </main>
+        </div>
+      </>
     );
   }
 
@@ -77,7 +171,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isRestricted = isAuthLoaded && isSignedIn && !isLoading && !isAdmin && !canAccessRoute(pathname || "");
   
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+    <>
+      <LoginToDashboardTransition phase={transitionPhase} userName={userName} />
+      <div className={`flex h-screen bg-gray-50 dark:bg-gray-900 ${animateDashboardIn ? "animate-hanva-dashboard-enter" : ""}`}>
       <div className="print:hidden h-full">
         <ErrorBoundary
           fallback={
@@ -131,5 +227,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
     </div>
+    </>
   );
 }
