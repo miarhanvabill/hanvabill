@@ -6,7 +6,7 @@ export default function SignInPage() {
     <div className="relative min-h-screen w-full overflow-hidden bg-[#1e1b18] flex flex-col lg:flex-row items-center justify-center lg:justify-end px-4 py-8 sm:px-6 lg:px-12 xl:px-20">
       {/* Full-bleed Luxury Salon Reception Background */}
       <div
-        className="absolute inset-0 bg-cover bg-no-repeat bg-[position:22%_center] lg:bg-center animate-hanva-login-bg"
+        className="absolute inset-0 bg-cover bg-no-repeat bg-[position:22%_center] lg:bg-center scale-[1.01]"
         style={{
           backgroundImage: "url('/login-salon-bg.jpg')",
         }}
@@ -36,7 +36,7 @@ export default function SignInPage() {
       </div>
 
       {/* Floating Frosted Glass Login Card */}
-      <div className="relative z-10 w-full max-w-[430px] sm:max-w-[448px] lg:mr-[2%] xl:mr-[4%] animate-hanva-login-card">
+      <div className="relative z-10 w-full max-w-[430px] sm:max-w-[448px] lg:mr-[2%] xl:mr-[4%]">
         <div className="bg-[#f4f5fb]/[0.94] backdrop-blur-xl rounded-[32px] shadow-[0_28px_75px_-12px_rgba(12,22,48,0.42)] border border-white/80 px-7 py-8 sm:px-9 sm:py-9">
           {/* Eyebrow Header with Side Dividers */}
           <div className="flex items-center justify-center gap-3 mb-4">
